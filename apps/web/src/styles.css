@@ -8,3 +8,121 @@ body {
   color: var(--foreground);
   min-height: 100dvh;
 }
+
+.shared-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 14rem;
+  gap: 1.5rem;
+  max-width: 70rem;
+  margin: auto;
+  padding: 1rem;
+  align-items: start;
+}
+.board {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-variant-numeric: tabular-nums;
+}
+.board th {
+  color: var(--muted-foreground);
+  font-weight: normal;
+  font-size: 0.75rem;
+}
+.board th:first-child {
+  width: 1.2rem;
+}
+.board td {
+  padding: 0;
+  border: 1px solid var(--border);
+}
+.board-cell {
+  aspect-ratio: 1;
+  position: relative;
+  display: grid;
+  place-items: center;
+  background: var(--muted);
+}
+.premium-double-letter {
+  background: color-mix(in oklch, var(--primary) 15%, var(--background));
+}
+.premium-triple-letter {
+  background: color-mix(in oklch, var(--primary) 30%, var(--background));
+}
+.premium-double-word {
+  background: color-mix(in oklch, var(--destructive) 15%, var(--background));
+}
+.premium-triple-word {
+  background: color-mix(in oklch, var(--destructive) 30%, var(--background));
+}
+.premium-mark {
+  font-size: clamp(0.5rem, 1vw, 0.8rem);
+  font-weight: 600;
+}
+.letter-tile {
+  position: absolute;
+  inset: 2px;
+  background: var(--background);
+  border: 1px solid var(--border);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: clamp(0.8rem, 2vw, 1.75rem);
+}
+.letter-tile small {
+  position: absolute;
+  bottom: 0;
+  right: 2px;
+  font-size: 0.6rem;
+}
+.blank-tile {
+  font-style: italic;
+}
+.turn-status {
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+}
+.match-status p {
+  margin-bottom: 0.75rem;
+}
+.match-status ul {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+}
+.match-status li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.active-player {
+  background: var(--accent);
+}
+.remaining-tiles {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+@media (max-width: 700px) {
+  .shared-board {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+    padding: 0.5rem;
+  }
+  .match-status ul {
+    display: flex;
+    gap: 1rem;
+  }
+  .match-status li {
+    flex: 1;
+  }
+}
+
+.fixture-note {
+  max-width: 70rem;
+  margin: 0 auto 1rem;
+  padding: 0 1rem;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}

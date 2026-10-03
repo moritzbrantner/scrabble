@@ -1,6 +1,6 @@
 # Scrabble
 
-A shared-board and private-phone multiplayer Scrabble application, under construction. The current slice supplies the browser entry point and Rust workspace; gameplay and network serving are not available yet.
+A shared-board and private-phone multiplayer Scrabble application, under construction. The browser currently presents a public board preview; gameplay transport and network serving are not available yet.
 
 ## Development
 
@@ -9,12 +9,13 @@ Install Bun 1.4.2 and Rust (the toolchain file selects 1.98.1 with Clippy and ru
 ```sh
 bun install --frozen-lockfile
 cargo fetch --locked
+bunx playwright install --with-deps chromium
 bun run check
 ```
 
 `bun run dev` opens the browser development server; visit its printed URL under `/scrabble/`. `bun run dev:server` runs the server scaffold, prints its current availability, and exits. Issue #10 adds the authoritative transport executable.
 
-`bun run check` checks formatting, TypeScript, lint, Rust tests, browser rendering, and the static production build. `bun run format` applies formatting. Dependency changes use `bun install` and commit `bun.lock`; Rust dependency changes include `Cargo.lock`.
+`bun run check` checks formatting, TypeScript, lint, Rust tests, browser rendering, the static production build, and Chromium layout checks. `bun run format` applies formatting. Dependency changes use `bun install` and commit `bun.lock`; Rust dependency changes include `Cargo.lock`.
 
 ## Hosting
 
@@ -31,3 +32,5 @@ The versioned domain contracts and offline English fixture ruleset are defined i
 [Placement validation](docs/specs/placement-validation.md) derives the main and cross words through a pure borrowed-state seam, with structured structural errors. Dictionary acceptance and scoring remain separate checks.
 
 [Scoring](docs/specs/scoring.md) calculates all validated words with new-tile premiums and a single full-rack bonus. The scored storage commit applies cumulative points atomically; browser command integration remains in #19.
+
+The [shared board](docs/specs/shared-board.md) renders public snapshot fixtures for lobby, playing, and finished phases. Add `?fixture=playing` or `?fixture=finished` to the `/scrabble/` entry point to inspect those presentation cases; multiplayer is not connected yet. `bun run test:browser` runs focused layout checks and writes screenshots to ignored `test-results/`.

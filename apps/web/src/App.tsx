@@ -1,14 +1,16 @@
-import { StateView, StateViewDescription } from "@moritzbrantner/ui/components/patterns/state-view";
+import { fixtures } from "./fixtures";
+import { SharedBoard } from "./SharedBoard";
 
 export function App() {
+  const selected =
+    typeof window === "undefined"
+      ? null
+      : new URLSearchParams(window.location.search).get("fixture");
+  const fixture = selected === "playing" || selected === "finished" ? selected : "lobby";
   return (
-    <main className="mx-auto max-w-xl p-6 text-foreground">
-      <h1 className="text-2xl font-semibold">Scrabble</h1>
-      <StateView variant="empty" className="mt-4">
-        <StateViewDescription>
-          Multiplayer play is being built. Game creation and joining are not available yet.
-        </StateViewDescription>
-      </StateView>
-    </main>
+    <>
+      <SharedBoard snapshot={fixtures.snapshots[fixture]} rules={fixtures.ruleset} />
+      <p className="fixture-note">Board preview · Multiplayer is not connected yet.</p>
+    </>
   );
 }
