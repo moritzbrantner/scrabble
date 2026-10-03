@@ -63,7 +63,6 @@ jobs:
           add_dependency "$R" 10 "$R" 9
 
           add_dependency "$R" 11 "$R" 10
-          add_dependency "$R" 11 "$G" 24
           add_dependency "$R" 12 "$R" 7
           add_dependency "$R" 12 "$R" 11
           add_dependency "$R" 13 "$R" 12
