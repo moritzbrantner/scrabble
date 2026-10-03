@@ -1,12 +1,24 @@
 import { z } from "zod";
 
-const id = z
+export const id = z
   .string()
   .max(20)
   .regex(/^(0|[1-9][0-9]*)$/)
   .pipe(z.string().refine((value) => BigInt(value) <= 18446744073709551615n));
-const letter = z.string().refine((value) => Array.from(value).length === 1);
-const coordinate = z.strictObject({ row: z.int().min(0).max(14), column: z.int().min(0).max(14) });
+export const letter = z.string().refine((value) => {
+  const scalar = value.codePointAt(0);
+  return (
+    Array.from(value).length === 1 && scalar !== undefined && (scalar < 0xd800 || scalar > 0xdfff)
+  );
+});
+export const coordinate = z.strictObject({
+  row: z.int().min(0).max(14),
+  column: z.int().min(0).max(14),
+});
+export const tileFace = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("letter"), letter }),
+  z.strictObject({ kind: z.literal("blank") }),
+]);
 const identity = z.strictObject({ name: z.string().min(1), revision: z.string().min(1) });
 const tile = z.strictObject({ coordinate, letter, is_blank: z.boolean() });
 export const premium = z.enum([
@@ -34,7 +46,7 @@ export const publicSnapshot = z.strictObject({
       z.strictObject({
         id,
         display_name: z.string(),
-        score: z.int(),
+        score: z.int().min(-2147483648).max(2147483647),
         rack_count: z.int().min(0).max(15),
       }),
     )
@@ -48,10 +60,7 @@ export const ruleset = z
     dictionary: identity,
     tiles: z.array(
       z.strictObject({
-        face: z.discriminatedUnion("kind", [
-          z.strictObject({ kind: z.literal("letter"), letter }),
-          z.strictObject({ kind: z.literal("blank") }),
-        ]),
+        face: tileFace,
         count: z.int().positive(),
         value: z.int().min(0).max(65535),
       }),
@@ -69,3 +78,12 @@ export const ruleset = z
 export type PublicSnapshot = z.infer<typeof publicSnapshot>;
 export type Ruleset = z.infer<typeof ruleset>;
 export type Premium = z.infer<typeof premium>;
+
+export const playerSnapshot = z.strictObject({
+  public: publicSnapshot,
+  own_rack: z.strictObject({
+    player_id: id,
+    tiles: z.array(z.strictObject({ id, face: tileFace })).max(15),
+  }),
+});
+export type PlayerSnapshot = z.infer<typeof playerSnapshot>;
