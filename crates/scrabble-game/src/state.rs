@@ -142,6 +142,27 @@ impl GameState {
             board,
         })
     }
+    pub(crate) fn player_score(&self, player: PlayerId) -> Option<i32> {
+        self.players
+            .iter()
+            .find(|entry| entry.id == player)
+            .map(|entry| entry.score)
+    }
+    pub(crate) fn commit_tiles_with_score(
+        &mut self,
+        player: PlayerId,
+        placements: &[Placement],
+        score: i32,
+    ) -> Result<(), StateError> {
+        let index = self
+            .players
+            .iter()
+            .position(|entry| entry.id == player)
+            .ok_or(StateError::UnknownPlayer)?;
+        self.place_tiles(player, placements)?;
+        self.players[index].score = score;
+        Ok(())
+    }
     pub fn ruleset(&self) -> &Ruleset {
         &self.ruleset
     }
