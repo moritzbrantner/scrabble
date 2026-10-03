@@ -168,6 +168,9 @@ impl GameState {
                 + usize::from(coordinate.column()),
         )
     }
+    pub(crate) fn board_is_empty(&self) -> bool {
+        self.board.iter().all(Option::is_none)
+    }
     pub fn board_tile(&self, coordinate: Coordinate) -> Option<&CommittedTile> {
         self.board_index(coordinate)
             .ok()
