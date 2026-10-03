@@ -1,0 +1,22 @@
+name: Pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  deploy:
+    permissions:
+      contents: read
+      actions: read
+      pages: write
+      id-token: write
+      packages: read
+    uses: moritzbrantner/reusable-workflows/.github/workflows/deploy-pages.yml@main
+    with:
+      bun_version: 1.4.2
+      pre_command: rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy && cargo fetch --locked
+      build_command: bun run check
+      artifact_path: dist
+      concurrency_group: pages

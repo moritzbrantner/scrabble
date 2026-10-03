@@ -1,0 +1,31 @@
+{
+  "plugins": ["typescript", "import"],
+  "rules": {
+    "typescript/consistent-type-definitions": ["error", "type"],
+    "curly": "error",
+    "no-case-declarations": "error",
+    "no-cond-assign": ["error", "always"],
+    "no-fallthrough": [
+      "error",
+      {
+        "allowEmptyCase": true
+      }
+    ],
+    "no-multi-assign": "error",
+    "no-nested-ternary": "error",
+    "no-sequences": [
+      "error",
+      {
+        "allowInParentheses": false
+      }
+    ],
+    "import/no-duplicates": [
+      "error",
+      {
+        "preferInline": true
+      }
+    ],
+    "typescript/no-floating-promises": "error",
+    "typescript/switch-exhaustiveness-check": "error"
+  }
+}
