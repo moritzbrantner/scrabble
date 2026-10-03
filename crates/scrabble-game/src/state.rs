@@ -10,6 +10,7 @@ use crate::protocol::{
 use crate::ruleset::{Ruleset, TileFace};
 use rand::{SeedableRng, seq::SliceRandom};
 use rand_chacha::ChaCha8Rng;
+use serde::Serialize;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt,
@@ -31,6 +32,7 @@ pub enum StateError {
     OutsideBoard,
     InvalidBlankAssignment,
     InvariantViolation,
+    CounterExhausted,
 }
 impl fmt::Display for StateError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -48,6 +50,7 @@ impl fmt::Display for StateError {
             Self::OccupiedSquare => "board square already occupied",
             Self::OutsideBoard => "coordinate outside configured board",
             Self::InvalidBlankAssignment => "invalid blank assignment",
+            Self::CounterExhausted => "authoritative counter exhausted",
             Self::InvariantViolation => "canonical tile conservation failed",
         };
         f.write_str(message)
@@ -55,7 +58,7 @@ impl fmt::Display for StateError {
 }
 impl std::error::Error for StateError {}
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct Tile {
     id: TileId,
     face: TileFace,
@@ -72,7 +75,7 @@ impl Tile {
         self.value
     }
 }
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct CommittedTile {
     tile: Tile,
     letter: char,
@@ -88,7 +91,7 @@ impl CommittedTile {
         matches!(self.tile.face, TileFace::Blank {})
     }
 }
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 struct Player {
     id: PlayerId,
     display_name: String,
@@ -260,6 +263,38 @@ impl GameState {
             .iter()
             .position(|entry| entry.id == player)
             .ok_or(StateError::UnknownPlayer)?;
+        let transfers = self.validated_transfers(player, placements)?;
+        if placements.is_empty() {
+            return Ok(());
+        }
+        let revision = self.next_revision()?;
+        // All fallible validation finishes above. Retain moves actual tiles instead of duplicating them.
+        let mut remaining =
+            Vec::with_capacity(self.players[player_index].rack.len() - transfers.len());
+        for tile in self.players[player_index].rack.drain(..) {
+            if let Some((_, index, letter)) = transfers.iter().find(|(id, _, _)| *id == tile.id) {
+                self.board[*index] = Some(CommittedTile {
+                    tile,
+                    letter: *letter,
+                });
+            } else {
+                remaining.push(tile);
+            }
+        }
+        self.players[player_index].rack = remaining;
+        self.revision = revision;
+        Ok(())
+    }
+    fn validated_transfers(
+        &self,
+        player: PlayerId,
+        placements: &[Placement],
+    ) -> Result<Vec<(TileId, usize, char)>, StateError> {
+        let player_index = self
+            .players
+            .iter()
+            .position(|entry| entry.id == player)
+            .ok_or(StateError::UnknownPlayer)?;
         let mut ids = BTreeSet::new();
         let mut coordinates = BTreeSet::new();
         let mut transfers = Vec::with_capacity(placements.len());
@@ -294,26 +329,78 @@ impl GameState {
             };
             transfers.push((tile.id, index, letter));
         }
-        if placements.is_empty() {
-            return Ok(());
-        }
+        Ok(transfers)
+    }
+    pub(crate) fn preview_tiles(
+        &self,
+        player: PlayerId,
+        placements: &[Placement],
+    ) -> Result<Vec<crate::protocol::PreviewTile>, StateError> {
+        let transfers = self.validated_transfers(player, placements)?;
+        Ok(placements
+            .iter()
+            .zip(transfers)
+            .map(|(placement, (_, _, letter))| crate::protocol::PreviewTile {
+                coordinate: placement.coordinate,
+                letter,
+                is_blank: placement.blank_as.is_some(),
+            })
+            .collect())
+    }
+    pub(crate) fn game_id(&self) -> GameId {
+        self.game_id
+    }
+    pub(crate) fn host(&self) -> Option<PlayerId> {
+        self.players.first().map(|player| player.id)
+    }
+    pub(crate) fn advance_turn(&mut self) -> Result<(), StateError> {
+        let Phase::Playing {
+            active_player,
+            turn,
+        } = self.phase
+        else {
+            return Err(StateError::WrongPhase);
+        };
+        let index = self
+            .players
+            .iter()
+            .position(|player| player.id == active_player)
+            .ok_or(StateError::UnknownPlayer)?;
+        let next_turn = turn
+            .get()
+            .checked_add(1)
+            .ok_or(StateError::CounterExhausted)?;
         let revision = self.next_revision()?;
-        // All fallible validation finishes above. Retain moves actual tiles instead of duplicating them.
-        let mut remaining =
-            Vec::with_capacity(self.players[player_index].rack.len() - transfers.len());
-        for tile in self.players[player_index].rack.drain(..) {
-            if let Some((_, index, letter)) = transfers.iter().find(|(id, _, _)| *id == tile.id) {
-                self.board[*index] = Some(CommittedTile {
-                    tile,
-                    letter: *letter,
-                });
-            } else {
-                remaining.push(tile);
-            }
-        }
-        self.players[player_index].rack = remaining;
+        self.phase = Phase::Playing {
+            active_player: self.players[(index + 1) % self.players.len()].id,
+            turn: TurnId::new(next_turn),
+        };
         self.revision = revision;
         Ok(())
+    }
+    /// Private replay evidence. Never send these bytes through a browser snapshot connection.
+    pub fn canonical_bytes(&self) -> Result<Vec<u8>, serde_json::Error> {
+        #[derive(Serialize)]
+        struct Evidence<'a> {
+            version: u16,
+            game_id: GameId,
+            ruleset: &'a Ruleset,
+            phase: &'a Phase,
+            revision: TurnId,
+            players: &'a [Player],
+            bag: &'a [Tile],
+            board: &'a [Option<CommittedTile>],
+        }
+        serde_json::to_vec(&Evidence {
+            version: 1,
+            game_id: self.game_id,
+            ruleset: &self.ruleset,
+            phase: &self.phase,
+            revision: self.revision,
+            players: &self.players,
+            bag: &self.bag,
+            board: &self.board,
+        })
     }
     pub fn public_snapshot(&self) -> PublicSnapshot {
         let size = usize::from(self.ruleset.board_size);
@@ -390,5 +477,25 @@ impl GameState {
             return Err(StateError::InvariantViolation);
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod turn_counter_tests {
+    use super::*;
+    #[test]
+    fn exhausted_turn_counter_does_not_mutate_state() {
+        let mut state =
+            GameState::new(GameId::new(1), crate::ruleset::english_fixture(), [0; 32]).unwrap();
+        state.add_player(PlayerId::new(1), "Ada".into()).unwrap();
+        state.add_player(PlayerId::new(2), "Lin".into()).unwrap();
+        state.deal_initial_racks().unwrap();
+        state.phase = Phase::Playing {
+            active_player: PlayerId::new(1),
+            turn: TurnId::new(u64::MAX),
+        };
+        let before = state.canonical_bytes().unwrap();
+        assert_eq!(state.advance_turn(), Err(StateError::CounterExhausted));
+        assert_eq!(state.canonical_bytes().unwrap(), before);
     }
 }
