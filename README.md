@@ -1,6 +1,6 @@
 # Scrabble
 
-A shared-board and private-phone multiplayer Scrabble application, under construction. The browser currently presents a public board preview; the browser transport adapter is verified against a local game-server runtime, while the Scrabble simulation adapter now runs inside that runtime, while the network executable is still being built.
+A shared-board and private-phone multiplayer Scrabble application, under construction. The browser currently presents a public board preview; the browser transport adapter is verified against a local game-server runtime, while the Scrabble simulation adapter now runs inside that runtime, and a Rust executable now hosts independent matches with runtime health, readiness and graceful recovery.
 
 ## Development
 
@@ -13,7 +13,7 @@ bunx playwright install --with-deps chromium
 bun run check
 ```
 
-`bun run dev` opens the browser development server; visit its printed URL under `/scrabble/`. `bun run dev:server` runs the server scaffold, prints its current availability, and exits. Issue #10 adds the authoritative transport executable.
+`bun run dev` opens the browser development server; visit its printed URL under `/scrabble/`. `bun run dev:tls` provisions a local TLS identity, and `bun run dev:server` starts the authoritative hosted server. See [server setup and configuration](docs/specs/server-executable.md) for local ports, production requirements, and graceful restart.
 
 `bun run check` checks formatting, TypeScript, lint, Rust tests, browser rendering, the static production build, and Chromium layout and real loopback WebTransport checks. `bun run format` applies formatting. Dependency changes use `bun install` and commit `bun.lock`; Rust dependency changes include `Cargo.lock`.
 
@@ -38,3 +38,5 @@ The [shared board](docs/specs/shared-board.md) renders public snapshot fixtures 
 The [browser transport](docs/specs/browser-transport.md) supports versioned welcome, bounded commands, latest-state snapshot reassembly, reliable control and in-memory reconnect capabilities. Its real-network fixture exercises upstream `game-server` independently of Scrabble rules. Production endpoint configuration remains #31.
 
 The [simulation adapter](docs/specs/simulation-adapter.md) maps runtime admissions directly to domain identities, applies authenticated commands, keeps ticks independent of turns, and separates canonical replay evidence from private player projections. Browser-free tests verify runtime replay, recovery, reconnect fencing and grace expiry. Started-game forfeit resolution remains #27.
+
+The [authoritative executable](docs/specs/server-executable.md) reuses game-server hosting/status/recovery for independent named matches. Private persistent initialization keeps tile order reproducible across restart. The real-process test proves scoped racks, match isolation, SIGTERM recovery and reconnect sequence fencing; a complete playable MVP still requires the remaining issues.
