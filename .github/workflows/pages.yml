@@ -16,7 +16,7 @@ jobs:
     uses: moritzbrantner/reusable-workflows/.github/workflows/deploy-pages.yml@main
     with:
       bun_version: 1.4.2
-      pre_command: rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy && cargo fetch --locked
+      pre_command: rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy && cargo fetch --locked && bunx playwright install --with-deps chromium
       build_command: bun run check
       artifact_path: dist
       concurrency_group: pages

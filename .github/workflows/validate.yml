@@ -15,4 +15,5 @@ jobs:
       - run: rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy
       - run: bun install --frozen-lockfile
       - run: cargo fetch --locked
+      - run: bunx playwright install --with-deps chromium
       - run: bun run check

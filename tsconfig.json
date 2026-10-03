@@ -17,5 +17,5 @@
     "allowImportingTsExtensions": true,
     "types": ["bun"]
   },
-  "include": ["apps/web"]
+  "include": ["apps/web", "scripts"]
 }
