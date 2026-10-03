@@ -25,3 +25,5 @@ The browser uses `/scrabble/` as its Vite base, including in development. GitHub
 The versioned domain contracts and offline English fixture ruleset are defined in `crates/scrabble-game`; see [protocol v1](docs/specs/protocol-v1.md) and the [domain glossary](CONTEXT.md). The fixture dictionary is test-only, not a full playable word list.
 
 `GameState` provides deterministic tile storage, initial dealing, replacement draws, and scoped projections. [State storage](docs/specs/domain-state.md) documents the seeded initialization contract and the validation still required before gameplay commits.
+
+`GameSession::apply` now provides the [authoritative turn boundary](docs/specs/turn-application.md) for start, preview/cancel, and pass, with identity, sequence and turn checks. Commit and exchange remain unavailable until their ordered rule/transaction slices.
