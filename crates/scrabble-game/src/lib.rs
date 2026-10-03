@@ -1,2 +1,5 @@
-//! Deterministic Scrabble domain. Gameplay is implemented in subsequent slices.
+//! Deterministic Scrabble domain and versioned wire contracts.
+pub mod identity;
+pub mod protocol;
+pub mod ruleset;
 pub const APPLICATION_NAME: &str = "Scrabble";
