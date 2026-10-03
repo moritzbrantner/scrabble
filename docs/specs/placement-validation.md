@@ -1,0 +1,11 @@
+# Structural placement validation
+
+`placement::validate` takes canonical state, a trusted selected player, and proposed placements. It borrows state immutably and returns either a structured `PlacementError` or an unforgeable `ValidatedMove` that retains that borrow. The authoritative command boundary must still establish active-player identity and turn; this pure seam establishes placement structure, not command authority.
+
+The validator reuses storage validation for tile ownership, duplicate identities/coordinates, occupied cells, board bounds, and blank alphabet assignment. It then requires a nonempty, rack-bounded straight line with no unfilled gaps. Committed tiles can fill gaps and extend either end. An empty board requires the center square; a later move must join committed tiles through at least one formed word. A single isolated tile does not form a word. Dictionary acceptance and scoring remain subsequent slices.
+
+Words are maximal contiguous horizontal or vertical runs in the merged committed/proposed view. The main word comes first, then perpendicular words in coordinate order. Only runs of at least two tiles are words. A single-tile placement can form one word or both axes; each axis appears once. Every word tile retains coordinate, represented letter, canonical value, blank status, and whether it is newly placed. Blank assignment changes its represented letter while retaining zero value. Placement input order does not affect words or canonical placement ordering.
+
+The validated result exposes read-only placements, words, and ruleset data for dictionary/scoring consumers. It cannot outlive its state borrow or be constructed directly by a caller. It does not change board, bag, racks, phase, preview, score, or revision. Commit remains unavailable until the authoritative transaction slice integrates structure, dictionary, and score validation.
+
+`cargo test -p scrabble-game --test placement --locked` covers center, line, gaps filled by committed tiles, extensions on both axes, crossing and parallel words, disconnected/overlapping moves, single-tile intersections, blanks, input-order invariance, distinct-letter word order, canonical values, and unchanged canonical bytes.
