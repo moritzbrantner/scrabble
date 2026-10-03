@@ -1,0 +1,137 @@
+{
+  "command": "030100000004000d7b2276657273696f6e223a317d",
+  "contract": {
+    "controlFormatVersion": 1,
+    "gameProtocolVersion": 3,
+    "maxBufferedSnapshotBytes": 131110,
+    "maxCommandPayloadBytes": 1024,
+    "maxControlPayloadBytes": 4096,
+    "maxIdleDatagrams": 256,
+    "maxPendingSnapshots": 4,
+    "maxSnapshotFragments": 64,
+    "maxSnapshotPayloadBytes": 65535,
+    "reconnectTokenBytes": 16,
+    "routeVersion": 1
+  },
+  "controlRejected": "4753435401030000",
+  "controlRequest": "475343540101000470696e67",
+  "controlResponse": "4753435401020004706f6e67",
+  "fragments": [
+    "030400200000000000010003000d03020020000000000001717f65",
+    "030400200000000000010103000de8f67993ae000d7b2276657273",
+    "0304002000000000000102030007696f6e223a317d"
+  ],
+  "gameCommand": {
+    "command": {
+      "kind": "preview",
+      "placements": [
+        {
+          "blank_as": null,
+          "coordinate": {
+            "column": 7,
+            "row": 7
+          },
+          "tile_id": "1"
+        }
+      ]
+    },
+    "expected_turn": "0",
+    "game_id": "1",
+    "player_id": "1",
+    "sequence": 4,
+    "version": 1
+  },
+  "playerSnapshot": {
+    "own_rack": {
+      "player_id": "1",
+      "tiles": [
+        {
+          "face": {
+            "kind": "letter",
+            "letter": "A"
+          },
+          "id": "7"
+        },
+        {
+          "face": {
+            "kind": "letter",
+            "letter": "L"
+          },
+          "id": "48"
+        },
+        {
+          "face": {
+            "kind": "letter",
+            "letter": "U"
+          },
+          "id": "88"
+        },
+        {
+          "face": {
+            "kind": "letter",
+            "letter": "O"
+          },
+          "id": "60"
+        },
+        {
+          "face": {
+            "kind": "letter",
+            "letter": "R"
+          },
+          "id": "75"
+        },
+        {
+          "face": {
+            "kind": "letter",
+            "letter": "C"
+          },
+          "id": "12"
+        },
+        {
+          "face": {
+            "kind": "letter",
+            "letter": "E"
+          },
+          "id": "19"
+        }
+      ]
+    },
+    "public": {
+      "board": [],
+      "dictionary": {
+        "name": "scrabble-authored-fixture",
+        "revision": "1"
+      },
+      "game_id": "1",
+      "phase": {
+        "active_player": "1",
+        "kind": "playing",
+        "turn": "0"
+      },
+      "players": [
+        {
+          "display_name": "Fixture player",
+          "id": "1",
+          "rack_count": 7,
+          "score": 0
+        },
+        {
+          "display_name": "Other fixture player",
+          "id": "2",
+          "rack_count": 7,
+          "score": 0
+        }
+      ],
+      "preview": null,
+      "remaining_tiles": 86,
+      "revision": "3",
+      "ruleset": {
+        "name": "en-classic-fixture",
+        "revision": "1"
+      },
+      "version": 1
+    }
+  },
+  "snapshot": "03020020000000000001717f65e8f67993ae000d7b2276657273696f6e223a317d",
+  "welcome": "03030000002a00140004002000000000000100000007abababababababababababababababab0000000000000258"
+}

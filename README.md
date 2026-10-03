@@ -1,6 +1,6 @@
 # Scrabble
 
-A shared-board and private-phone multiplayer Scrabble application, under construction. The browser currently presents a public board preview; gameplay transport and network serving are not available yet.
+A shared-board and private-phone multiplayer Scrabble application, under construction. The browser currently presents a public board preview; the browser transport adapter is verified against a local game-server runtime, while the Scrabble simulation adapter and network executable are still being built.
 
 ## Development
 
@@ -15,7 +15,7 @@ bun run check
 
 `bun run dev` opens the browser development server; visit its printed URL under `/scrabble/`. `bun run dev:server` runs the server scaffold, prints its current availability, and exits. Issue #10 adds the authoritative transport executable.
 
-`bun run check` checks formatting, TypeScript, lint, Rust tests, browser rendering, the static production build, and Chromium layout checks. `bun run format` applies formatting. Dependency changes use `bun install` and commit `bun.lock`; Rust dependency changes include `Cargo.lock`.
+`bun run check` checks formatting, TypeScript, lint, Rust tests, browser rendering, the static production build, and Chromium layout and real loopback WebTransport checks. `bun run format` applies formatting. Dependency changes use `bun install` and commit `bun.lock`; Rust dependency changes include `Cargo.lock`.
 
 ## Hosting
 
@@ -34,3 +34,5 @@ The versioned domain contracts and offline English fixture ruleset are defined i
 [Scoring](docs/specs/scoring.md) calculates all validated words with new-tile premiums and a single full-rack bonus. The scored storage commit applies cumulative points atomically; browser command integration remains in #19.
 
 The [shared board](docs/specs/shared-board.md) renders public snapshot fixtures for lobby, playing, and finished phases. Add `?fixture=playing` or `?fixture=finished` to the `/scrabble/` entry point to inspect those presentation cases; multiplayer is not connected yet. `bun run test:browser` runs focused layout checks and writes screenshots to ignored `test-results/`.
+
+The [browser transport](docs/specs/browser-transport.md) supports versioned welcome, bounded commands, latest-state snapshot reassembly, reliable control and in-memory reconnect capabilities. Its real-network fixture exercises upstream `game-server` independently of Scrabble rules. Production endpoint configuration remains #31.
