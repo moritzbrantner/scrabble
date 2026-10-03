@@ -29,7 +29,11 @@ jobs:
             local blocker_number="$4"
 
             local blocker_id
-            blocker_id="$(gh api               -H "X-GitHub-Api-Version: 2026-03-10"               "repos/$blocker_repo/issues/$blocker_number"               --jq '.id')"
+            if [[ "$blocker_repo" == "moritzbrantner/game-server" && "$blocker_number" == "24" ]]; then
+              blocker_id="5693404811"
+            else
+              blocker_id="$(gh api               -H "X-GitHub-Api-Version: 2026-03-10"               "repos/$blocker_repo/issues/$blocker_number"               --jq '.id')"
+            fi
 
             if gh api               -H "X-GitHub-Api-Version: 2026-03-10"               "repos/$blocked_repo/issues/$blocked_number/dependencies/blocked_by?per_page=100"               --jq '.[].id' | grep -Fxq "$blocker_id"; then
               echo "$blocked_repo#$blocked_number already depends on $blocker_repo#$blocker_number"
