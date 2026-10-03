@@ -29,3 +29,5 @@ The versioned domain contracts and offline English fixture ruleset are defined i
 `GameSession::apply` now provides the [authoritative turn boundary](docs/specs/turn-application.md) for start, preview/cancel, and pass, with identity, sequence and turn checks. Commit and exchange remain unavailable until their ordered rule/transaction slices.
 
 [Placement validation](docs/specs/placement-validation.md) derives the main and cross words through a pure borrowed-state seam, with structured structural errors. Dictionary acceptance and scoring remain separate checks.
+
+[Scoring](docs/specs/scoring.md) calculates all validated words with new-tile premiums and a single full-rack bonus. The scored storage commit applies cumulative points atomically; browser command integration remains in #19.
