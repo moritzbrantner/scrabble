@@ -46,7 +46,7 @@ The app uses upstream status contract version 1 directly:
 
 Health/readiness and placement capacity are different facts. Unknown matches fail with 404; mutations are unsupported. Status contains process/match facts, never racks, seed material or reconnect tokens. No additional application HTTP mutation endpoint is introduced in this slice, and reliable control is rejected by default.
 
-Send SIGINT or SIGTERM for graceful shutdown. The runtime marks readiness unavailable, drains, freezes and writes one recovery bundle for all configured matches. The next successful startup reconstructs the same factory/ruleset inputs, verifies/replays saved authority, restores runtime reconnect capabilities and sequence cursors, and consumes the bundle only after serving is ready. The persistent initialization key remains. Do not reuse an incompatible ruleset or change the configured match set around an existing bundle. A hard kill does not produce a new graceful recovery bundle; continuous crash persistence is outside this runtime contract.
+Send SIGINT or SIGTERM for graceful shutdown. The runtime marks readiness unavailable, drains, freezes and writes one recovery bundle for all configured matches. The next successful startup reconstructs the same factory/ruleset inputs, verifies/replays saved authority, restores runtime reconnect capabilities and sequence cursors, and consumes the bundle after the TLS listener binds and before marking serving ready. The persistent initialization key remains. Do not reuse an incompatible ruleset or change the configured match set around an existing bundle. A hard kill does not produce a new graceful recovery bundle; continuous crash persistence is outside this runtime contract.
 
 ## Verification
 
