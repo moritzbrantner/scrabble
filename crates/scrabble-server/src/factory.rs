@@ -108,28 +108,53 @@ fn seed(config: &ServerConfig) -> ErrorResult<[u8; 32]> {
     }
 }
 
-pub fn create_matches(config: &ServerConfig) -> ErrorResult<Vec<(MatchId, ScrabbleSimulation)>> {
-    let seed = seed(config)?;
-    let key = hmac::Key::new(hmac::HMAC_SHA256, &seed);
-    let mut game_ids = BTreeSet::new();
-    let mut matches = Vec::with_capacity(config.match_ids.len());
-    for id in &config.match_ids {
-        let mut identity = digest::Context::new(&digest::SHA256);
-        identity.update(b"scrabble/game-id/v1\0");
-        identity.update(id.as_str().as_bytes());
-        let digest = identity.finish();
-        let game_id = u64::from_be_bytes(digest.as_ref()[..8].try_into()?);
-        if !game_ids.insert(game_id) {
-            return Err("configured matches have colliding game identities".into());
+/// Shared private initialization for both configured and dynamically created matches.
+/// The factory retains a derivation key, never a copy of any authoritative game state.
+#[derive(Clone)]
+pub struct MatchFactory {
+    key: hmac::Key,
+}
+impl MatchFactory {
+    pub fn new(config: &ServerConfig) -> ErrorResult<Self> {
+        let mut identities = BTreeSet::new();
+        for id in &config.match_ids {
+            if !identities.insert(game_id(id)) {
+                return Err("configured matches have colliding game identities".into());
+            }
         }
-        let mut derivation = hmac::Context::with_key(&key);
+        Ok(Self {
+            key: hmac::Key::new(hmac::HMAC_SHA256, &seed(config)?),
+        })
+    }
+
+    pub fn create(&self, id: &MatchId) -> ErrorResult<ScrabbleSimulation> {
+        let mut derivation = hmac::Context::with_key(&self.key);
         derivation.update(b"scrabble/deal/v1\0");
         derivation.update(id.as_str().as_bytes());
         let seed: [u8; 32] = derivation.sign().as_ref().try_into()?;
-        matches.push((
-            id.clone(),
-            ScrabbleSimulation::new(GameId::new(game_id), english_fixture(), seed)?,
-        ));
+        Ok(ScrabbleSimulation::new(
+            game_id(id),
+            english_fixture(),
+            seed,
+        )?)
+    }
+}
+
+pub fn game_id(id: &MatchId) -> GameId {
+    let mut identity = digest::Context::new(&digest::SHA256);
+    identity.update(b"scrabble/game-id/v1\0");
+    identity.update(id.as_str().as_bytes());
+    let digest = identity.finish();
+    let mut bytes = [0; 8];
+    bytes.copy_from_slice(&digest.as_ref()[..8]);
+    GameId::new(u64::from_be_bytes(bytes))
+}
+
+pub fn create_matches(config: &ServerConfig) -> ErrorResult<Vec<(MatchId, ScrabbleSimulation)>> {
+    let factory = MatchFactory::new(config)?;
+    let mut matches = Vec::with_capacity(config.match_ids.len());
+    for id in &config.match_ids {
+        matches.push((id.clone(), factory.create(id)?));
     }
     Ok(matches)
 }

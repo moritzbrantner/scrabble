@@ -10,6 +10,8 @@ The factory persists one private 32-byte initialization key outside the upstream
 
 Each match's deal seed is HMAC-SHA256 of its canonical match ID with a versioned domain separator. Its public numeric game ID derives separately from SHA-256 of the match ID, not from the secret key. Match order cannot change identity or initialization. Hash collisions in the configured game-ID set fail explicitly. The installed ruleset/dictionary identity and factory derivation are replay inputs; incompatible changes require an intentional migration rather than silently resetting games.
 
+The executable now consumes upstream's dynamic prepared host. The factory is reusable for individual IDs, and recovery reconstructs the bounded manifest membership rather than requiring every restored ID to be preconfigured. Fresh starts still use configured IDs. The create-game request surface and automatic retirement policy are implemented in the next slice; switching the hosted boundary does not itself expose creation to browsers.
+
 ## Operational boundary
 
 Configuration defaults to local development with two matches, finite capacity/grace bounds and TLS file paths under ignored `.local/server`. It never disables TLS or supplies a predictable default shuffle seed. A local-only deterministic test seed can initialize a new private file, but cannot overwrite an existing seed and is forbidden in production. Production requires explicit absolute TLS, seed and recovery paths and match IDs. Unknown keys and invalid configuration fail before serving.

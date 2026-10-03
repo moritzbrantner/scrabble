@@ -1,8 +1,8 @@
-use crate::{config::ServerConfig, factory::create_matches};
+use crate::{config::ServerConfig, factory::MatchFactory};
 use game_server::{
     MatchHostRecoveryConfig, MatchHostStatusConfig, MatchHostWebTransportConfig,
-    RejectMatchControlService, prepare_match_host_for_recovery,
-    serve_prepared_match_host_with_status_and_control_and_shutdown,
+    RejectMatchControlService, prepare_live_match_host_for_recovery,
+    serve_prepared_live_match_host_with_status_and_control_and_shutdown,
 };
 use std::error::Error;
 use tokio::sync::mpsc;
@@ -12,13 +12,14 @@ pub async fn serve(
     shutdown: mpsc::Receiver<()>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     let config = tokio::task::spawn_blocking(move || {
-        let matches = create_matches(&config)?;
-        Ok::<_, Box<dyn Error + Send + Sync>>((config, matches))
+        let factory = MatchFactory::new(&config)?;
+        Ok::<_, Box<dyn Error + Send + Sync>>((config, factory))
     })
     .await??;
-    let (config, matches) = config;
-    let prepared = prepare_match_host_for_recovery(
-        matches,
+    let (config, factory) = config;
+    let prepared = prepare_live_match_host_for_recovery(
+        config.match_ids,
+        move |id| factory.create(id),
         config.max_matches,
         config.reconnect_grace_ticks,
         MatchHostRecoveryConfig {
@@ -26,7 +27,7 @@ pub async fn serve(
         },
     )
     .await?;
-    serve_prepared_match_host_with_status_and_control_and_shutdown(
+    serve_prepared_live_match_host_with_status_and_control_and_shutdown(
         prepared,
         RejectMatchControlService,
         MatchHostWebTransportConfig {
