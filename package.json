@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --config apps/web/vite.config.ts",
-    "dev:server": "cargo run -p scrabble-server",
+    "dev:server": "cargo run -p scrabble-server --locked",
+    "dev:tls": "cargo run -p scrabble-server --example local_tls --locked",
     "format": "oxfmt . && cargo fmt --all",
     "format:check": "oxfmt --check . && cargo fmt --all --check",
     "lint": "oxlint --type-aware --tsconfig tsconfig.json apps/web scripts && cargo clippy --workspace --all-targets --locked -- -D warnings",
