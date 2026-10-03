@@ -50,6 +50,12 @@ impl GameSession {
     pub fn add_player(&mut self, player: PlayerId, name: String) -> Result<(), StateError> {
         self.state.add_player(player, name)
     }
+    pub fn remove_lobby_player(&mut self, player: PlayerId) -> Result<(), StateError> {
+        self.state.remove_lobby_player(player)?;
+        self.last_sequences.remove(&player);
+        self.clear_preview_for(player);
+        Ok(())
+    }
     pub fn public_snapshot(&self) -> PublicSnapshot {
         let mut snapshot = self.state.public_snapshot();
         snapshot.preview = self.preview.clone();

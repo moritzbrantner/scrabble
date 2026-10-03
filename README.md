@@ -1,6 +1,6 @@
 # Scrabble
 
-A shared-board and private-phone multiplayer Scrabble application, under construction. The browser currently presents a public board preview; the browser transport adapter is verified against a local game-server runtime, while the Scrabble simulation adapter and network executable are still being built.
+A shared-board and private-phone multiplayer Scrabble application, under construction. The browser currently presents a public board preview; the browser transport adapter is verified against a local game-server runtime, while the Scrabble simulation adapter now runs inside that runtime, while the network executable is still being built.
 
 ## Development
 
@@ -21,7 +21,7 @@ bun run check
 
 The browser uses `/scrabble/` as its Vite base, including in development. GitHub Actions validates and builds once, uploads `dist`, and deploys that artifact on main to GitHub Pages. Configure repository Pages to use GitHub Actions. No server credential belongs in this public static bundle. Production authoritative hosting is tracked in #31.
 
-`cargo` owns canonical game logic under `crates/scrabble-game`; `crates/scrabble-server` will adapt it to `game-server`. `apps/web` owns presentation only. See the ordered GitHub issues #1–#34 for the MVP acceptance requirements.
+`cargo` owns canonical game logic under `crates/scrabble-game`; `crates/scrabble-server` adapts it to `game-server` through `ScrabbleSimulation`. `apps/web` owns presentation only. See the ordered GitHub issues #1–#34 for the MVP acceptance requirements.
 
 The versioned domain contracts and offline English fixture ruleset are defined in `crates/scrabble-game`; see [protocol v1](docs/specs/protocol-v1.md) and the [domain glossary](CONTEXT.md). The fixture dictionary is test-only, not a full playable word list.
 
@@ -36,3 +36,5 @@ The versioned domain contracts and offline English fixture ruleset are defined i
 The [shared board](docs/specs/shared-board.md) renders public snapshot fixtures for lobby, playing, and finished phases. Add `?fixture=playing` or `?fixture=finished` to the `/scrabble/` entry point to inspect those presentation cases; multiplayer is not connected yet. `bun run test:browser` runs focused layout checks and writes screenshots to ignored `test-results/`.
 
 The [browser transport](docs/specs/browser-transport.md) supports versioned welcome, bounded commands, latest-state snapshot reassembly, reliable control and in-memory reconnect capabilities. Its real-network fixture exercises upstream `game-server` independently of Scrabble rules. Production endpoint configuration remains #31.
+
+The [simulation adapter](docs/specs/simulation-adapter.md) maps runtime admissions directly to domain identities, applies authenticated commands, keeps ticks independent of turns, and separates canonical replay evidence from private player projections. Browser-free tests verify runtime replay, recovery, reconnect fencing and grace expiry. Started-game forfeit resolution remains #27.
