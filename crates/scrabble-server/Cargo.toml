@@ -6,9 +6,10 @@ license.workspace = true
 
 [dependencies]
 scrabble-game = { path = "../scrabble-game" }
+game-server = { git = "https://github.com/moritzbrantner/game-server.git", rev = "a3851dab9c1fb25dd31b465fb554ca475769caab" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = ["raw_value"] }
 
 [dev-dependencies]
-game-server = { git = "https://github.com/moritzbrantner/game-server.git", rev = "a3851dab9c1fb25dd31b465fb554ca475769caab" }
-serde_json = "1.0"
 tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "signal", "sync"] }
 wtransport = { version = "0.7.2", default-features = false, features = ["ring", "self-signed"] }

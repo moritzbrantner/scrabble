@@ -251,6 +251,24 @@ impl GameState {
         self.revision = revision;
         Ok(())
     }
+    /// Only undealt lobby seats can leave storage. Started games retain rack ownership.
+    pub fn remove_lobby_player(&mut self, id: PlayerId) -> Result<(), StateError> {
+        if !matches!(self.phase, Phase::Lobby {}) {
+            return Err(StateError::WrongPhase);
+        }
+        let index = self
+            .players
+            .iter()
+            .position(|player| player.id == id)
+            .ok_or(StateError::UnknownPlayer)?;
+        if !self.players[index].rack.is_empty() {
+            return Err(StateError::InvariantViolation);
+        }
+        let revision = self.next_revision()?;
+        self.players.remove(index);
+        self.revision = revision;
+        Ok(())
+    }
     pub fn refill_rack(&mut self, player: PlayerId) -> Result<usize, StateError> {
         if !matches!(self.phase, Phase::Playing { .. }) {
             return Err(StateError::WrongPhase);

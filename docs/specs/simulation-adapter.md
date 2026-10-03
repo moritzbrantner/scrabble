@@ -1,0 +1,13 @@
+# Scrabble game-server adapter
+
+`ScrabbleSimulation::new(game_id, ruleset, seed)` constructs a fresh deterministic lobby. The adapter fixes tick rate at 20 Hz, uses the ruleset's player capacity, and delegates storage, dealing, previews and passes to `GameSession`. Display names start as `Player <runtime ID>`; join/name selection belongs to #12.
+
+Admission maps the authenticated runtime u32 player directly to the domain decimal-string u64 ID. Command payloads are limited by the upstream 1,024-byte boundary and strict Scrabble protocol v1. The adapter compares authenticated identity and transport sequence with payload claims through `GameSession::apply`; failures mutate neither canonical nor projected state. Commit and exchange retain the session's explicit unsupported result until their transaction issues.
+
+Player-facing snapshots contain `public` plus the selected admitted player's `own_rack`. Unknown/retired recipients fail closed. No connection is sent the canonical snapshot, which contains full immutable ruleset, bag order, racks, scores, phase, board and bounded admission identity evidence. Preview is deliberately ephemeral and excluded from canonical evidence. Runtime tick is carried and hashed by `SimulationSnapshot`, independently of domain turn and public revision.
+
+Canonical evidence wrapper version 1 has `version`, `admitted`, `last_admitted_player` and `game`, where `game` embeds the versioned domain canonical JSON. This format is private replay/recovery evidence, not a browser protocol. Recovery reconstructs the same simulation from the initial game ID/ruleset/full seed, then uses upstream replay interpretation and checkpoint verification; the runtime restores its own tokens, epochs and sequence cursors. It does not deserialize untrusted JSON directly into mutable `GameState`.
+
+See [the simulation decision](../adr/0005-simulation-adapter.md) for grace expiry and removal policy. `GameState::remove_lobby_player` permits only an undealt lobby seat and preserves bag/inventory. Started seats retain ownership while retired identities lose private access. Explicit forfeit resolution remains #27, and immediate disconnect/reconnect preview notifications remain #26 because upstream's current trait has no such hook.
+
+Run `cargo test -p scrabble-server --locked` for adapter, real-runtime replay/recovery and wire-fixture compatibility evidence; these tests need no browser or network listener. Full repository checks remain `bun run check`. Shared convention sourceRevision: `46d8793bb3034326561f876dcc67dbaa5aa1e432`.
