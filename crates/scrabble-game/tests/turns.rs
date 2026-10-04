@@ -180,3 +180,71 @@ fn only_the_host_can_start_and_invalid_preview_preserves_the_previous_one() {
     )
     .unwrap();
 }
+
+#[test]
+fn lobby_names_are_bounded_atomic_and_never_identity_authority() {
+    let mut session = lobby();
+    let rename = command(
+        2,
+        1,
+        0,
+        Command::SetName {
+            display_name: "  Ada  ".into(),
+        },
+    );
+    apply(&mut session, &rename).unwrap();
+    let public = session.public_snapshot();
+    assert_eq!(public.players[0].display_name, "Ada");
+    assert_eq!(public.players[1].display_name, "Ada");
+    assert_ne!(public.players[0].id, public.players[1].id);
+    assert_eq!(
+        apply(&mut session, &command(2, 2, 0, Command::Start {})),
+        Err(CommandError::NotHost)
+    );
+    let before = session.state().canonical_bytes().unwrap();
+    for name in [
+        "".to_owned(),
+        " ".to_owned(),
+        "x".repeat(33),
+        "bad\nname".to_owned(),
+    ] {
+        assert!(
+            apply(
+                &mut session,
+                &command(2, 2, 0, Command::SetName { display_name: name })
+            )
+            .is_err()
+        );
+        assert_eq!(session.state().canonical_bytes().unwrap(), before);
+    }
+    let claim = command(
+        1,
+        2,
+        0,
+        Command::SetName {
+            display_name: "Impostor".into(),
+        },
+    );
+    assert_eq!(
+        session.apply(PlayerId::new(2), 2, &claim),
+        Err(CommandError::WrongIdentity)
+    );
+    assert_eq!(session.state().canonical_bytes().unwrap(), before);
+    apply(&mut session, &command(1, 1, 0, Command::Start {})).unwrap();
+    let started = session.state().canonical_bytes().unwrap();
+    assert!(
+        apply(
+            &mut session,
+            &command(
+                1,
+                2,
+                0,
+                Command::SetName {
+                    display_name: "Other".into()
+                }
+            )
+        )
+        .is_err()
+    );
+    assert_eq!(session.state().canonical_bytes().unwrap(), started);
+}

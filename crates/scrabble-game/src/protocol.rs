@@ -19,6 +19,7 @@ pub struct Placement {
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
     Start {},
+    SetName { display_name: String },
     Preview { placements: Vec<Placement> },
     Commit { placements: Vec<Placement> },
     Pass {},
@@ -47,7 +48,7 @@ impl CommandEnvelope {
         let count = match &envelope.command {
             Command::Preview { placements } | Command::Commit { placements } => placements.len(),
             Command::Exchange { tile_ids } => tile_ids.len(),
-            Command::Start {} | Command::Pass {} => 0,
+            Command::Start {} | Command::Pass {} | Command::SetName { .. } => 0,
         };
         if count > 15 {
             return Err(ContractError("command exceeds tile limit".into()));

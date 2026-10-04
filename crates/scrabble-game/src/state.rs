@@ -204,6 +204,33 @@ impl GameState {
             .map(TurnId::new)
             .ok_or(StateError::InvariantViolation)
     }
+    /// Names identify presentation only; duplicates never substitute for authenticated IDs.
+    pub fn set_display_name(
+        &mut self,
+        id: PlayerId,
+        display_name: String,
+    ) -> Result<(), StateError> {
+        if !matches!(self.phase, Phase::Lobby {}) {
+            return Err(StateError::WrongPhase);
+        }
+        let name = display_name.trim();
+        if name.is_empty() || name.chars().count() > 32 || name.chars().any(char::is_control) {
+            return Err(StateError::InvalidName);
+        }
+        let index = self
+            .players
+            .iter()
+            .position(|player| player.id == id)
+            .ok_or(StateError::UnknownPlayer)?;
+        if self.players[index].display_name == name {
+            return Ok(());
+        }
+        let revision = self.next_revision()?;
+        self.players[index].display_name = name.to_owned();
+        self.revision = revision;
+        Ok(())
+    }
+
     pub fn add_player(&mut self, id: PlayerId, display_name: String) -> Result<(), StateError> {
         if !matches!(self.phase, Phase::Lobby {}) {
             return Err(StateError::WrongPhase);

@@ -36,6 +36,7 @@ impl Response {
 fn operation_error(error: GameOperationError) -> Response {
     match error {
         GameOperationError::InvalidRequest => Response::error(400, "invalid-request"),
+        GameOperationError::JoinClosed => Response::error(409, "join-closed"),
         GameOperationError::ExpiredMatch => Response::error(410, "expired-match"),
         GameOperationError::ExpiredRequest => Response::error(410, "expired-request"),
         GameOperationError::NotServing => Response::error(503, "not-serving"),
@@ -161,10 +162,15 @@ async fn route(request: Request, games: &Games, board_origin: &str) -> Response 
     {
         return Response::error(403, "origin-rejected");
     }
-    let is_game = request
-        .path
-        .strip_prefix("/games/")
-        .and_then(|id| MatchId::new(id).ok());
+    let new_admission = request.path.ends_with("/join");
+    let is_game = request.path.strip_prefix("/games/").and_then(|id| {
+        MatchId::new(if new_admission {
+            id.strip_suffix("/join")?
+        } else {
+            id
+        })
+        .ok()
+    });
     if request.path != "/games" && is_game.is_none() {
         return Response::error(404, "not-found");
     }
@@ -196,7 +202,11 @@ async fn route(request: Request, games: &Games, board_origin: &str) -> Response 
             }
         }
         "GET" => match is_game {
-            Some(id) => match games.lookup(&id, now).await {
+            Some(id) => match if new_admission {
+                games.check_join(&id, now).await
+            } else {
+                games.lookup(&id, now).await
+            } {
                 Ok(join) => match serde_json::to_string(&join) {
                     Ok(body) => Response { status: 200, body },
                     Err(_) => operation_error(GameOperationError::Internal),
@@ -205,7 +215,7 @@ async fn route(request: Request, games: &Games, board_origin: &str) -> Response 
             },
             None => Response::error(405, "method-not-allowed"),
         },
-        "DELETE" => match is_game {
+        "DELETE" if !new_admission => match is_game {
             Some(id) => match games.retire(&id, now).await {
                 Ok(()) => Response {
                     status: 204,
