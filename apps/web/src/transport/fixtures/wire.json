@@ -100,6 +100,467 @@
     },
     "public": {
       "board": [],
+      "configuration": {
+        "bingo_bonus": 50,
+        "board_size": 15,
+        "dictionary": {
+          "name": "scrabble-authored-fixture",
+          "revision": "1"
+        },
+        "exchange_minimum_bag": 7,
+        "identity": {
+          "name": "en-classic-fixture",
+          "revision": "1"
+        },
+        "maximum_players": 4,
+        "minimum_players": 2,
+        "premiums": [
+          "triple_word",
+          "normal",
+          "normal",
+          "double_letter",
+          "normal",
+          "normal",
+          "normal",
+          "triple_word",
+          "normal",
+          "normal",
+          "normal",
+          "double_letter",
+          "normal",
+          "normal",
+          "triple_word",
+          "normal",
+          "double_word",
+          "normal",
+          "normal",
+          "normal",
+          "triple_letter",
+          "normal",
+          "normal",
+          "normal",
+          "triple_letter",
+          "normal",
+          "normal",
+          "normal",
+          "double_word",
+          "normal",
+          "normal",
+          "normal",
+          "double_word",
+          "normal",
+          "normal",
+          "normal",
+          "double_letter",
+          "normal",
+          "double_letter",
+          "normal",
+          "normal",
+          "normal",
+          "double_word",
+          "normal",
+          "normal",
+          "double_letter",
+          "normal",
+          "normal",
+          "double_word",
+          "normal",
+          "normal",
+          "normal",
+          "double_letter",
+          "normal",
+          "normal",
+          "normal",
+          "double_word",
+          "normal",
+          "normal",
+          "double_letter",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "double_word",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "double_word",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "triple_letter",
+          "normal",
+          "normal",
+          "normal",
+          "triple_letter",
+          "normal",
+          "normal",
+          "normal",
+          "triple_letter",
+          "normal",
+          "normal",
+          "normal",
+          "triple_letter",
+          "normal",
+          "normal",
+          "normal",
+          "double_letter",
+          "normal",
+          "normal",
+          "normal",
+          "double_letter",
+          "normal",
+          "double_letter",
+          "normal",
+          "normal",
+          "normal",
+          "double_letter",
+          "normal",
+          "normal",
+          "triple_word",
+          "normal",
+          "normal",
+          "double_letter",
+          "normal",
+          "normal",
+          "normal",
+          "double_word",
+          "normal",
+          "normal",
+          "normal",
+          "double_letter",
+          "normal",
+          "normal",
+          "triple_word",
+          "normal",
+          "normal",
+          "double_letter",
+          "normal",
+          "normal",
+          "normal",
+          "double_letter",
+          "normal",
+          "double_letter",
+          "normal",
+          "normal",
+          "normal",
+          "double_letter",
+          "normal",
+          "normal",
+          "normal",
+          "triple_letter",
+          "normal",
+          "normal",
+          "normal",
+          "triple_letter",
+          "normal",
+          "normal",
+          "normal",
+          "triple_letter",
+          "normal",
+          "normal",
+          "normal",
+          "triple_letter",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "double_word",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "double_word",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "double_letter",
+          "normal",
+          "normal",
+          "double_word",
+          "normal",
+          "normal",
+          "normal",
+          "double_letter",
+          "normal",
+          "normal",
+          "normal",
+          "double_word",
+          "normal",
+          "normal",
+          "double_letter",
+          "normal",
+          "normal",
+          "double_word",
+          "normal",
+          "normal",
+          "normal",
+          "double_letter",
+          "normal",
+          "double_letter",
+          "normal",
+          "normal",
+          "normal",
+          "double_word",
+          "normal",
+          "normal",
+          "normal",
+          "double_word",
+          "normal",
+          "normal",
+          "normal",
+          "triple_letter",
+          "normal",
+          "normal",
+          "normal",
+          "triple_letter",
+          "normal",
+          "normal",
+          "normal",
+          "double_word",
+          "normal",
+          "triple_word",
+          "normal",
+          "normal",
+          "double_letter",
+          "normal",
+          "normal",
+          "normal",
+          "triple_word",
+          "normal",
+          "normal",
+          "normal",
+          "double_letter",
+          "normal",
+          "normal",
+          "triple_word"
+        ],
+        "rack_size": 7,
+        "scoreless_turn_limit": 6,
+        "tiles": [
+          {
+            "count": 9,
+            "face": {
+              "kind": "letter",
+              "letter": "A"
+            },
+            "value": 1
+          },
+          {
+            "count": 2,
+            "face": {
+              "kind": "letter",
+              "letter": "B"
+            },
+            "value": 3
+          },
+          {
+            "count": 2,
+            "face": {
+              "kind": "letter",
+              "letter": "C"
+            },
+            "value": 3
+          },
+          {
+            "count": 4,
+            "face": {
+              "kind": "letter",
+              "letter": "D"
+            },
+            "value": 2
+          },
+          {
+            "count": 12,
+            "face": {
+              "kind": "letter",
+              "letter": "E"
+            },
+            "value": 1
+          },
+          {
+            "count": 2,
+            "face": {
+              "kind": "letter",
+              "letter": "F"
+            },
+            "value": 4
+          },
+          {
+            "count": 3,
+            "face": {
+              "kind": "letter",
+              "letter": "G"
+            },
+            "value": 2
+          },
+          {
+            "count": 2,
+            "face": {
+              "kind": "letter",
+              "letter": "H"
+            },
+            "value": 4
+          },
+          {
+            "count": 9,
+            "face": {
+              "kind": "letter",
+              "letter": "I"
+            },
+            "value": 1
+          },
+          {
+            "count": 1,
+            "face": {
+              "kind": "letter",
+              "letter": "J"
+            },
+            "value": 8
+          },
+          {
+            "count": 1,
+            "face": {
+              "kind": "letter",
+              "letter": "K"
+            },
+            "value": 5
+          },
+          {
+            "count": 4,
+            "face": {
+              "kind": "letter",
+              "letter": "L"
+            },
+            "value": 1
+          },
+          {
+            "count": 2,
+            "face": {
+              "kind": "letter",
+              "letter": "M"
+            },
+            "value": 3
+          },
+          {
+            "count": 6,
+            "face": {
+              "kind": "letter",
+              "letter": "N"
+            },
+            "value": 1
+          },
+          {
+            "count": 8,
+            "face": {
+              "kind": "letter",
+              "letter": "O"
+            },
+            "value": 1
+          },
+          {
+            "count": 2,
+            "face": {
+              "kind": "letter",
+              "letter": "P"
+            },
+            "value": 3
+          },
+          {
+            "count": 1,
+            "face": {
+              "kind": "letter",
+              "letter": "Q"
+            },
+            "value": 10
+          },
+          {
+            "count": 6,
+            "face": {
+              "kind": "letter",
+              "letter": "R"
+            },
+            "value": 1
+          },
+          {
+            "count": 4,
+            "face": {
+              "kind": "letter",
+              "letter": "S"
+            },
+            "value": 1
+          },
+          {
+            "count": 6,
+            "face": {
+              "kind": "letter",
+              "letter": "T"
+            },
+            "value": 1
+          },
+          {
+            "count": 4,
+            "face": {
+              "kind": "letter",
+              "letter": "U"
+            },
+            "value": 1
+          },
+          {
+            "count": 2,
+            "face": {
+              "kind": "letter",
+              "letter": "V"
+            },
+            "value": 4
+          },
+          {
+            "count": 2,
+            "face": {
+              "kind": "letter",
+              "letter": "W"
+            },
+            "value": 4
+          },
+          {
+            "count": 1,
+            "face": {
+              "kind": "letter",
+              "letter": "X"
+            },
+            "value": 8
+          },
+          {
+            "count": 2,
+            "face": {
+              "kind": "letter",
+              "letter": "Y"
+            },
+            "value": 4
+          },
+          {
+            "count": 1,
+            "face": {
+              "kind": "letter",
+              "letter": "Z"
+            },
+            "value": 10
+          },
+          {
+            "count": 2,
+            "face": {
+              "kind": "blank"
+            },
+            "value": 0
+          }
+        ]
+      },
       "dictionary": {
         "name": "scrabble-authored-fixture",
         "revision": "1"

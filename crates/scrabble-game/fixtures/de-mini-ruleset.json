@@ -1,0 +1,157 @@
+{
+  "identity": {
+    "name": "de-mini-fixture",
+    "revision": "1"
+  },
+  "dictionary": {
+    "name": "scrabble-de-authored-fixture",
+    "revision": "1"
+  },
+  "tiles": [
+    {
+      "face": {
+        "kind": "letter",
+        "letter": "A"
+      },
+      "count": 4,
+      "value": 1
+    },
+    {
+      "face": {
+        "kind": "letter",
+        "letter": "B"
+      },
+      "count": 2,
+      "value": 3
+    },
+    {
+      "face": {
+        "kind": "letter",
+        "letter": "D"
+      },
+      "count": 2,
+      "value": 2
+    },
+    {
+      "face": {
+        "kind": "letter",
+        "letter": "L"
+      },
+      "count": 2,
+      "value": 2
+    },
+    {
+      "face": {
+        "kind": "letter",
+        "letter": "N"
+      },
+      "count": 3,
+      "value": 1
+    },
+    {
+      "face": {
+        "kind": "letter",
+        "letter": "R"
+      },
+      "count": 3,
+      "value": 1
+    },
+    {
+      "face": {
+        "kind": "letter",
+        "letter": "S"
+      },
+      "count": 3,
+      "value": 1
+    },
+    {
+      "face": {
+        "kind": "letter",
+        "letter": "Ä"
+      },
+      "count": 2,
+      "value": 6
+    },
+    {
+      "face": {
+        "kind": "letter",
+        "letter": "Ö"
+      },
+      "count": 2,
+      "value": 8
+    },
+    {
+      "face": {
+        "kind": "letter",
+        "letter": "Ü"
+      },
+      "count": 2,
+      "value": 6
+    },
+    {
+      "face": {
+        "kind": "blank"
+      },
+      "count": 2,
+      "value": 0
+    }
+  ],
+  "board_size": 7,
+  "premiums": [
+    "triple_word",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "triple_word",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "double_word",
+    "double_letter",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "triple_word",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "normal",
+    "triple_word"
+  ],
+  "rack_size": 3,
+  "bingo_bonus": 20,
+  "exchange_minimum_bag": 3,
+  "scoreless_turn_limit": 6,
+  "minimum_players": 2,
+  "maximum_players": 2
+}

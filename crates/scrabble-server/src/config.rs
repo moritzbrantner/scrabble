@@ -19,6 +19,7 @@ pub struct DictionaryConfig {
 pub struct ServerConfig {
     pub mode: Mode,
     pub dictionary: Option<DictionaryConfig>,
+    pub ruleset_file: Option<PathBuf>,
     pub port: u16,
     pub status_port: u16,
     pub api_port: u16,
@@ -47,6 +48,7 @@ fn fail(message: impl Into<String>) -> ConfigError {
 }
 const KEYS: &[&str] = &[
     "SCRABBLE_MODE",
+    "SCRABBLE_RULESET_FILE",
     "SCRABBLE_DICTIONARY_FILE",
     "SCRABBLE_DICTIONARY_NAME",
     "SCRABBLE_DICTIONARY_REVISION",
@@ -236,9 +238,24 @@ impl ServerConfig {
         } else {
             None
         };
+        let ruleset_file = if values.contains_key("SCRABBLE_RULESET_FILE") {
+            if dictionary.is_none() {
+                return Err(fail(
+                    "custom rulesets require explicit dictionary configuration",
+                ));
+            }
+            let file = path(values, "SCRABBLE_RULESET_FILE", "")?;
+            if matches!(mode, Mode::Production) && !file.is_absolute() {
+                return Err(fail("production ruleset path must be absolute"));
+            }
+            Some(file)
+        } else {
+            None
+        };
         let config = Self {
             mode,
             dictionary,
+            ruleset_file,
             port,
             status_port,
             api_port,

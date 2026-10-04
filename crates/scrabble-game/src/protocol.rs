@@ -2,7 +2,7 @@
 use crate::identity::{
     ContractError, Coordinate, GameId, PlayerId, ProtocolVersion, TileId, TurnId,
 };
-use crate::ruleset::{ContentIdentity, TileFace};
+use crate::ruleset::{ContentIdentity, Ruleset, TileFace};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -163,6 +163,8 @@ pub struct PublicSnapshot {
     pub game_id: GameId,
     pub revision: TurnId,
     pub ruleset: ContentIdentity,
+    /// Immutable public geometry, alphabet and scoring data; never contains dictionary words.
+    pub configuration: Ruleset,
     pub dictionary: ContentIdentity,
     pub phase: Phase,
     pub board: Vec<BoardTile>,

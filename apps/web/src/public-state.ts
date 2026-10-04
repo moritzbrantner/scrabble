@@ -19,7 +19,18 @@ export const tileFace = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("letter"), letter }),
   z.strictObject({ kind: z.literal("blank") }),
 ]);
-const identity = z.strictObject({ name: z.string().min(1), revision: z.string().min(1) });
+const identity = z.strictObject({
+  name: z
+    .string()
+    .min(1)
+    .max(64)
+    .regex(/^[A-Za-z0-9_.-]+$/),
+  revision: z
+    .string()
+    .min(1)
+    .max(192)
+    .regex(/^[A-Za-z0-9_.+:-]+$/),
+});
 const tile = z.strictObject({ coordinate, letter, is_blank: z.boolean() });
 export const premium = z.enum([
   "normal",
@@ -65,11 +76,54 @@ const publicTurn = z.strictObject({
     )
     .max(4),
 });
+export const ruleset = z
+  .strictObject({
+    identity,
+    dictionary: identity,
+    tiles: z
+      .array(
+        z.strictObject({
+          face: tileFace,
+          count: z.int().min(1).max(65535),
+          value: z.int().min(0).max(65535),
+        }),
+      )
+      .min(1)
+      .max(64),
+    board_size: z.int().min(1).max(15),
+    premiums: z.array(premium).max(225),
+    rack_size: z.int().min(1).max(15),
+    bingo_bonus: z.int().min(0).max(65535),
+    exchange_minimum_bag: z.int().min(0).max(65535),
+    scoreless_turn_limit: z.int().min(1).max(65535),
+    minimum_players: z.int().min(2).max(4),
+    maximum_players: z.int().min(2).max(4),
+  })
+  .refine(
+    (value) =>
+      value.board_size % 2 === 1 &&
+      value.premiums.length === value.board_size ** 2 &&
+      value.minimum_players <= value.maximum_players,
+  )
+  .refine((value) => {
+    const faces = value.tiles.map((tile) => (tile.face.kind === "blank" ? "" : tile.face.letter));
+    const total = value.tiles.reduce((sum, tile) => sum + tile.count, 0);
+    return (
+      new Set(faces).size === faces.length &&
+      faces.some((face) => face !== "") &&
+      value.tiles.every((tile) =>
+        tile.face.kind === "blank" ? tile.value === 0 : /^\p{Alphabetic}$/u.test(tile.face.letter),
+      ) &&
+      total >= value.maximum_players * value.rack_size &&
+      total <= 200
+    );
+  });
 export const publicSnapshot = z.strictObject({
   version: z.literal(1),
   game_id: id,
   revision: id,
   ruleset: identity,
+  configuration: ruleset,
   dictionary: identity,
   phase,
   board: z.array(tile).max(225),
@@ -89,27 +143,6 @@ export const publicSnapshot = z.strictObject({
   host: z.strictObject({ id: id.nullable() }).optional(),
   preview: z.strictObject({ player_id: id, turn: id, tiles: z.array(tile).max(15) }).nullable(),
 });
-export const ruleset = z
-  .strictObject({
-    identity,
-    dictionary: identity,
-    tiles: z.array(
-      z.strictObject({
-        face: tileFace,
-        count: z.int().positive(),
-        value: z.int().min(0).max(65535),
-      }),
-    ),
-    board_size: z.int().min(1).max(15),
-    premiums: z.array(premium),
-    rack_size: z.int().min(1).max(15),
-    bingo_bonus: z.int(),
-    exchange_minimum_bag: z.int(),
-    scoreless_turn_limit: z.int(),
-    minimum_players: z.int(),
-    maximum_players: z.int(),
-  })
-  .refine((value) => value.premiums.length === value.board_size ** 2);
 export type PublicSnapshot = z.infer<typeof publicSnapshot>;
 export type Ruleset = z.infer<typeof ruleset>;
 export type Premium = z.infer<typeof premium>;

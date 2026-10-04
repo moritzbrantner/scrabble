@@ -101,6 +101,7 @@ fn public_snapshot_has_no_private_fields_and_rejects_injected_racks() {
         version: ProtocolVersion,
         game_id: GameId::new(1),
         revision: TurnId::new(0),
+        configuration: rules.clone(),
         ruleset: rules.identity,
         dictionary: rules.dictionary,
         phase: Phase::Lobby {},
