@@ -760,3 +760,145 @@ fn pass_is_fenced_exactly_once_and_replays_without_changing_tile_ownership() {
             .unwrap();
     assert_eq!(restored.snapshot().unwrap(), expected);
 }
+
+#[test]
+fn exchanged_racks_remain_private_and_replay_through_recovery() {
+    let mut runtime = MatchRuntime::new_with_replay_capture(simulation(), 100);
+    runtime.admit(ReconnectToken([1; 16])).unwrap();
+    runtime.admit(ReconnectToken([2; 16])).unwrap();
+    runtime
+        .submit_command(1, 1, 1, &command(1, 1, 0, Command::Start {}))
+        .unwrap();
+    let own: PlayerSnapshot =
+        serde_json::from_slice(&runtime.snapshot_for(1).unwrap().payload).unwrap();
+    let other: PlayerSnapshot =
+        serde_json::from_slice(&runtime.snapshot_for(2).unwrap().payload).unwrap();
+    runtime
+        .submit_command(1, 1, 2, &command(1, 2, 0, draft(&own)))
+        .unwrap();
+    let before = runtime.snapshot().unwrap();
+    let private = runtime.snapshot_for(1).unwrap();
+    let ids: Vec<_> = own
+        .own_rack
+        .tiles
+        .iter()
+        .take(2)
+        .map(|tile| tile.id)
+        .collect();
+    for (player, sequence, turn, selected) in [
+        (2, 1, 0, vec![other.own_rack.tiles[0].id]),
+        (1, 3, 99, ids.clone()),
+        (1, 3, 0, vec![other.own_rack.tiles[0].id]),
+        (1, 3, 0, vec![ids[0], ids[0]]),
+    ] {
+        assert!(
+            runtime
+                .submit_command(
+                    player,
+                    1,
+                    sequence,
+                    &command(
+                        player,
+                        sequence,
+                        turn,
+                        Command::Exchange { tile_ids: selected }
+                    )
+                )
+                .is_err()
+        );
+        assert_eq!(runtime.snapshot().unwrap(), before);
+        assert_eq!(runtime.snapshot_for(1).unwrap(), private);
+    }
+    let payload = command(
+        1,
+        3,
+        0,
+        Command::Exchange {
+            tile_ids: ids.clone(),
+        },
+    );
+    assert_eq!(
+        runtime.submit_command(1, 1, 3, &payload).unwrap(),
+        CommandOutcome::Applied
+    );
+    let exchanged = runtime.snapshot().unwrap();
+    assert_eq!(
+        runtime.submit_command(1, 1, 3, &payload).unwrap(),
+        CommandOutcome::IgnoredStale
+    );
+    assert!(
+        runtime
+            .submit_command(
+                1,
+                1,
+                4,
+                &command(
+                    1,
+                    4,
+                    0,
+                    Command::Exchange {
+                        tile_ids: ids.clone()
+                    }
+                )
+            )
+            .is_err()
+    );
+    assert_eq!(runtime.snapshot().unwrap(), exchanged);
+    let first: PlayerSnapshot =
+        serde_json::from_slice(&runtime.snapshot_for(1).unwrap().payload).unwrap();
+    let second: PlayerSnapshot =
+        serde_json::from_slice(&runtime.snapshot_for(2).unwrap().payload).unwrap();
+    assert_eq!(first.public, second.public);
+    assert_eq!(second.own_rack, other.own_rack);
+    assert_eq!(first.own_rack.tiles.len(), 7);
+    assert_eq!(&first.own_rack.tiles[..5], &own.own_rack.tiles[2..]);
+    assert!(
+        first
+            .own_rack
+            .tiles
+            .iter()
+            .all(|tile| !ids.contains(&tile.id))
+    );
+    assert_eq!(first.public.board, own.public.board);
+    assert_eq!(first.public.players, own.public.players);
+    assert_eq!(first.public.remaining_tiles, own.public.remaining_tiles);
+    assert!(first.public.preview.is_none());
+    assert_eq!(
+        first.public.phase,
+        Phase::Playing {
+            active_player: PlayerId::new(2),
+            turn: TurnId::new(1)
+        }
+    );
+    let public = serde_json::to_value(&first.public).unwrap();
+    assert!(public.get("tile_ids").is_none());
+    assert!(public.get("exchange").is_none());
+    assert!(
+        public["players"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|player| player.get("rack").is_none())
+    );
+    let next = command(
+        2,
+        1,
+        1,
+        Command::Exchange {
+            tile_ids: vec![second.own_rack.tiles[0].id],
+        },
+    );
+    runtime.submit_command(2, 1, 1, &next).unwrap();
+    runtime.advance_tick().unwrap();
+    let expected = runtime.snapshot().unwrap();
+    let log = ReplayLog::decode(&runtime.replay_log().unwrap().encode().unwrap()).unwrap();
+    assert_eq!(
+        verify_replay(simulation(), &log).unwrap().final_snapshot,
+        expected
+    );
+    runtime.freeze_for_recovery();
+    let restored =
+        MatchRuntime::restore_from_recovery(simulation(), runtime.recovery_image().unwrap())
+            .unwrap();
+    assert_eq!(restored.snapshot().unwrap(), expected);
+}

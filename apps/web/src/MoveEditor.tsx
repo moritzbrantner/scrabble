@@ -19,7 +19,8 @@ type EditorState = {
   selected?: string;
   blank?: { tileId: string; row: number; column: number };
   message?: string;
-  pending?: "move" | "pass";
+  pending?: "move" | "pass" | "exchange";
+  exchange?: string[];
   confirmPass?: true;
 };
 export function MoveEditor({
@@ -33,7 +34,7 @@ export function MoveEditor({
   rules: Ruleset;
   canAct: boolean;
   onTurnAction: (
-    command: Extract<CommandEnvelope["command"], { kind: "commit" | "pass" }>,
+    command: Extract<CommandEnvelope["command"], { kind: "commit" | "pass" | "exchange" }>,
   ) => Promise<void>;
   onPreview?: (placements: MoveDraft["placements"]) => Promise<void>;
 }) {
@@ -44,8 +45,25 @@ export function MoveEditor({
   const blank = stale ? undefined : state.blank;
   const pending = !stale && state.pending !== undefined;
   const enabled = canAct && !pending;
+  const exchange = stale ? undefined : state.exchange;
+  const exchanging = exchange !== undefined;
+  const canExchange = snapshot.public.remaining_tiles >= rules.exchange_minimum_bag;
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const board = useRef<HTMLDivElement>(null);
+  const editor = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (exchanging) {
+      editor.current?.querySelector<HTMLButtonElement>(".phone-rack button")?.focus();
+    }
+  }, [exchanging]);
+  const exchangeButton = useRef<HTMLButtonElement>(null);
+  const restoreExchangeFocus = useRef(false);
+  useEffect(() => {
+    if (!exchanging && enabled && restoreExchangeFocus.current) {
+      restoreExchangeFocus.current = false;
+      exchangeButton.current?.focus();
+    }
+  }, [exchanging, enabled]);
   const passButton = useRef<HTMLButtonElement>(null);
   const problem = draftProblem(snapshot, rules, current);
   const previewCallback = useRef(onPreview);
@@ -59,7 +77,7 @@ export function MoveEditor({
     if (!canAct || pending) {
       return;
     }
-    const placements = current.placements;
+    const placements = exchanging ? [] : current.placements;
     const publish = () => {
       if (previewPaused.current) {
         return;
@@ -75,7 +93,7 @@ export function MoveEditor({
       clearTimeout(initial);
       clearInterval(refresh);
     };
-  }, [canAct, pending, current.context, previewPlacements]);
+  }, [canAct, pending, current.context, previewPlacements, exchanging]);
   useEffect(() => {
     if (stale) {
       setState({ draft: current, message: "The game changed. Your draft was cleared." });
@@ -92,7 +110,7 @@ export function MoveEditor({
     }
   }, [snapshot.public.game_id]);
   function edit(action: DraftAction) {
-    if (!enabled && action.kind !== "reset") {
+    if (exchanging || (!enabled && action.kind !== "reset")) {
       return;
     }
     const result = editDraft(snapshot, rules, current, action);
@@ -102,7 +120,7 @@ export function MoveEditor({
     });
   }
   function square(row: number, column: number) {
-    if (!enabled) {
+    if (!enabled || exchanging) {
       return;
     }
     const placed = current.placements.find(
@@ -121,31 +139,43 @@ export function MoveEditor({
       edit({ kind: "place", tileId: selected, coordinate: { row, column }, blankAs: null });
     }
   }
-  async function submit(kind: "commit" | "pass") {
+  async function submit(kind: "commit" | "pass" | "exchange") {
     if (
       !enabled ||
       (kind === "commit" && (problem !== undefined || current.placements.length === 0)) ||
-      (kind === "pass" && state.confirmPass !== true)
+      (kind === "pass" && state.confirmPass !== true) ||
+      (kind === "exchange" &&
+        (!canExchange ||
+          exchange === undefined ||
+          exchange.length === 0 ||
+          exchange.length > snapshot.public.remaining_tiles))
     ) {
       return;
     }
     const draft = current;
     // Fence heartbeat writes before reserving the turn action's transport sequence.
     previewPaused.current = true;
-    const action = kind === "commit" ? "move" : "pass";
+    const action = kind === "commit" ? "move" : kind;
+    const label = { commit: "Move", pass: "Pass", exchange: "Exchange" }[kind];
     setState({ draft, pending: action });
     timer.current = setTimeout(() => {
       setState((previous) =>
         previous.draft.context === draft.context
           ? {
               draft: previous.draft,
-              message: `${kind === "commit" ? "Move" : "Pass"} was not confirmed. Your draft is kept; you can retry.`,
+              message: `${label} was not confirmed. Your draft is kept; you can retry.`,
             }
           : previous,
       );
     }, 5000);
     try {
-      await onTurnAction(kind === "commit" ? { kind, placements: draft.placements } : { kind });
+      if (kind === "commit") {
+        await onTurnAction({ kind, placements: draft.placements });
+      } else if (kind === "exchange") {
+        await onTurnAction({ kind, tile_ids: exchange ?? [] });
+      } else {
+        await onTurnAction({ kind });
+      }
     } catch {
       clearTimeout(timer.current);
       setState((previous) =>
@@ -175,21 +205,33 @@ export function MoveEditor({
   } else if (!canAct && state.message === undefined) {
     feedback = "Reconnect to edit. Your draft is kept.";
   }
+  if (exchanging && enabled) {
+    feedback = `Select rack tiles to exchange. ${exchange.length} selected.`;
+  }
   if (pending) {
     feedback = `Waiting for ${state.pending} confirmation…`;
   }
   return (
-    <section className="move-editor" aria-label="Move editor">
+    <section ref={editor} className="move-editor" aria-label="Move editor">
       <PlayerRack
         rack={snapshot.own_rack}
         rules={rules}
         canAct={enabled}
         selection={{
-          selected,
+          selected: exchange ?? (selected === undefined ? [] : [selected]),
           placed: current.placements.map((tile) => tile.tile_id),
           onSelect: (tileId) => {
             if (enabled) {
-              setState({ draft: current, selected: tileId });
+              setState(
+                exchange === undefined
+                  ? { draft: current, selected: tileId }
+                  : {
+                      draft: current,
+                      exchange: exchange.includes(tileId)
+                        ? exchange.filter((id) => id !== tileId)
+                        : [...exchange, tileId],
+                    },
+              );
             }
           },
         }}
@@ -237,7 +279,7 @@ export function MoveEditor({
                   aria-label={label}
                   aria-description={premiums[premium].label}
                   aria-pressed={draft !== undefined && selected === draft.tile_id}
-                  disabled={!enabled || fixed !== undefined}
+                  disabled={!enabled || exchanging || fixed !== undefined}
                   onClick={() => square(row, column)}
                 >
                   <small className="square-reference" aria-hidden="true">
@@ -281,6 +323,7 @@ export function MoveEditor({
         <Button
           disabled={
             !enabled ||
+            exchanging ||
             selected === undefined ||
             !current.placements.some((tile) => tile.tile_id === selected)
           }
@@ -291,6 +334,7 @@ export function MoveEditor({
         <Button
           disabled={
             pending ||
+            exchanging ||
             (current.placements.length === 0 && selected === undefined && blank === undefined)
           }
           onClick={() => edit({ kind: "reset" })}
@@ -298,19 +342,52 @@ export function MoveEditor({
           Cancel move
         </Button>
         <Button
-          disabled={!enabled || problem !== undefined || blank !== undefined}
+          disabled={!enabled || exchanging || problem !== undefined || blank !== undefined}
           onClick={() => void submit("commit")}
         >
           Commit move
         </Button>
         <Button
           ref={passButton}
-          disabled={!enabled}
+          disabled={!enabled || exchanging}
           onClick={() => setState({ draft: current, confirmPass: true })}
         >
           Pass turn
         </Button>
+        <Button
+          ref={exchangeButton}
+          disabled={!enabled || exchanging || !canExchange}
+          onClick={() => setState({ draft: current, exchange: [] })}
+        >
+          Exchange tiles
+        </Button>
       </div>
+      {!canExchange && (
+        <p>Exchange requires at least {rules.exchange_minimum_bag} tiles in the bag.</p>
+      )}
+      {exchange !== undefined && enabled && (
+        <div className="pass-confirmation" role="group" aria-label="Exchange tiles">
+          <p>Choose tiles in your rack. Exchanging ends your turn and clears your draft.</p>
+          <Button
+            disabled={
+              exchange.length === 0 ||
+              !canExchange ||
+              exchange.length > snapshot.public.remaining_tiles
+            }
+            onClick={() => void submit("exchange")}
+          >
+            Confirm exchange
+          </Button>
+          <Button
+            onClick={() => {
+              restoreExchangeFocus.current = true;
+              setState({ draft: current });
+            }}
+          >
+            Keep playing
+          </Button>
+        </div>
+      )}
       {!stale && state.confirmPass === true && enabled && (
         <div className="pass-confirmation" role="group" aria-label="Confirm pass">
           <p>Pass this turn? Your draft will be cleared.</p>

@@ -67,6 +67,9 @@ test("built Pages client plays consecutive turns through isolated phones", async
       await expect(rack.locator("button:disabled")).toHaveCount(7);
       await expect(commit(phone)).toBeDisabled();
       await expect(phone.getByRole("button", { name: "Pass turn", exact: true })).toBeDisabled();
+      await expect(
+        phone.getByRole("button", { name: "Exchange tiles", exact: true }),
+      ).toBeDisabled();
     };
     await expect(commit(second)).toBeDisabled();
     await waiting(second);
@@ -177,6 +180,67 @@ test("built Pages client plays consecutive turns through isolated phones", async
     await expect(editor.locator(".tentative-square")).toHaveCount(0);
     await waiting(first);
     await expect(second.getByText("It is your turn.", { exact: true })).toBeVisible();
+    const secondEditor = second.getByRole("region", { name: "Move editor", exact: true });
+    const secondRack = second.getByRole("list", { name: "Your rack", exact: true });
+    const selectedIds = afterSecond[1]?.slice(0, 2) ?? [];
+    expect(selectedIds).toHaveLength(2);
+    const draftTile = secondRack.getByRole("button").first();
+    const draftBlank = (await draftTile.getAttribute("aria-label"))?.startsWith("Blank tile");
+    await draftTile.click();
+    await secondEditor.getByRole("button", { name: /^Row 7, column 8:/ }).click();
+    if (draftBlank) {
+      await secondEditor
+        .getByRole("group", { name: "Choose blank letter", exact: true })
+        .getByRole("button", { name: "A", exact: true })
+        .click();
+    }
+    await expect(page.locator(".tentative-tile")).toHaveCount(1);
+    const exchange = second.getByRole("button", { name: "Exchange tiles", exact: true });
+    await exchange.click();
+    const exchangeGroup = second.getByRole("group", { name: "Exchange tiles", exact: true });
+    const confirmExchange = exchangeGroup.getByRole("button", {
+      name: "Confirm exchange",
+      exact: true,
+    });
+    await expect(confirmExchange).toBeDisabled();
+    await expect(secondRack.getByRole("button").first()).toBeFocused();
+    await expect(page.locator(".tentative-tile")).toHaveCount(0);
+    for (const id of selectedIds) {
+      const tile = secondRack.locator(`[data-tile-id="${id}"]`).getByRole("button");
+      await tile.click();
+      await expect(tile).toHaveAttribute("aria-pressed", "true");
+    }
+    const toggleTile = secondRack.getByRole("button").first();
+    await toggleTile.click();
+    await expect(toggleTile).toHaveAttribute("aria-pressed", "false");
+    await toggleTile.click();
+    expect(rackIds()).toEqual(afterSecond);
+    expect(boardState()?.public.phase).toMatchObject({ kind: "playing", turn: "3" });
+    await exchangeGroup.getByRole("button", { name: "Keep playing", exact: true }).click();
+    await expect(exchange).toBeFocused();
+    await expect(secondEditor.locator(".tentative-square")).toHaveCount(1);
+    await expect(page.locator(".tentative-tile")).toHaveCount(1);
+    await exchange.click();
+    await expect(page.locator(".tentative-tile")).toHaveCount(0);
+    for (const id of selectedIds) {
+      await secondRack.locator(`[data-tile-id="${id}"]`).getByRole("button").click();
+    }
+    await confirmExchange.focus();
+    await confirmExchange.press("Enter");
+    await converge("4", "CAT", [4, 5], 83);
+    const afterExchange = rackIds();
+    expect(afterExchange[0]).toEqual(afterSecond[0]);
+    expect(afterExchange[1]?.slice(0, 5)).toEqual(afterSecond[1]?.slice(2));
+    expect(afterExchange[1]?.filter((id) => !afterSecond[1]?.includes(id))).toHaveLength(2);
+    expect(afterExchange[1]?.some((id) => selectedIds.includes(id))).toBe(false);
+    await expect(page.locator(".tentative-tile")).toHaveCount(0);
+    await expect(secondEditor.locator(".tentative-square")).toHaveCount(0);
+    await waiting(second);
+    await second.reload();
+    await expect
+      .poll(() => secondState()?.own_rack.tiles.map((tile) => tile.id))
+      .toEqual(afterExchange[1]);
+    await expect(second.getByText("Waiting for Ada.", { exact: true })).toBeVisible();
   } finally {
     await firstContext.close();
     await secondContext.close();

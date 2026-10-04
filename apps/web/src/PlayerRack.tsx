@@ -12,7 +12,7 @@ export function PlayerRack({
   rules: Ruleset;
   canAct: boolean;
   selection?: {
-    selected: string | undefined;
+    selected: string[];
     placed: string[];
     onSelect: (tileId: string) => void;
   };
@@ -43,7 +43,7 @@ export function PlayerRack({
                   data-placed={selection.placed.includes(tile.id)}
                   disabled={!canAct}
                   aria-label={`${description}${selection.placed.includes(tile.id) ? ", placed in draft" : ""}`}
-                  aria-pressed={selection.selected === tile.id}
+                  aria-pressed={selection.selected.includes(tile.id)}
                   onClick={() => selection.onSelect(tile.id)}
                 >
                   <span aria-hidden="true">{letter}</span>
