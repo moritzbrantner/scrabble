@@ -63,11 +63,18 @@ export function LiveBoard({
           setSnapshot(current);
         },
       });
-      match.run().catch(() => {
-        if (mounted) {
-          setState({ kind: "failed", message: "Unable to start the connection." });
-        }
-      });
+      // A cancelled effect must not begin a network admission (including StrictMode replay).
+      void Promise.resolve()
+        .then(() => {
+          if (mounted) {
+            return match?.run();
+          }
+        })
+        .catch(() => {
+          if (mounted) {
+            setState({ kind: "failed", message: "Unable to start the connection." });
+          }
+        });
     } catch {
       setState({ kind: "failed", message: "Invalid match connection settings." });
     }

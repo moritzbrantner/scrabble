@@ -53,6 +53,7 @@ test("board recovers a lost creation response with one game, then joins its real
   expect(href).not.toBeNull();
   const publicId = new URL(href ?? "").searchParams.get("match");
   expect(publicId).toBe(firstMatch);
+  expect(new URL(page.url()).searchParams.get("match")).toBe(firstMatch);
   expect(bodies).toHaveLength(2);
   expect(bodies[0]).toBe(bodies[1]);
   const status = await (await request.get(`${fixture.status}/status`)).json();
@@ -104,4 +105,10 @@ test("board recovers a lost creation response with one game, then joins its real
     })),
   ).toEqual({ local: [], session: [], url: page.url() });
   expect(href).not.toContain("requestId");
+  await page.reload();
+  await expect(page.getByRole("table", { name: "Scrabble board" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Create game", exact: true })).toHaveCount(0);
+  expect(new URL(page.url()).searchParams.get("match")).toBe(firstMatch);
+  const restoredStatus = await (await request.get(`${fixture.status}/status`)).json();
+  expect(restoredStatus.capacity.hostedMatches).toBe(1);
 });
