@@ -485,6 +485,122 @@
         "revision": "1"
       },
       "game_id": "1",
+      "history": [
+        {
+          "action": {
+            "kind": "pass"
+          },
+          "player_id": "1",
+          "scores": [
+            {
+              "delta": 0,
+              "player_id": "1",
+              "score": 8
+            },
+            {
+              "delta": 0,
+              "player_id": "2",
+              "score": 0
+            }
+          ],
+          "turn": "0"
+        },
+        {
+          "action": {
+            "kind": "pass"
+          },
+          "player_id": "2",
+          "scores": [
+            {
+              "delta": 0,
+              "player_id": "1",
+              "score": 8
+            },
+            {
+              "delta": 0,
+              "player_id": "2",
+              "score": 0
+            }
+          ],
+          "turn": "1"
+        },
+        {
+          "action": {
+            "kind": "pass"
+          },
+          "player_id": "1",
+          "scores": [
+            {
+              "delta": 0,
+              "player_id": "1",
+              "score": 8
+            },
+            {
+              "delta": 0,
+              "player_id": "2",
+              "score": 0
+            }
+          ],
+          "turn": "2"
+        },
+        {
+          "action": {
+            "kind": "pass"
+          },
+          "player_id": "2",
+          "scores": [
+            {
+              "delta": 0,
+              "player_id": "1",
+              "score": 8
+            },
+            {
+              "delta": 0,
+              "player_id": "2",
+              "score": 0
+            }
+          ],
+          "turn": "3"
+        },
+        {
+          "action": {
+            "kind": "pass"
+          },
+          "player_id": "1",
+          "scores": [
+            {
+              "delta": 0,
+              "player_id": "1",
+              "score": 8
+            },
+            {
+              "delta": 0,
+              "player_id": "2",
+              "score": 0
+            }
+          ],
+          "turn": "4"
+        },
+        {
+          "action": {
+            "kind": "pass"
+          },
+          "player_id": "2",
+          "scores": [
+            {
+              "delta": -9,
+              "player_id": "1",
+              "score": -1
+            },
+            {
+              "delta": -10,
+              "player_id": "2",
+              "score": -10
+            }
+          ],
+          "turn": "5"
+        }
+      ],
       "phase": {
         "kind": "finished",
         "winners": ["1"]
@@ -519,6 +635,7 @@
         "revision": "1"
       },
       "game_id": "1",
+      "history": [],
       "phase": {
         "kind": "lobby"
       },
@@ -556,6 +673,7 @@
         "revision": "1"
       },
       "game_id": "1",
+      "history": [],
       "phase": {
         "active_player": "1",
         "kind": "playing",

@@ -33,6 +33,38 @@ const phase = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("playing"), active_player: id, turn: id }),
   z.strictObject({ kind: z.literal("finished"), winners: z.array(id) }),
 ]);
+export const turnAction = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("commit"),
+    words: z
+      .array(
+        z
+          .string()
+          .min(1)
+          .max(30)
+          .refine((word) => Array.from(word).length <= 15),
+      )
+      .max(16),
+    move_score: z.int().min(0).max(4294967295),
+    blank_count: z.int().min(0).max(15),
+  }),
+  z.strictObject({ kind: z.literal("pass") }),
+  z.strictObject({ kind: z.literal("exchange"), tile_count: z.int().min(1).max(15) }),
+]);
+const publicTurn = z.strictObject({
+  turn: id,
+  player_id: id,
+  action: turnAction,
+  scores: z
+    .array(
+      z.strictObject({
+        player_id: id,
+        delta: z.int().min(-4294967295).max(4294967295),
+        score: z.int().min(-2147483648).max(2147483647),
+      }),
+    )
+    .max(4),
+});
 export const publicSnapshot = z.strictObject({
   version: z.literal(1),
   game_id: id,
@@ -53,6 +85,7 @@ export const publicSnapshot = z.strictObject({
     )
     .max(4),
   remaining_tiles: z.int().min(0).max(65535),
+  history: z.array(publicTurn).max(24),
   host: z.strictObject({ id: id.nullable() }).optional(),
   preview: z.strictObject({ player_id: id, turn: id, tiles: z.array(tile).max(15) }).nullable(),
 });

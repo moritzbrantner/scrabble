@@ -3,7 +3,7 @@ use crate::{
     dictionary::{self, Dictionary, DictionaryError},
     identity::PlayerId,
     placement::{self, PlacementError},
-    protocol::{Phase, Placement},
+    protocol::{Phase, Placement, TurnAction},
     scoring::{self, MoveScore, ScoredCommitError},
     state::{GameState, StateError},
 };
@@ -49,13 +49,30 @@ pub fn apply_with_dictionary(
     let validated =
         placement::validate(state, player, placements).map_err(CommitError::Placement)?;
     dictionary::validate(&validated, dictionary).map_err(CommitError::Dictionary)?;
+    let words = validated.words().iter().map(|word| word.text()).collect();
+    let blank_count = validated
+        .words()
+        .iter()
+        .flat_map(|word| word.tiles())
+        .filter(|tile| tile.is_new() && tile.is_blank())
+        .map(|tile| (tile.coordinate().row(), tile.coordinate().column()))
+        .collect::<std::collections::BTreeSet<_>>()
+        .len() as u8;
     // Publish only after every mutation succeeds, including turn/revision overflow checks.
     let mut candidate = state.clone();
     let score = scoring::commit_placement(&mut candidate, player, placements)
         .map_err(CommitError::Score)?;
     candidate.refill_rack(player).map_err(CommitError::State)?;
     candidate
-        .complete_turn(score.total())
+        .finish_turn(
+            state,
+            score.total(),
+            TurnAction::Commit {
+                words,
+                move_score: score.total(),
+                blank_count,
+            },
+        )
         .map_err(CommitError::State)?;
     *state = candidate;
     Ok(score)

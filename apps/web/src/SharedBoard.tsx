@@ -1,5 +1,7 @@
 import { type PublicSnapshot, type Ruleset } from "./public-state";
 
+import { TurnHistory } from "./TurnHistory";
+
 import { premiums } from "./board-premiums";
 
 export function SharedBoard({ snapshot, rules }: { snapshot: PublicSnapshot; rules: Ruleset }) {
@@ -127,6 +129,7 @@ export function SharedBoard({ snapshot, rules }: { snapshot: PublicSnapshot; rul
         {snapshot.phase.kind === "lobby" && <p>Waiting for players to join.</p>}
         <p className="remaining-tiles">{snapshot.remaining_tiles} tiles remaining</p>
       </aside>
+      <TurnHistory snapshot={snapshot} />
     </main>
   );
 }

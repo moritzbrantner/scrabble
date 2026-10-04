@@ -122,6 +122,7 @@ pub struct GameState {
     bag: Vec<Tile>,
     board: Vec<Option<CommittedTile>>,
     consecutive_scoreless_turns: u16,
+    history: Vec<crate::protocol::PublicTurn>,
     // Immutable replay input, held privately so exchange shuffles never depend on client input.
     seed: [u8; 32],
 }
@@ -155,6 +156,7 @@ impl GameState {
             bag,
             board,
             consecutive_scoreless_turns: 0,
+            history: Vec::new(),
             seed,
         })
     }
@@ -575,6 +577,42 @@ impl GameState {
         self.revision = revision;
         Ok(())
     }
+    /// Publish history only with the same successful candidate as the completed turn.
+    pub(crate) fn finish_turn(
+        &mut self,
+        previous: &Self,
+        move_score: u32,
+        action: crate::protocol::TurnAction,
+    ) -> Result<(), StateError> {
+        let Phase::Playing {
+            active_player,
+            turn,
+        } = previous.phase
+        else {
+            return Err(StateError::WrongPhase);
+        };
+        self.complete_turn(move_score)?;
+        let scores = self
+            .players
+            .iter()
+            .zip(&previous.players)
+            .map(|(after, before)| crate::protocol::ScoreChange {
+                player_id: after.id,
+                delta: i64::from(after.score) - i64::from(before.score),
+                score: after.score,
+            })
+            .collect();
+        if self.history.len() == crate::protocol::MAX_HISTORY_TURNS {
+            self.history.remove(0);
+        }
+        self.history.push(crate::protocol::PublicTurn {
+            turn,
+            player_id: active_player,
+            action,
+            scores,
+        });
+        Ok(())
+    }
     /// Private replay evidence. Never send these bytes through a browser snapshot connection.
     pub fn canonical_bytes(&self) -> Result<Vec<u8>, serde_json::Error> {
         #[derive(Serialize)]
@@ -585,17 +623,19 @@ impl GameState {
             phase: &'a Phase,
             revision: TurnId,
             consecutive_scoreless_turns: u16,
+            history: &'a [crate::protocol::PublicTurn],
             players: &'a [Player],
             bag: &'a [Tile],
             board: &'a [Option<CommittedTile>],
         }
         serde_json::to_vec(&Evidence {
-            version: 2,
+            version: 3,
             game_id: self.game_id,
             ruleset: &self.ruleset,
             phase: &self.phase,
             revision: self.revision,
             consecutive_scoreless_turns: self.consecutive_scoreless_turns,
+            history: &self.history,
             players: &self.players,
             bag: &self.bag,
             board: &self.board,
@@ -638,6 +678,7 @@ impl GameState {
                 })
                 .collect(),
             remaining_tiles: self.bag.len() as u16,
+            history: self.history.clone(),
             preview: None,
         }
     }

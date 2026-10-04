@@ -295,6 +295,20 @@ test("built Pages client plays consecutive turns through isolated phones", async
     expect(rackIds()).toEqual(afterExchange);
     expect(boardState()?.public.preview).toBeNull();
     await expect(page.getByText("Game finished", { exact: true })).toBeVisible();
+    const history = page.getByRole("region", { name: "Turn history", exact: true });
+    await expect(history.getByRole("listitem")).toHaveCount(8);
+    await expect(history.getByRole("listitem").nth(0)).toContainText("Turn 1: Ada — TA · 4 points");
+    await expect(history.getByRole("listitem").nth(1)).toContainText(
+      "Turn 2: Lin — CTA · 5 points",
+    );
+    await expect(history.getByRole("listitem").nth(2)).toContainText("Passed");
+    await expect(history.getByRole("listitem").nth(3)).toContainText("Exchanged 2 tiles");
+    const publicHistory = boardState()?.public.history;
+    expect(publicHistory?.map((entry) => entry.turn)).toEqual(
+      Array.from({ length: 8 }, (_, index) => String(index)),
+    );
+    expect(publicHistory?.[3]?.action).toEqual({ kind: "exchange", tile_count: 2 });
+
     const finishedPhone = async (phone: Page) => {
       await expect(phone.getByText("Game finished.", { exact: true })).toBeVisible();
       const rack = phone.getByRole("list", { name: "Your rack", exact: true });
@@ -317,6 +331,12 @@ test("built Pages client plays consecutive turns through isolated phones", async
     await first.reload();
     await expect.poll(() => firstState()?.public.phase).toEqual({ kind: "finished", winners });
     await finishedPhone(first);
+    expect(firstState()?.public.history).toEqual(publicHistory);
+    await page.reload();
+    await expect.poll(() => boardState()?.public.history).toEqual(publicHistory);
+    await expect(
+      page.getByRole("region", { name: "Turn history", exact: true }).getByRole("listitem"),
+    ).toHaveCount(8);
   } finally {
     await firstContext.close();
     await secondContext.close();

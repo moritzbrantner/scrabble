@@ -527,6 +527,7 @@
           "revision": "1"
         },
         "game_id": "1",
+        "history": [],
         "phase": {
           "active_player": "1",
           "kind": "playing",
@@ -635,6 +636,7 @@
           "revision": "1"
         },
         "game_id": "1",
+        "history": [],
         "phase": {
           "active_player": "1",
           "kind": "playing",
@@ -725,6 +727,7 @@
           "revision": "1"
         },
         "game_id": "1",
+        "history": [],
         "phase": {
           "active_player": "1",
           "kind": "playing",

@@ -113,3 +113,48 @@ test("private invalid-word feedback is structured and rejects malformed response
   }
   expect(() => decodeWordRejection(new Uint8Array([255]))).toThrow("encoding");
 });
+
+test("public history bounds and private exchange-field injection fail at the browser boundary", () => {
+  const entry = fixtures.snapshots.finished.history[0];
+  expect(entry).toBeDefined();
+  if (entry === undefined) {
+    throw new Error("Missing authoritative finished turn fixture");
+  }
+  const projected = (history: unknown) =>
+    snapshot({
+      ...player,
+      public: { ...player.public, history },
+    });
+  expect(() =>
+    decodePlayerSnapshot(
+      projected([{ ...entry, action: { kind: "exchange", tile_count: 1, tile_ids: ["99"] } }]),
+      "1",
+    ),
+  ).toThrow("incompatible");
+  expect(() =>
+    decodePlayerSnapshot(projected(Array.from({ length: 25 }, () => entry)), "1"),
+  ).toThrow("incompatible");
+  expect(() =>
+    decodePlayerSnapshot(
+      projected([
+        {
+          ...entry,
+          action: { kind: "commit", words: ["A".repeat(16)], move_score: 1, blank_count: 0 },
+        },
+      ]),
+      "1",
+    ),
+  ).toThrow("incompatible");
+  const widest = { ...entry, scores: [{ player_id: "1", delta: -4294967295, score: -2147483648 }] };
+  expect(decodePlayerSnapshot(projected([widest]), "1").public.history[0]?.scores[0]?.delta).toBe(
+    -4294967295,
+  );
+  expect(() =>
+    decodePlayerSnapshot(
+      projected([
+        { ...widest, scores: [{ player_id: "1", delta: -4294967296, score: -2147483648 }] },
+      ]),
+      "1",
+    ),
+  ).toThrow("incompatible");
+});
