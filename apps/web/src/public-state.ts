@@ -48,6 +48,7 @@ export const publicSnapshot = z.strictObject({
         display_name: z.string(),
         score: z.int().min(-2147483648).max(2147483647),
         rack_count: z.int().min(0).max(15),
+        connected: z.boolean().optional(),
       }),
     )
     .max(4),

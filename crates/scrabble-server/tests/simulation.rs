@@ -263,10 +263,21 @@ fn runtime_replay_recovery_and_reconnect_use_identical_authority() {
     let restored = MatchRuntime::restore_from_recovery(simulation(), image).unwrap();
     assert_eq!(restored.snapshot().unwrap(), expected);
     for id in [1, 2] {
-        assert_eq!(
-            restored.snapshot_for(id).unwrap(),
-            runtime.snapshot_for(id).unwrap()
+        let mut expected: PlayerSnapshot =
+            serde_json::from_slice(&runtime.snapshot_for(id).unwrap().payload).unwrap();
+        assert!(
+            expected
+                .public
+                .players
+                .iter()
+                .all(|player| player.connected == Some(true))
         );
+        for player in &mut expected.public.players {
+            player.connected = Some(false);
+        }
+        let recovered: PlayerSnapshot =
+            serde_json::from_slice(&restored.snapshot_for(id).unwrap().payload).unwrap();
+        assert_eq!(recovered, expected);
     }
 }
 

@@ -8,7 +8,7 @@ import { SharedBoard } from "./SharedBoard";
 test("entry point displays a compact lobby and complete public board", () => {
   const html = renderToStaticMarkup(<App />);
   expect(html).toContain("Scrabble</h1>");
-  expect(html).toContain("not available yet");
+  expect(html).toContain("Waiting for players to join.");
   expect((html.match(/<td /g) ?? []).length).toBe(225);
 });
 for (const phase of ["lobby", "playing", "finished"] as const) {

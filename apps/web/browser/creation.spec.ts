@@ -53,6 +53,7 @@ test("board recovers a lost creation response with one game, then joins its real
   expect(href).not.toBeNull();
   const publicId = new URL(href ?? "").searchParams.get("match");
   expect(publicId).toBe(firstMatch);
+  expect(new URL(page.url()).searchParams.get("match")).toBe(firstMatch);
   expect(bodies).toHaveLength(2);
   expect(bodies[0]).toBe(bodies[1]);
   const status = await (await request.get(`${fixture.status}/status`)).json();
@@ -104,4 +105,63 @@ test("board recovers a lost creation response with one game, then joins its real
     })),
   ).toEqual({ local: [], session: [], url: page.url() });
   expect(href).not.toContain("requestId");
+  await page.reload();
+  await expect(page.getByRole("table", { name: "Scrabble board" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Create game", exact: true })).toHaveCount(0);
+  expect(new URL(page.url()).searchParams.get("match")).toBe(firstMatch);
+  const restoredStatus = await (await request.get(`${fixture.status}/status`)).json();
+  expect(restoredStatus.capacity.hostedMatches).toBe(1);
+});
+
+test("lobby tracks joined players and confirms Start from authoritative snapshots", async ({
+  page,
+  context,
+}) => {
+  const certificate = fixture.certificateHash
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+  await page.goto(
+    `./?server=${encodeURIComponent(fixture.endpoint)}&api=${encodeURIComponent(fixture.api)}&certificate=${certificate}`,
+  );
+  await page.getByRole("button", { name: "Create game", exact: true }).click();
+  const start = page.getByRole("button", { name: "Start game", exact: true });
+  await expect(start).toBeDisabled();
+  const invite = await page
+    .getByRole("link", { name: "Join this game", exact: true })
+    .getAttribute("href");
+  expect(invite).not.toBeNull();
+  const guest = await context.newPage();
+  await guest.goto(invite ?? "");
+  const roster = page.getByRole("list", { name: "Players and scores" });
+  await expect(roster.getByRole("listitem")).toHaveCount(2);
+  await expect(start).toBeEnabled();
+  await expect(guest.getByRole("button", { name: "Start game", exact: true })).toBeDisabled();
+  await expect(roster).toContainText("Player 1");
+  await expect(roster).toContainText("Player 2");
+  await expect(roster.getByRole("listitem").filter({ hasText: "Connected" })).toHaveCount(2);
+  await page.evaluate(async () => {
+    const modulePath = "/scrabble/src/transport/browser-match.ts";
+    const { BrowserMatch } = (await import(
+      modulePath
+    )) as typeof import("../src/transport/browser-match");
+    const original = Object.getOwnPropertyDescriptor(BrowserMatch.prototype, "sendCommand");
+    if (original === undefined) {
+      throw new Error("Missing command seam");
+    }
+    BrowserMatch.prototype.sendCommand = async () => 1;
+    setTimeout(() => {
+      Object.defineProperty(BrowserMatch.prototype, "sendCommand", original);
+    }, 1000);
+  });
+  await start.click();
+  await expect(page.getByRole("alert")).toContainText("Start was not confirmed", { timeout: 7000 });
+  await expect(roster.getByRole("listitem")).toHaveCount(2);
+  await expect(start).toBeEnabled();
+  await start.click();
+  await expect(page.getByText("Turn 1", { exact: true })).toBeVisible();
+  await expect(guest.getByText("Turn 1", { exact: true })).toBeVisible();
+  await expect(start).toHaveCount(0);
+  await guest.close();
+  await expect(roster.getByRole("listitem").filter({ hasText: "Disconnected" })).toHaveCount(1);
+  await expect(roster.getByRole("listitem")).toHaveCount(2);
 });

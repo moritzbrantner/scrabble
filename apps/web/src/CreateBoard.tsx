@@ -39,6 +39,9 @@ export function CreateBoard({
       }
       const join = await createGame(api, endpoint, request.current, controller.signal);
       if (!controller.signal.aborted) {
+        const location = new URL(window.location.href);
+        location.searchParams.set("match", join.matchId);
+        window.history.replaceState(null, "", location);
         setState({ kind: "created", join });
       }
     } catch (error) {
