@@ -27,7 +27,7 @@ The versioned domain contracts and offline English fixture ruleset are defined i
 
 `GameState` provides deterministic tile storage, initial dealing, replacement draws, and scoped projections. [State storage](docs/specs/domain-state.md) documents the seeded initialization contract and the validation still required before gameplay commits.
 
-`GameSession::apply` now provides the [authoritative turn boundary](docs/specs/turn-application.md) for start, preview/cancel, commit, pass and exchange, with identity, sequence and turn checks.
+`GameSession::apply` now provides the [authoritative turn boundary](docs/specs/turn-application.md) for start, preview/cancel, commit, pass and exchange, with identity, sequence and turn checks. [Game completion](docs/specs/game-completion.md) applies final rack deductions, go-out transfers, and explicit ties, then freezes gameplay.
 
 [Placement validation](docs/specs/placement-validation.md) derives the main and cross words through a pure borrowed-state seam, with structured structural errors. Dictionary acceptance and scoring remain separate checks.
 

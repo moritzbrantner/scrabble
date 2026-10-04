@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { selectOpening } from "./game-fixture";
 import { observeSnapshots } from "./pages-observer";
+import fixtures from "../src/fixtures/public.json" with { type: "json" };
 
 test("built Pages client plays consecutive turns through isolated phones", async ({
   page,
@@ -252,6 +253,70 @@ test("built Pages client plays consecutive turns through isolated phones", async
       .poll(() => secondState()?.own_rack.tiles.map((tile) => tile.id))
       .toEqual(afterExchange[1]);
     await expect(second.getByText("Waiting for Ada.", { exact: true })).toBeVisible();
+    const remainingValues = [firstState(), secondState()].map(
+      (snapshot) =>
+        snapshot?.own_rack.tiles.reduce((sum, tile) => {
+          const definition = fixtures.ruleset.tiles.find((entry) =>
+            entry.face.kind === "blank"
+              ? tile.face.kind === "blank"
+              : tile.face.kind === "letter" && entry.face.letter === tile.face.letter,
+          );
+          if (definition === undefined) {
+            throw new Error("Unknown rack face");
+          }
+          return sum + definition.value;
+        }, 0) ?? 0,
+    );
+    const finalScores = [4, 5].map((score, index) => score - (remainingValues[index] ?? 0));
+    for (const [index, phone] of [first, second, first, second].entries()) {
+      await phone.getByRole("button", { name: "Pass turn", exact: true }).click();
+      await phone.getByRole("button", { name: "Confirm pass", exact: true }).click();
+      if (index < 3) {
+        await converge(String(5 + index), "CTA", [4, 5], 83);
+      }
+    }
+    await expect
+      .poll(() => {
+        const snapshot = boardState()?.public;
+        return (
+          snapshot?.phase.kind === "finished" &&
+          JSON.stringify(firstState()?.public) === JSON.stringify(snapshot) &&
+          JSON.stringify(secondState()?.public) === JSON.stringify(snapshot)
+        );
+      })
+      .toBe(true);
+    const highest = Math.max(...finalScores);
+    const winners = finalScores.flatMap((score, index) =>
+      score === highest ? [String(index + 2)] : [],
+    );
+    expect(boardState()?.public.phase).toEqual({ kind: "finished", winners });
+    expect(boardState()?.public.players.map((player) => player.score)).toEqual(finalScores);
+    expect(boardState()?.own_rack.tiles).toEqual([]);
+    expect(rackIds()).toEqual(afterExchange);
+    expect(boardState()?.public.preview).toBeNull();
+    await expect(page.getByText("Game finished", { exact: true })).toBeVisible();
+    const finishedPhone = async (phone: Page) => {
+      await expect(phone.getByText("Game finished.", { exact: true })).toBeVisible();
+      const rack = phone.getByRole("list", { name: "Your rack", exact: true });
+      await expect(rack).toHaveAttribute("aria-disabled", "true");
+      await expect(rack.getByRole("listitem")).toHaveCount(7);
+      await expect(rack.getByRole("button")).toHaveCount(0);
+      for (const name of ["Commit move", "Pass turn", "Exchange tiles"]) {
+        await expect(phone.getByRole("button", { name, exact: true })).toHaveCount(0);
+      }
+      expect(
+        await phone
+          .getByRole("list", { name: "Players and scores", exact: true })
+          .locator("strong")
+          .allTextContents(),
+      ).toEqual(finalScores.map(String));
+    };
+    for (const phone of [first, second]) {
+      await finishedPhone(phone);
+    }
+    await first.reload();
+    await expect.poll(() => firstState()?.public.phase).toEqual({ kind: "finished", winners });
+    await finishedPhone(first);
   } finally {
     await firstContext.close();
     await secondContext.close();

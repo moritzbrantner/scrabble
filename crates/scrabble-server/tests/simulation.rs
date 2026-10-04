@@ -14,6 +14,36 @@ use std::collections::BTreeSet;
 fn simulation() -> ScrabbleSimulation {
     ScrabbleSimulation::new(GameId::new(1), english_fixture(), [7; 32]).unwrap()
 }
+
+#[test]
+fn recovery_rejects_previous_game_evidence_before_replaying_changed_turn_semantics() {
+    let mut runtime = MatchRuntime::new_with_replay_capture(simulation(), 100);
+    let current = runtime.snapshot().unwrap();
+    let old = String::from_utf8(current.payload)
+        .unwrap()
+        .replacen("\"game\":{\"version\":2", "\"game\":{\"version\":1", 1)
+        .replacen(",\"consecutive_scoreless_turns\":0", "", 1);
+    let value: Value = serde_json::from_str(&old).unwrap();
+    assert_eq!(value["game"]["version"], 1);
+    assert!(value["game"].get("consecutive_scoreless_turns").is_none());
+    let old = game_server::SimulationSnapshot::new(0, old.into_bytes());
+    // A valid full checkpoint in the public native replay format, using the old game payload.
+    let mut encoded = b"GSRP\x01\x04".to_vec();
+    encoded.extend_from_slice(&0_u64.to_be_bytes());
+    encoded.extend_from_slice(&(12 + old.payload.len() as u32).to_be_bytes());
+    encoded.extend_from_slice(&old.state_hash.to_be_bytes());
+    encoded.extend_from_slice(&(old.payload.len() as u32).to_be_bytes());
+    encoded.extend_from_slice(&old.payload);
+    let log = ReplayLog::decode(&encoded).unwrap();
+    assert!(matches!(
+        verify_replay(simulation(), &log),
+        Err(game_server::ReplayError::CheckpointMismatch { .. })
+    ));
+    runtime.freeze_for_recovery();
+    let mut image = runtime.recovery_image().unwrap();
+    image.replay = log;
+    assert!(MatchRuntime::restore_from_recovery(simulation(), image).is_err());
+}
 fn command(player: u32, sequence: u32, turn: u64, command: Command) -> Vec<u8> {
     serde_json::to_vec(&CommandEnvelope {
         version: ProtocolVersion,
@@ -36,6 +66,205 @@ fn started() -> ScrabbleSimulation {
         .apply_command(1, 1, &command(1, 1, 0, Command::Start {}))
         .unwrap();
     simulation
+}
+
+#[test]
+fn finished_scores_are_private_projection_safe_and_survive_replay_and_recovery() {
+    let fresh = || simulation().with_lifecycle(1000);
+    let mut runtime = MatchRuntime::new_with_replay_capture(fresh(), 100);
+    runtime.admit(ReconnectToken([1; 16])).unwrap();
+    runtime.admit(ReconnectToken([2; 16])).unwrap();
+    runtime
+        .submit_command(1, 1, 1, &command(1, 1, 0, Command::Start {}))
+        .unwrap();
+    let read = |runtime: &MatchRuntime<ScrabbleSimulation>, player| -> PlayerSnapshot {
+        serde_json::from_slice(&runtime.snapshot_for(player).unwrap().payload).unwrap()
+    };
+    let before = [read(&runtime, 1), read(&runtime, 2)];
+    let rules = english_fixture();
+    let remaining_values: Vec<i32> = before
+        .iter()
+        .map(|snapshot| {
+            snapshot
+                .own_rack
+                .tiles
+                .iter()
+                .map(|tile| {
+                    i32::from(
+                        rules
+                            .tiles
+                            .iter()
+                            .find(|definition| definition.face == tile.face)
+                            .unwrap()
+                            .value,
+                    )
+                })
+                .sum()
+        })
+        .collect();
+    for turn in 0..u64::from(rules.scoreless_turn_limit) {
+        let player = (turn % 2 + 1) as u32;
+        let sequence = (turn / 2 + if player == 1 { 2 } else { 1 }) as u32;
+        runtime
+            .submit_command(
+                player,
+                1,
+                sequence,
+                &command(player, sequence, turn, Command::Pass {}),
+            )
+            .unwrap();
+        runtime.advance_tick().unwrap();
+    }
+    let after = [read(&runtime, 1), read(&runtime, 2)];
+    assert_eq!(after[0].public, after[1].public);
+    for index in 0..2 {
+        assert_eq!(after[index].own_rack, before[index].own_rack);
+        assert_eq!(
+            after[0].public.players[index].score,
+            -remaining_values[index]
+        );
+    }
+    let highest = remaining_values.iter().min().unwrap();
+    assert_eq!(
+        after[0].public.phase,
+        Phase::Finished {
+            winners: remaining_values
+                .iter()
+                .enumerate()
+                .filter_map(
+                    |(index, value)| (value == highest).then_some(PlayerId::new(index as u64 + 1))
+                )
+                .collect(),
+        }
+    );
+    let public = serde_json::to_value(&after[0].public).unwrap();
+    assert!(public.get("consecutive_scoreless_turns").is_none());
+    assert!(public.get("bag").is_none());
+    assert!(
+        public["players"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|player| player.get("rack").is_none())
+    );
+    let canonical = runtime.snapshot().unwrap();
+    let value: Value = serde_json::from_slice(&canonical.payload).unwrap();
+    assert_eq!(value["game"]["version"], 2);
+    assert_eq!(value["game"]["consecutive_scoreless_turns"], 6);
+    assert_eq!(value["lifecycle"]["finished_at_tick"], 5);
+    let records = runtime.replay_log().unwrap().records().len();
+    assert!(
+        runtime
+            .submit_command(1, 1, 5, &command(1, 5, 6, Command::Pass {}))
+            .is_err()
+    );
+    assert_eq!(runtime.snapshot().unwrap(), canonical);
+    assert_eq!(runtime.replay_log().unwrap().records().len(), records);
+    let log = ReplayLog::decode(&runtime.replay_log().unwrap().encode().unwrap()).unwrap();
+    assert_eq!(
+        verify_replay(fresh(), &log).unwrap().final_snapshot,
+        canonical
+    );
+    runtime.freeze_for_recovery();
+    let mut recovered =
+        MatchRuntime::restore_from_recovery(fresh(), runtime.recovery_image().unwrap()).unwrap();
+    assert_eq!(recovered.snapshot().unwrap(), canonical);
+    let mut offline = after.clone();
+    for snapshot in &mut offline {
+        for player in &mut snapshot.public.players {
+            player.connected = Some(false);
+        }
+    }
+    assert_eq!(read(&recovered, 1), offline[0]);
+    assert_eq!(read(&recovered, 2), offline[1]);
+    recovered
+        .reconnect(ReconnectToken([1; 16]), ReconnectToken([3; 16]))
+        .unwrap();
+    assert!(
+        recovered
+            .submit_command(1, 2, 5, &command(1, 5, 6, Command::Pass {}))
+            .is_err()
+    );
+    assert_eq!(read(&recovered, 1).public.phase, after[0].public.phase);
+    recovered
+        .reconnect(ReconnectToken([2; 16]), ReconnectToken([4; 16]))
+        .unwrap();
+    assert_eq!(read(&recovered, 1).public.players, after[0].public.players);
+}
+
+#[test]
+fn empty_bag_go_out_final_scores_replay_and_recover_exactly() {
+    use scrabble_game::{dictionary::WordList, ruleset::TileDefinition};
+    use std::sync::Arc;
+    let mut rules = english_fixture();
+    rules.maximum_players = 2;
+    rules.rack_size = 2;
+    rules.bingo_bonus = 0;
+    rules.tiles = vec![TileDefinition {
+        face: TileFace::Letter { letter: 'A' },
+        count: 4,
+        value: 1,
+    }];
+    let dictionary = Arc::new(WordList::from_text(rules.dictionary.clone(), "AA\n").unwrap());
+    let fresh = || {
+        ScrabbleSimulation::with_dictionary(
+            GameId::new(1),
+            rules.clone(),
+            [7; 32],
+            dictionary.clone(),
+        )
+        .unwrap()
+    };
+    let mut runtime = MatchRuntime::new_with_replay_capture(fresh(), 100);
+    runtime.admit(ReconnectToken([1; 16])).unwrap();
+    runtime.admit(ReconnectToken([2; 16])).unwrap();
+    runtime
+        .submit_command(1, 1, 1, &command(1, 1, 0, Command::Start {}))
+        .unwrap();
+    let own: PlayerSnapshot =
+        serde_json::from_slice(&runtime.snapshot_for(1).unwrap().payload).unwrap();
+    let placements = own
+        .own_rack
+        .tiles
+        .iter()
+        .enumerate()
+        .map(|(index, tile)| Placement {
+            tile_id: tile.id,
+            coordinate: Coordinate::new(7, 7 + index as u8).unwrap(),
+            blank_as: None,
+        })
+        .collect();
+    runtime
+        .submit_command(1, 1, 2, &command(1, 2, 0, Command::Commit { placements }))
+        .unwrap();
+    let finished: PlayerSnapshot =
+        serde_json::from_slice(&runtime.snapshot_for(1).unwrap().payload).unwrap();
+    assert_eq!(
+        finished.public.phase,
+        Phase::Finished {
+            winners: vec![PlayerId::new(1)]
+        }
+    );
+    assert_eq!(
+        finished
+            .public
+            .players
+            .iter()
+            .map(|player| player.score)
+            .collect::<Vec<_>>(),
+        vec![6, -2]
+    );
+    assert!(finished.own_rack.tiles.is_empty());
+    let canonical = runtime.snapshot().unwrap();
+    let log = ReplayLog::decode(&runtime.replay_log().unwrap().encode().unwrap()).unwrap();
+    assert_eq!(
+        verify_replay(fresh(), &log).unwrap().final_snapshot,
+        canonical
+    );
+    runtime.freeze_for_recovery();
+    let recovered =
+        MatchRuntime::restore_from_recovery(fresh(), runtime.recovery_image().unwrap()).unwrap();
+    assert_eq!(recovered.snapshot().unwrap(), canonical);
 }
 fn draft(snapshot: &PlayerSnapshot) -> Command {
     let tile = &snapshot.own_rack.tiles[0];

@@ -33,6 +33,7 @@ pub enum StateError {
     InvalidBlankAssignment,
     InvariantViolation,
     CounterExhausted,
+    ScoreOverflow,
     EmptyExchange,
     ExchangeUnavailable,
 }
@@ -55,6 +56,7 @@ impl fmt::Display for StateError {
             Self::EmptyExchange => "select at least one tile to exchange",
             Self::ExchangeUnavailable => "not enough bag tiles for exchange",
             Self::CounterExhausted => "authoritative counter exhausted",
+            Self::ScoreOverflow => "final score exceeds supported range",
             Self::InvariantViolation => "canonical tile conservation failed",
         };
         f.write_str(message)
@@ -114,6 +116,7 @@ pub struct GameState {
     players: Vec<Player>,
     bag: Vec<Tile>,
     board: Vec<Option<CommittedTile>>,
+    consecutive_scoreless_turns: u16,
     // Immutable replay input, held privately so exchange shuffles never depend on client input.
     seed: [u8; 32],
 }
@@ -146,6 +149,7 @@ impl GameState {
             players: vec![],
             bag,
             board,
+            consecutive_scoreless_turns: 0,
             seed,
         })
     }
@@ -492,7 +496,8 @@ impl GameState {
     pub(crate) fn host(&self) -> Option<PlayerId> {
         self.players.first().map(|player| player.id)
     }
-    pub(crate) fn advance_turn(&mut self) -> Result<(), StateError> {
+    /// Complete one accepted turn, including final scoring. All fallible work precedes publication.
+    pub(crate) fn complete_turn(&mut self, move_score: u32) -> Result<(), StateError> {
         let Phase::Playing {
             active_player,
             turn,
@@ -510,10 +515,58 @@ impl GameState {
             .checked_add(1)
             .ok_or(StateError::CounterExhausted)?;
         let revision = self.next_revision()?;
-        self.phase = Phase::Playing {
-            active_player: self.players[(index + 1) % self.players.len()].id,
-            turn: TurnId::new(next_turn),
+        let scoreless = if move_score == 0 {
+            self.consecutive_scoreless_turns
+                .checked_add(1)
+                .ok_or(StateError::CounterExhausted)?
+        } else {
+            0
         };
+        let went_out = self.bag.is_empty() && self.players[index].rack.is_empty();
+        let finished = went_out || scoreless >= self.ruleset.scoreless_turn_limit;
+        let mut scores = Vec::new();
+        let phase = if finished {
+            let mut transfer = 0_i32;
+            for player in &self.players {
+                let remaining = player.rack.iter().try_fold(0_i32, |sum, tile| {
+                    sum.checked_add(i32::from(tile.value))
+                        .ok_or(StateError::ScoreOverflow)
+                })?;
+                transfer = transfer
+                    .checked_add(remaining)
+                    .ok_or(StateError::ScoreOverflow)?;
+                scores.push(
+                    player
+                        .score
+                        .checked_sub(remaining)
+                        .ok_or(StateError::ScoreOverflow)?,
+                );
+            }
+            if went_out {
+                scores[index] = scores[index]
+                    .checked_add(transfer)
+                    .ok_or(StateError::ScoreOverflow)?;
+            }
+            let highest = scores.iter().max().ok_or(StateError::InvariantViolation)?;
+            Phase::Finished {
+                winners: self
+                    .players
+                    .iter()
+                    .zip(&scores)
+                    .filter_map(|(player, score)| (score == highest).then_some(player.id))
+                    .collect(),
+            }
+        } else {
+            Phase::Playing {
+                active_player: self.players[(index + 1) % self.players.len()].id,
+                turn: TurnId::new(next_turn),
+            }
+        };
+        for (player, score) in self.players.iter_mut().zip(scores) {
+            player.score = score;
+        }
+        self.phase = phase;
+        self.consecutive_scoreless_turns = scoreless;
         self.revision = revision;
         Ok(())
     }
@@ -526,16 +579,18 @@ impl GameState {
             ruleset: &'a Ruleset,
             phase: &'a Phase,
             revision: TurnId,
+            consecutive_scoreless_turns: u16,
             players: &'a [Player],
             bag: &'a [Tile],
             board: &'a [Option<CommittedTile>],
         }
         serde_json::to_vec(&Evidence {
-            version: 1,
+            version: 2,
             game_id: self.game_id,
             ruleset: &self.ruleset,
             phase: &self.phase,
             revision: self.revision,
+            consecutive_scoreless_turns: self.consecutive_scoreless_turns,
             players: &self.players,
             bag: &self.bag,
             board: &self.board,
@@ -624,6 +679,94 @@ impl GameState {
 #[cfg(test)]
 mod turn_counter_tests {
     use super::*;
+    #[test]
+    fn final_score_overflow_leaves_the_whole_command_and_preview_unpublished() {
+        use crate::{
+            dictionary::WordList,
+            protocol::{Command, CommandEnvelope},
+            session::GameSession,
+        };
+        use std::sync::Arc;
+        let mut rules = crate::ruleset::english_fixture();
+        rules.maximum_players = 2;
+        rules.rack_size = 2;
+        rules.bingo_bonus = 0;
+        rules.tiles = vec![crate::ruleset::TileDefinition {
+            face: TileFace::Letter { letter: 'A' },
+            count: 4,
+            value: 1,
+        }];
+        let mut base = GameState::new(GameId::new(1), rules, [7; 32]).unwrap();
+        base.add_player(PlayerId::new(1), "Ada".into()).unwrap();
+        base.add_player(PlayerId::new(2), "Lin".into()).unwrap();
+        base.deal_initial_racks().unwrap();
+        let placements: Vec<_> = base.players[0]
+            .rack
+            .iter()
+            .enumerate()
+            .map(|(index, tile)| Placement {
+                tile_id: tile.id,
+                coordinate: Coordinate::new(7, 7 + index as u8).unwrap(),
+                blank_as: None,
+            })
+            .collect();
+        for commit in [false, true] {
+            let mut state = base.clone();
+            state.ruleset.scoreless_turn_limit = 1;
+            state.players[0].score = if commit { i32::MAX - 4 } else { i32::MIN };
+            let dictionary =
+                Arc::new(WordList::from_text(state.ruleset.dictionary.clone(), "AA\n").unwrap());
+            let mut session = GameSession::with_dictionary(state, dictionary);
+            let envelope = |sequence, command| CommandEnvelope {
+                version: ProtocolVersion,
+                game_id: GameId::new(1),
+                player_id: PlayerId::new(1),
+                sequence,
+                expected_turn: TurnId::new(0),
+                command,
+            };
+            session
+                .apply(
+                    PlayerId::new(1),
+                    1,
+                    &envelope(
+                        1,
+                        Command::Preview {
+                            placements: placements.clone(),
+                        },
+                    ),
+                )
+                .unwrap();
+            let before = session.state().canonical_bytes().unwrap();
+            let preview = session.public_snapshot().preview;
+            let action = if commit {
+                Command::Commit {
+                    placements: placements.clone(),
+                }
+            } else {
+                Command::Pass {}
+            };
+            for _ in 0..2 {
+                let error = session
+                    .apply(PlayerId::new(1), 2, &envelope(2, action.clone()))
+                    .unwrap_err();
+                assert_eq!(
+                    error,
+                    if commit {
+                        crate::session::CommandError::Commit(crate::commit::CommitError::State(
+                            StateError::ScoreOverflow,
+                        ))
+                    } else {
+                        crate::session::CommandError::State(StateError::ScoreOverflow)
+                    }
+                );
+                assert_eq!(session.state().canonical_bytes().unwrap(), before);
+                assert_eq!(session.public_snapshot().preview, preview);
+                session.state().verify_tile_conservation().unwrap();
+            }
+        }
+    }
+
     #[test]
     fn scored_commit_does_not_publish_transfers_before_turn_or_revision_overflow() {
         let (base, placements) = (0..=255)
@@ -727,7 +870,7 @@ mod turn_counter_tests {
             turn: TurnId::new(u64::MAX),
         };
         let before = state.canonical_bytes().unwrap();
-        assert_eq!(state.advance_turn(), Err(StateError::CounterExhausted));
+        assert_eq!(state.complete_turn(0), Err(StateError::CounterExhausted));
         assert_eq!(state.canonical_bytes().unwrap(), before);
     }
 }

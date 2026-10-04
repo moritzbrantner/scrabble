@@ -494,18 +494,18 @@
           "display_name": "Ada",
           "id": "1",
           "rack_count": 5,
-          "score": 8
+          "score": -1
         },
         {
           "display_name": "Lin",
           "id": "2",
           "rack_count": 7,
-          "score": 0
+          "score": -10
         }
       ],
       "preview": null,
       "remaining_tiles": 86,
-      "revision": "4",
+      "revision": "10",
       "ruleset": {
         "name": "en-classic-fixture",
         "revision": "1"
