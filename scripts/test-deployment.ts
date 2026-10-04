@@ -60,6 +60,7 @@ const tls = join(directory, "tls");
 const state = join(directory, "state");
 const content = join(directory, "content");
 const httpsPort = await port();
+const quicPort = await port();
 Object.assign(env, {
   DEPLOY_TLS_DIRECTORY: tls,
   DEPLOY_STATE_DIRECTORY: state,
@@ -67,7 +68,7 @@ Object.assign(env, {
   DEPLOY_UID: String(uid),
   DEPLOY_GID: String(gid),
   DEPLOY_HTTPS_PORT: `127.0.0.1:${httpsPort}`,
-  DEPLOY_QUIC_PORT: `127.0.0.1:${await port()}`,
+  DEPLOY_QUIC_PORT: `127.0.0.1:${quicPort}`,
   DEPLOY_VERSION: "deployment-check",
   DEPLOY_DICTIONARY_NAME: "scrabble-authored-fixture",
   DEPLOY_DICTIONARY_REVISION: "1",
@@ -146,6 +147,25 @@ try {
       ]),
     ),
     "https://localhost/game",
+  );
+  const metadataFile = join(directory, "join.json");
+  await Bun.write(metadataFile, JSON.stringify(created));
+  await run(
+    [
+      "cargo",
+      "run",
+      "-q",
+      "-p",
+      "scrabble-server",
+      "--example",
+      "deployment_probe",
+      "--locked",
+      "--",
+      join(tls, "cert.pem"),
+      `https://127.0.0.1:${quicPort}${created.matchPath}`,
+      metadataFile,
+    ],
+    env,
   );
   const seed = await readFile(join(state, "seed"));
   await services("stop", "gateway", "server");
