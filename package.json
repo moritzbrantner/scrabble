@@ -13,7 +13,7 @@
     "test": "cargo test --workspace --all-targets --locked && bun test apps/web/src",
     "build": "vite build --config apps/web/vite.config.ts",
     "check": "bun run format:check && bun run typecheck && bun run lint && bun run test && bun run build && bun run test:browser",
-    "test:browser": "bun scripts/test-browser.ts",
+    "test:browser": "bun scripts/test-browser.ts && bun scripts/test-browser.ts --pages",
     "fixtures:generate": "cargo run -q -p scrabble-game --example public_fixtures --locked"
   },
   "dependencies": {

@@ -1,24 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
-import { readFileSync } from "node:fs";
 import { z } from "zod";
 import jsQR from "jsqr";
 import { type PublicSnapshot } from "../src/public-state";
-const path = process.env.SCRABBLE_GAME_FIXTURE;
-if (path === undefined) {
-  throw new Error("Use bun run test:browser to provision Scrabble");
-}
-const fixture = z
-  .strictObject({
-    endpoint: z.string(),
-    api: z.string(),
-    status: z.string(),
-    certificateHash: z.array(z.int().min(0).max(255)).length(32),
-    opening: z.strictObject({
-      requestId: z.string().regex(/^[0-9a-f]{32}$/),
-      requestedAt: z.int().min(0),
-    }),
-  })
-  .parse(JSON.parse(readFileSync(path, "utf8")));
+import { gameFixture as fixture, selectOpening } from "./game-fixture";
 
 type Observed = {
   tick: string;
@@ -654,22 +638,7 @@ test("an authoritative AT commit converges on the board and both private phones"
     `./?server=${encodeURIComponent(fixture.endpoint)}&api=${encodeURIComponent(fixture.api)}&certificate=${certificate}`,
   );
   await observeProjection(page);
-  await page.evaluate(({ requestId, requestedAt }) => {
-    const original = crypto.getRandomValues.bind(crypto);
-    const originalNow = Date.now;
-    crypto.getRandomValues = <T extends ArrayBufferView | null>(array: T): T => {
-      if (array instanceof Uint8Array && array.length === 16) {
-        array.set(Uint8Array.from(requestId.match(/../g) ?? [], (hex) => Number.parseInt(hex, 16)));
-        crypto.getRandomValues = original;
-        Date.now = () => {
-          Date.now = originalNow;
-          return requestedAt * 1000;
-        };
-        return array;
-      }
-      return original(array);
-    };
-  }, fixture.opening);
+  await selectOpening(page);
   await page.getByRole("button", { name: "Create game", exact: true }).click();
   const href = await page
     .getByRole("link", { name: "Join this game", exact: true })

@@ -14,9 +14,13 @@ export function App() {
   const api: string | undefined = import.meta.env.DEV
     ? (connection?.get("api") ?? undefined)
     : import.meta.env.VITE_SCRABBLE_API || undefined;
-  const certificateHash = connection?.get("certificate") ?? undefined;
-  const localTrust =
-    !import.meta.env.DEV || certificateHash === undefined ? {} : { certificateHash };
+  let certificateHash: string | undefined;
+  if (import.meta.env.DEV) {
+    certificateHash = connection?.get("certificate") ?? undefined;
+  } else if (import.meta.env.MODE === "test") {
+    certificateHash = import.meta.env.VITE_SCRABBLE_TEST_CERTIFICATE_HASH || undefined;
+  }
+  const localTrust = certificateHash === undefined ? {} : { certificateHash };
   if (connection?.get("view") === "player") {
     const unambiguous =
       connection.getAll("match").length === 1 && connection.getAll("view").length === 1;
@@ -29,10 +33,10 @@ export function App() {
       />
     );
   }
-  if (import.meta.env.DEV && endpoint && matchId) {
+  if (endpoint && matchId) {
     return <LiveBoard endpoint={endpoint} matchId={matchId} {...localTrust} />;
   }
-  if (import.meta.env.DEV && endpoint && api) {
+  if (endpoint && api) {
     return <CreateBoard endpoint={endpoint} api={api} {...localTrust} />;
   }
   const selected =

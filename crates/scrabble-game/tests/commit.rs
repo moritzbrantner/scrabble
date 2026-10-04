@@ -310,3 +310,34 @@ fn replacement_draws_are_atomic_bounded_and_preserve_tile_conservation() {
         );
     }
 }
+
+#[test]
+fn non_active_owned_commit_cannot_change_the_playable_turn() {
+    let (mut session, _) = game("1");
+    let placements = session
+        .state()
+        .rack(PlayerId::new(2))
+        .unwrap()
+        .iter()
+        .take(2)
+        .enumerate()
+        .map(|(index, tile)| Placement {
+            tile_id: tile.id(),
+            coordinate: Coordinate::new(7, 7 + index as u8).unwrap(),
+            blank_as: match tile.face() {
+                TileFace::Blank {} => Some('A'),
+                TileFace::Letter { .. } => None,
+            },
+        })
+        .collect();
+    let command = CommandEnvelope {
+        player_id: PlayerId::new(2),
+        ..envelope(1, Command::Commit { placements })
+    };
+    let before = session.state().canonical_bytes().unwrap();
+    assert_eq!(
+        session.apply(PlayerId::new(2), 1, &command),
+        Err(CommandError::NotActive)
+    );
+    assert_eq!(session.state().canonical_bytes().unwrap(), before);
+}
