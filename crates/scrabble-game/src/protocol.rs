@@ -124,6 +124,38 @@ pub struct PublicPreview {
     pub turn: TurnId,
     pub tiles: Vec<PreviewTile>,
 }
+/// Bounded projection; the complete accepted commands remain in native replay evidence.
+pub const MAX_HISTORY_TURNS: usize = 24;
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum TurnAction {
+    Commit {
+        words: Vec<String>,
+        move_score: u32,
+        blank_count: u8,
+    },
+    Pass {},
+    Exchange {
+        tile_count: u8,
+    },
+}
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ScoreChange {
+    pub player_id: PlayerId,
+    /// Includes final rack deductions/transfers; i64 accommodates any i32 score difference.
+    pub delta: i64,
+    pub score: i32,
+}
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PublicTurn {
+    pub turn: TurnId,
+    pub player_id: PlayerId,
+    pub action: TurnAction,
+    pub scores: Vec<ScoreChange>,
+}
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PublicSnapshot {
@@ -136,6 +168,7 @@ pub struct PublicSnapshot {
     pub board: Vec<BoardTile>,
     pub players: Vec<PublicPlayer>,
     pub remaining_tiles: u16,
+    pub history: Vec<PublicTurn>,
     /// Ephemeral projection. Never part of canonical replay or score calculation.
     pub preview: Option<PublicPreview>,
     /// Present only for matches with a shared board outside the playing roster.

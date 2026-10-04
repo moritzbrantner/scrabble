@@ -271,6 +271,7 @@ fn board_and_phone_projections_have_exact_public_boundaries_and_rotated_epochs_s
                 "board",
                 "dictionary",
                 "game_id",
+                "history",
                 "host",
                 "phase",
                 "players",

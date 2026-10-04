@@ -21,11 +21,11 @@ fn recovery_rejects_previous_game_evidence_before_replaying_changed_turn_semanti
     let current = runtime.snapshot().unwrap();
     let old = String::from_utf8(current.payload)
         .unwrap()
-        .replacen("\"game\":{\"version\":2", "\"game\":{\"version\":1", 1)
-        .replacen(",\"consecutive_scoreless_turns\":0", "", 1);
+        .replacen("\"game\":{\"version\":3", "\"game\":{\"version\":2", 1)
+        .replacen(",\"history\":[]", "", 1);
     let value: Value = serde_json::from_str(&old).unwrap();
-    assert_eq!(value["game"]["version"], 1);
-    assert!(value["game"].get("consecutive_scoreless_turns").is_none());
+    assert_eq!(value["game"]["version"], 2);
+    assert!(value["game"].get("history").is_none());
     let old = game_server::SimulationSnapshot::new(0, old.into_bytes());
     // A valid full checkpoint in the public native replay format, using the old game payload.
     let mut encoded = b"GSRP\x01\x04".to_vec();
@@ -149,7 +149,7 @@ fn finished_scores_are_private_projection_safe_and_survive_replay_and_recovery()
     );
     let canonical = runtime.snapshot().unwrap();
     let value: Value = serde_json::from_slice(&canonical.payload).unwrap();
-    assert_eq!(value["game"]["version"], 2);
+    assert_eq!(value["game"]["version"], 3);
     assert_eq!(value["game"]["consecutive_scoreless_turns"], 6);
     assert_eq!(value["lifecycle"]["finished_at_tick"], 5);
     let records = runtime.replay_log().unwrap().records().len();
@@ -251,6 +251,23 @@ fn empty_bag_go_out_final_scores_replay_and_recover_exactly() {
             .players
             .iter()
             .map(|player| player.score)
+            .collect::<Vec<_>>(),
+        vec![6, -2]
+    );
+    assert_eq!(finished.public.history.len(), 1);
+    assert_eq!(
+        finished.public.history[0].action,
+        scrabble_game::protocol::TurnAction::Commit {
+            words: vec!["AA".into()],
+            move_score: 4,
+            blank_count: 0,
+        }
+    );
+    assert_eq!(
+        finished.public.history[0]
+            .scores
+            .iter()
+            .map(|score| score.delta)
             .collect::<Vec<_>>(),
         vec![6, -2]
     );

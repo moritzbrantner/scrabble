@@ -113,6 +113,7 @@ fn public_snapshot_has_no_private_fields_and_rejects_injected_racks() {
             rack_count: 0,
         }],
         remaining_tiles: 100,
+        history: vec![],
         preview: None,
     };
     let mut encoded = serde_json::to_value(&snapshot).unwrap();

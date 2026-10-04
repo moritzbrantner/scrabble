@@ -2,7 +2,7 @@
 use crate::dictionary::{Dictionary, authored_fixture};
 use crate::identity::{GameId, PlayerId, TurnId};
 use crate::protocol::{
-    Command, CommandEnvelope, Phase, PlayerSnapshot, PublicPreview, PublicSnapshot,
+    Command, CommandEnvelope, Phase, PlayerSnapshot, PublicPreview, PublicSnapshot, TurnAction,
 };
 use crate::state::{GameState, StateError};
 use std::{collections::BTreeMap, fmt, sync::Arc};
@@ -129,7 +129,9 @@ impl GameSession {
                         };
                     }
                     Command::Pass {} => {
-                        self.state.complete_turn(0)?;
+                        let mut candidate = self.state.clone();
+                        candidate.finish_turn(&self.state, 0, TurnAction::Pass {})?;
+                        self.state = candidate;
                         self.preview = None;
                     }
                     Command::Start {} | Command::SetName { .. } | Command::ClaimBoard { .. } => {
@@ -148,7 +150,13 @@ impl GameSession {
                     Command::Exchange { tile_ids } => {
                         let mut candidate = self.state.clone();
                         candidate.exchange_tiles(player, tile_ids)?;
-                        candidate.complete_turn(0)?;
+                        candidate.finish_turn(
+                            &self.state,
+                            0,
+                            TurnAction::Exchange {
+                                tile_count: tile_ids.len() as u8,
+                            },
+                        )?;
                         self.state = candidate;
                         self.preview = None;
                     }
