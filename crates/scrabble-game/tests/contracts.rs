@@ -30,6 +30,9 @@ fn v1_command_roundtrips_without_identifier_rounding() {
 fn every_command_has_an_unambiguous_v1_encoding() {
     for command in [
         Command::Start {},
+        Command::SetName {
+            display_name: "Ada".into(),
+        },
         Command::Pass {},
         Command::Preview { placements: vec![] },
         Command::Commit { placements: vec![] },

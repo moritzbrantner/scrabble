@@ -94,13 +94,18 @@ impl GameSession {
                 if envelope.expected_turn != TurnId::new(0) {
                     return Err(CommandError::StaleTurn);
                 }
-                if !matches!(envelope.command, Command::Start {}) {
-                    return Err(StateError::WrongPhase.into());
+                match &envelope.command {
+                    Command::SetName { display_name } => {
+                        self.state.set_display_name(player, display_name.clone())?
+                    }
+                    Command::Start {} => {
+                        if self.state.host() != Some(player) {
+                            return Err(CommandError::NotHost);
+                        }
+                        self.state.deal_initial_racks()?;
+                    }
+                    _ => return Err(StateError::WrongPhase.into()),
                 }
-                if self.state.host() != Some(player) {
-                    return Err(CommandError::NotHost);
-                }
-                self.state.deal_initial_racks()?;
             }
             Phase::Playing {
                 active_player,
@@ -132,7 +137,9 @@ impl GameSession {
                         self.state.advance_turn()?;
                         self.preview = None;
                     }
-                    Command::Start {} => return Err(StateError::WrongPhase.into()),
+                    Command::Start {} | Command::SetName { .. } => {
+                        return Err(StateError::WrongPhase.into());
+                    }
                     // Commit requires structural/dictionary/scoring integration (#5, #6, #19, #24).
                     Command::Commit { .. } | Command::Exchange { .. } => {
                         return Err(CommandError::UnsupportedCommand);

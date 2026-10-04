@@ -1,3 +1,4 @@
+import { resumeCapability, type ResumeCapability } from "./resume-capability";
 import {
   contract,
   decodeControl,
@@ -26,6 +27,9 @@ export type MatchOptions = {
   matchId: string;
   onState: (state: ConnectionState) => void;
   onSnapshot: (snapshot: Snapshot) => void;
+  /** Private resume capability: pass only to the storage owner, never to a public view. */
+  resume?: ResumeCapability;
+  onResume?: (capability: ResumeCapability) => void;
   /** Local development certificates only. Production uses normal HTTPS trust. */
   serverCertificateHashes?: WebTransportHash[];
 };
@@ -108,6 +112,7 @@ export class BrowserMatch {
   #url: URL;
   #token: Uint8Array | undefined;
   #sequence = 0;
+  #expectedPlayer: string | undefined;
   #transport: WebTransport | undefined;
   #writer: WritableStreamDefaultWriter<Uint8Array> | undefined;
   #admission: Admission | undefined;
@@ -119,6 +124,17 @@ export class BrowserMatch {
   constructor(options: MatchOptions) {
     this.#options = options;
     this.#url = matchUrl(options.endpoint, options.matchId);
+    if (options.resume !== undefined) {
+      const saved = resumeCapability.parse(options.resume);
+      if (saved.route !== this.#url.href) {
+        throw new ProtocolError("Saved session belongs to another match");
+      }
+      this.#token = Uint8Array.from({ length: 16 }, (_, index) =>
+        Number.parseInt(saved.token.slice(index * 2, index * 2 + 2), 16),
+      );
+      this.#sequence = saved.sequence;
+      this.#expectedPlayer = saved.playerId;
+    }
   }
 
   /** Resolves when this connection ends. Calling again explicitly reconnects the same player. */
@@ -168,8 +184,13 @@ export class BrowserMatch {
       const { reconnectToken, ...admission } = decodeWelcome(
         await readAll(welcomeStream, 46, handshake),
       );
+      if (this.#expectedPlayer !== undefined && admission.playerId !== this.#expectedPlayer) {
+        throw new ProtocolError("Reconnect returned a different player");
+      }
+      this.#expectedPlayer = admission.playerId;
       this.#token = reconnectToken;
       this.#admission = admission;
+      this.#publishResume();
       this.#writer = transport.datagrams.writable.getWriter();
       this.#options.onState({ kind: "connected", admission });
       const reader = transport.datagrams.readable.getReader();
@@ -238,6 +259,7 @@ export class BrowserMatch {
     }
     // Reserve before awaiting: concurrent writes and reconnects cannot reuse a sequence.
     this.#sequence = sequence;
+    this.#publishResume();
     try {
       await writer.write(frame);
     } catch {
@@ -304,6 +326,19 @@ export class BrowserMatch {
         });
       }
     }
+  }
+
+  #publishResume(): void {
+    if (this.#token === undefined || this.#expectedPlayer === undefined) {
+      return;
+    }
+    this.#options.onResume?.({
+      version: 1,
+      route: this.#url.href,
+      playerId: this.#expectedPlayer,
+      token: Array.from(this.#token, (byte) => byte.toString(16).padStart(2, "0")).join(""),
+      sequence: this.#sequence,
+    });
   }
 
   disconnect(): void {

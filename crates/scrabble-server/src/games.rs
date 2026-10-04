@@ -1,7 +1,7 @@
 //! Public creation information and bounded lifecycle policy; gameplay authority stays in the runtime.
 use crate::{
     factory::{MatchFactory, creation_time, game_id},
-    simulation::{MATCH_LIFETIME_SECONDS, ScrabbleSimulation, retirement_due},
+    simulation::{MATCH_LIFETIME_SECONDS, MatchLifecycle, ScrabbleSimulation, retirement_due},
 };
 use game_server::{BrowserRoutePrefix, LiveHostError, LiveMatchHost, MatchId, MatchRuntime};
 use scrabble_game::identity::GameId;
@@ -51,6 +51,7 @@ pub enum GameOperationError {
     InvalidRequest,
     ExpiredRequest,
     ExpiredMatch,
+    JoinClosed,
     NotServing,
     Draining,
     AtCapacity,
@@ -160,6 +161,21 @@ impl Games {
         id: &MatchId,
         now: u64,
     ) -> Result<JoinInformation, GameOperationError> {
+        self.lookup_checked(id, now, false).await
+    }
+    pub async fn check_join(
+        &self,
+        id: &MatchId,
+        now: u64,
+    ) -> Result<JoinInformation, GameOperationError> {
+        self.lookup_checked(id, now, true).await
+    }
+    async fn lookup_checked(
+        &self,
+        id: &MatchId,
+        now: u64,
+        new_player: bool,
+    ) -> Result<JoinInformation, GameOperationError> {
         let created_at = creation_time(id).ok_or(GameOperationError::UnknownMatch)?;
         if now >= created_at.saturating_add(MATCH_LIFETIME_SECONDS) {
             return Err(GameOperationError::ExpiredMatch);
@@ -178,10 +194,30 @@ impl Games {
                 let snapshot = runtime
                     .snapshot()
                     .map_err(|_| GameOperationError::Internal)?;
-                if retirement_due(&snapshot.payload, now, runtime.current_tick())
-                    .map_err(|_| GameOperationError::Internal)?
+                #[derive(Deserialize)]
+                struct GameHeader {
+                    phase: scrabble_game::protocol::Phase,
+                }
+                #[derive(Deserialize)]
+                struct Projection {
+                    lifecycle: Option<MatchLifecycle>,
+                    game: GameHeader,
+                }
+                let current: Projection = serde_json::from_slice(&snapshot.payload)
+                    .map_err(|_| GameOperationError::Internal)?;
+                if current
+                    .lifecycle
+                    .is_some_and(|lifecycle| lifecycle.can_retire(now, runtime.current_tick()))
                 {
                     return Err(GameOperationError::ExpiredMatch);
+                }
+                if new_player {
+                    if !matches!(current.game.phase, scrabble_game::protocol::Phase::Lobby {}) {
+                        return Err(GameOperationError::JoinClosed);
+                    }
+                    if runtime.slot_count() >= runtime.max_players() {
+                        return Err(GameOperationError::AtCapacity);
+                    }
                 }
                 Ok(())
             })

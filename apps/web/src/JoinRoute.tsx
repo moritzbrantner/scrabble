@@ -1,7 +1,7 @@
 import { Button } from "@moritzbrantner/ui/client";
 import { useEffect, useState } from "react";
 import { JoinError, lookupGame } from "./create-game";
-import { LiveBoard } from "./LiveBoard";
+import { PlayerPhone } from "./PlayerPhone";
 import { validInviteId } from "./player-invite";
 
 type State = { kind: "checking" | "ready" } | { kind: "failed"; message: string };
@@ -53,12 +53,12 @@ export function JoinRoute({
     }
     return () => controller.abort();
   }, [matchId, endpoint, api, attempt]);
-  if (state.kind === "ready" && endpoint !== undefined) {
+  if (state.kind === "ready" && endpoint !== undefined && api !== undefined) {
     return (
-      <LiveBoard
+      <PlayerPhone
+        api={api}
         endpoint={endpoint}
         matchId={matchId}
-        playerView
         {...(certificateHash === undefined ? {} : { certificateHash })}
       />
     );

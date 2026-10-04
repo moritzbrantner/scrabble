@@ -216,6 +216,21 @@ fn runtime_replay_recovery_and_reconnect_use_identical_authority() {
     let mut runtime = MatchRuntime::new_with_replay_capture(simulation(), 2);
     let first = runtime.admit(ReconnectToken([1; 16])).unwrap();
     let second = runtime.admit(ReconnectToken([2; 16])).unwrap();
+    runtime
+        .submit_command(
+            second.player_id,
+            second.connection_epoch,
+            1,
+            &command(
+                second.player_id,
+                1,
+                0,
+                Command::SetName {
+                    display_name: "Player 1".into(),
+                },
+            ),
+        )
+        .unwrap();
     let start = command(first.player_id, 1, 0, Command::Start {});
     assert_eq!(
         runtime
@@ -248,8 +263,8 @@ fn runtime_replay_recovery_and_reconnect_use_identical_authority() {
         .submit_command(
             second.player_id,
             second.connection_epoch,
-            1,
-            &command(second.player_id, 1, 1, Command::Pass {}),
+            2,
+            &command(second.player_id, 2, 1, Command::Pass {}),
         )
         .unwrap();
     runtime.advance_tick().unwrap();

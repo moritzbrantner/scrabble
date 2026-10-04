@@ -1,6 +1,6 @@
 # Scrabble game-server adapter
 
-`ScrabbleSimulation::new(game_id, ruleset, seed)` constructs a fresh deterministic lobby. The adapter fixes tick rate at 20 Hz, uses the ruleset's player capacity, and delegates storage, dealing, previews and passes to `GameSession`. Display names start as `Player <runtime ID>`; join/name selection belongs to #14.
+`ScrabbleSimulation::new(game_id, ruleset, seed)` constructs a fresh deterministic lobby. The adapter fixes tick rate at 20 Hz, uses the ruleset's player capacity, and delegates storage, dealing, previews and passes to `GameSession`. Display names start as `Player <runtime ID>`. The lobby-only authenticated `SetName` command trims and validates a 1–32-scalar name, allows duplicates, and updates only that player’s presentation. Names never identify a session or confer host authority.
 
 Admission maps the authenticated runtime u32 player directly to the domain decimal-string u64 ID. Command payloads are limited by the upstream 1,024-byte boundary and strict Scrabble protocol v1. The adapter compares authenticated identity and transport sequence with payload claims through `GameSession::apply`; failures mutate neither canonical nor projected state. Commit and exchange retain the session's explicit unsupported result until their transaction issues.
 

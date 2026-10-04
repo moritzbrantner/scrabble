@@ -19,6 +19,7 @@ export const commandEnvelope = z.strictObject({
   expected_turn: id,
   command: z.discriminatedUnion("kind", [
     z.strictObject({ kind: z.literal("start") }),
+    z.strictObject({ kind: z.literal("set_name"), display_name: z.string().max(128) }),
     z.strictObject({ kind: z.literal("preview"), placements }),
     z.strictObject({ kind: z.literal("commit"), placements }),
     z.strictObject({ kind: z.literal("pass") }),

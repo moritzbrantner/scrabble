@@ -162,12 +162,14 @@ test("lobby tracks joined players and confirms Start from authoritative snapshot
   expect(invite).not.toBeNull();
   const guest = await context.newPage();
   await guest.goto(invite ?? "");
+  await guest.getByLabel("Player name", { exact: true }).fill("Lin");
+  await guest.getByRole("button", { name: "Join game", exact: true }).click();
   const roster = page.getByRole("list", { name: "Players and scores" });
   await expect(roster.getByRole("listitem")).toHaveCount(2);
   await expect(start).toBeEnabled();
-  await expect(guest.getByRole("button", { name: "Start game", exact: true })).toBeDisabled();
+  await expect(guest.getByRole("button", { name: "Start game", exact: true })).toHaveCount(0);
   await expect(roster).toContainText("Player 1");
-  await expect(roster).toContainText("Player 2");
+  await expect(roster).toContainText("Lin");
   await expect(roster.getByRole("listitem").filter({ hasText: "Connected" })).toHaveCount(2);
   await page.evaluate(async () => {
     const modulePath = "/scrabble/src/transport/browser-match.ts";
@@ -189,7 +191,7 @@ test("lobby tracks joined players and confirms Start from authoritative snapshot
   await expect(start).toBeEnabled();
   await start.click();
   await expect(page.getByText("Turn 1", { exact: true })).toBeVisible();
-  await expect(guest.getByText("Turn 1", { exact: true })).toBeVisible();
+  await expect(guest.getByText("Waiting for Player 1.", { exact: true })).toBeVisible();
   await expect(start).toHaveCount(0);
   await guest.close();
   await expect(roster.getByRole("listitem").filter({ hasText: "Disconnected" })).toHaveCount(1);
@@ -213,4 +215,93 @@ test("player invitations reject malformed and expired games before transport adm
   await expect(page.getByRole("alert")).toContainText("game has expired");
   await expect(page.getByRole("table", { name: "Scrabble board" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Create game", exact: true })).toHaveCount(0);
+});
+
+test("phone names preserve distinct identities across refresh and full-game failures", async ({
+  page,
+  browser,
+}) => {
+  const certificate = fixture.certificateHash
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+  await page.goto(
+    `./?server=${encodeURIComponent(fixture.endpoint)}&api=${encodeURIComponent(fixture.api)}&certificate=${certificate}`,
+  );
+  await page.getByRole("button", { name: "Create game", exact: true }).click();
+  const href = await page
+    .getByRole("link", { name: "Join this game", exact: true })
+    .getAttribute("href");
+  const firstContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const secondContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const thirdContext = await browser.newContext();
+  const fullContext = await browser.newContext();
+  try {
+    const first = await firstContext.newPage();
+    const second = await secondContext.newPage();
+    for (const phone of [first, second]) {
+      await phone.goto(href ?? "");
+      await expect(phone.getByRole("table", { name: "Scrabble board" })).toHaveCount(0);
+      await phone.getByLabel("Player name", { exact: true }).fill("Ada");
+      await phone.getByRole("button", { name: "Join game", exact: true }).click();
+      await expect(phone.getByRole("heading", { name: "Ada", exact: true })).toBeVisible();
+    }
+    const firstId = await first.getByTestId("player-identity").textContent();
+    const secondId = await second.getByTestId("player-identity").textContent();
+    expect(firstId).not.toBe(secondId);
+    const roster = page.getByRole("list", { name: "Players and scores" });
+    await expect(roster.getByRole("listitem").filter({ hasText: "Ada" })).toHaveCount(2);
+    for (let refresh = 0; refresh < 2; refresh++) {
+      await first.reload();
+      await expect(first.getByRole("heading", { name: "Ada", exact: true })).toBeVisible();
+      await expect(first.getByTestId("player-identity")).toHaveText(firstId ?? "");
+      await expect(first.getByLabel("Player name", { exact: true })).toHaveCount(0);
+    }
+    const privacy = await first.evaluate(() => {
+      const keys = Object.keys(sessionStorage);
+      const saved: unknown = JSON.parse(sessionStorage.getItem(keys[0] ?? "") ?? "null");
+      return {
+        local: Object.keys(localStorage),
+        count: keys.length,
+        fields: saved === null || typeof saved !== "object" ? [] : Object.keys(saved).sort(),
+        privateUrl: /token|reconnect|sequence|rack|Ada/i.test(location.href),
+        overflow: document.documentElement.scrollWidth > innerWidth,
+      };
+    });
+    expect(privacy).toEqual({
+      local: [],
+      count: 1,
+      fields: ["playerId", "route", "sequence", "token", "version"],
+      privateUrl: false,
+      overflow: false,
+    });
+    const third = await thirdContext.newPage();
+    await third.goto(href ?? "");
+    await third.getByLabel("Player name", { exact: true }).fill("Lin");
+    await third.getByRole("button", { name: "Join game", exact: true }).click();
+    await expect(third.getByRole("heading", { name: "Lin", exact: true })).toBeVisible();
+    const full = await fullContext.newPage();
+    await full.goto(href ?? "");
+    await full.getByLabel("Player name", { exact: true }).fill("Fourth");
+    await full.getByRole("button", { name: "Join game", exact: true }).click();
+    await expect(full.getByRole("alert")).toContainText("game is full");
+    await expect(full.getByTestId("player-identity")).toHaveCount(0);
+    await expect(roster.getByRole("listitem")).toHaveCount(4);
+    await page.getByRole("button", { name: "Start game", exact: true }).click();
+    await expect(page.getByText("Turn 1", { exact: true })).toBeVisible();
+    await expect(first.getByText("Waiting for Player 1.", { exact: true })).toBeVisible();
+    await full.getByRole("button", { name: "Retry player connection", exact: true }).click();
+    await expect(full.getByRole("alert")).toContainText("game has already started");
+    await first.reload();
+    await expect(first.getByTestId("player-identity")).toHaveText(firstId ?? "");
+    await expect(first.getByRole("heading", { name: "Ada", exact: true })).toBeVisible();
+    await expect(first.getByRole("table", { name: "Scrabble board" })).toHaveCount(0);
+    await expect(first.getByText("Waiting for Player 1.", { exact: true })).toBeVisible();
+  } finally {
+    await Promise.all([
+      firstContext.close(),
+      secondContext.close(),
+      thirdContext.close(),
+      fullContext.close(),
+    ]);
+  }
 });

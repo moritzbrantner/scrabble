@@ -158,19 +158,26 @@ export async function lookupGame(
   endpoint: string,
   matchId: string,
   signal: AbortSignal,
+  mode: "available" | "new" = "available",
 ): Promise<JoinInformation> {
   if (!joinInformation.shape.matchId.safeParse(matchId).success) {
     throw new JoinError("This game identifier is invalid. Ask the host for a new invitation.");
   }
   matchUrl(endpoint, matchId);
   const url = creationUrl(api);
-  url.pathname += `/${matchId}`;
+  url.pathname += `/${matchId}${mode === "new" ? "/join" : ""}`;
   const response = await fetch(url, {
     credentials: "omit",
     signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
   });
   if (!response.ok) {
     await response.body?.cancel();
+    if (response.status === 429) {
+      throw new JoinError("This game is full. Ask the host for another invitation.");
+    }
+    if (response.status === 409) {
+      throw new JoinError("This game has already started. New players cannot join.");
+    }
     if (response.status === 410) {
       throw new JoinError("This game has expired. Ask the host for a new invitation.");
     }
