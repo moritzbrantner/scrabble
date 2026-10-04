@@ -42,6 +42,8 @@ Created games, including abandoned games, expire six hours after their request t
 
 `DELETE /games/<match-id>` requests the same eligible retirement; it cannot terminate a fresh or still-retained game. It returns 204 on success, 409 when not eligible, 404 when unknown/already retired, and 503 during drain. Eligibility is monotonic for terminal games and hard lifetime expiration. The host freezes the runtime, fences old commands/reconnects, closes active connections and stops ticking before releasing the capacity slot. Retired IDs disappear from status and browser routes. Retirement discards that game's state; later creation retries are already expired and cannot recreate it.
 
+Canonical tick history uses the runtime’s private SHA-256 digest checkpoints while recovery retains a full final canonical snapshot. At 20 Hz the six-hour limit yields at most 19,440,000 encoded tick-record bytes, plus commands, session events and the final snapshot, under the runtime’s 256 MiB recovery-image limit. A real Scrabble regression checks this bound.
+
 Lifecycle is stored only inside `ScrabbleSimulation`'s canonical snapshot. Initial lifecycle inputs derive from the canonical match ID, so replay/recovery reconstruct the same authority. Public player snapshots do not expose lifecycle internals. Graceful recovery's bounded manifest supplies created IDs to the factory; configured defaults never recreate retired IDs. Hard termination remains outside graceful recovery guarantees.
 
 ## HTTP bounds and evidence
