@@ -22,7 +22,7 @@ export function showEditor(snapshot: PlayerSnapshot, rules: Ruleset) {
         snapshot.public.phase.kind === "playing" &&
         snapshot.public.phase.active_player === snapshot.own_rack.player_id
       }
-      onCommit={async () => {
+      onTurnAction={async () => {
         throw new Error("No transport in the isolated editor fixture");
       }}
     />,

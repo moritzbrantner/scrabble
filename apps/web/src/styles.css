@@ -279,11 +279,20 @@ body {
   font-weight: 700;
 }
 .blank-choices,
-.draft-actions {
+.draft-actions,
+.pass-confirmation {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-block: 0.75rem;
+}
+.pass-confirmation p {
+  flex-basis: 100%;
+  margin: 0;
+}
+.draft-actions button,
+.pass-confirmation button {
+  min-height: 44px;
 }
 .blank-choices button {
   min-width: 44px;

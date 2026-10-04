@@ -381,14 +381,14 @@ export function PlayerPhone({
                       }),
                     );
                   }}
-                  onCommit={async (placements) => {
+                  onTurnAction={async (command) => {
                     const client = activeClient.current;
                     if (
                       !canAct ||
                       client === undefined ||
                       snapshot.public.phase.kind !== "playing"
                     ) {
-                      throw new Error("Move cannot be sent");
+                      throw new Error("Turn action cannot be sent");
                     }
                     const turn = snapshot.public.phase.turn;
                     await client.sendCommand((sequence, authenticated) =>
@@ -398,7 +398,7 @@ export function PlayerPhone({
                         player_id: authenticated,
                         sequence,
                         expected_turn: turn,
-                        command: { kind: "commit", placements },
+                        command,
                       }),
                     );
                   }}

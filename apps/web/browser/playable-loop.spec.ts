@@ -66,6 +66,7 @@ test("built Pages client plays consecutive turns through isolated phones", async
       await expect(rack).toHaveAttribute("aria-disabled", "true");
       await expect(rack.locator("button:disabled")).toHaveCount(7);
       await expect(commit(phone)).toBeDisabled();
+      await expect(phone.getByRole("button", { name: "Pass turn", exact: true })).toBeDisabled();
     };
     await expect(commit(second)).toBeDisabled();
     await waiting(second);
@@ -144,6 +145,38 @@ test("built Pages client plays consecutive turns through isolated phones", async
     await expect(page.getByText("Turn 3", { exact: true })).toBeVisible();
     await expect(page.locator(".letter-tile")).toHaveCount(3);
     await expect.poll(() => boardState()?.own_rack.tiles.length).toBe(0);
+    const nextTile = first
+      .getByRole("list", { name: "Your rack", exact: true })
+      .getByRole("button")
+      .first();
+    const blank = (await nextTile.getAttribute("aria-label"))?.startsWith("Blank tile");
+    await nextTile.click();
+    const editor = first.getByRole("region", { name: "Move editor", exact: true });
+    await editor.getByRole("button", { name: /^Row 7, column 8:/ }).click();
+    if (blank) {
+      await editor
+        .getByRole("group", { name: "Choose blank letter", exact: true })
+        .getByRole("button", { name: "A", exact: true })
+        .click();
+    }
+    await expect(page.locator(".tentative-tile")).toHaveCount(1);
+    const pass = first.getByRole("button", { name: "Pass turn", exact: true });
+    await pass.click();
+    const confirmation = first.getByRole("group", { name: "Confirm pass", exact: true });
+    await expect(confirmation).toBeVisible();
+    expect(boardState()?.public.phase).toMatchObject({ kind: "playing", turn: "2" });
+    await confirmation.getByRole("button", { name: "Keep playing", exact: true }).click();
+    await expect(confirmation).toHaveCount(0);
+    await expect(pass).toBeFocused();
+    await expect(editor.locator(".tentative-square")).toHaveCount(1);
+    await pass.click();
+    await confirmation.getByRole("button", { name: "Confirm pass", exact: true }).click();
+    await converge("3", "CAT", [4, 5], 83);
+    expect(rackIds()).toEqual(afterSecond);
+    await expect(page.locator(".tentative-tile")).toHaveCount(0);
+    await expect(editor.locator(".tentative-square")).toHaveCount(0);
+    await waiting(first);
+    await expect(second.getByText("It is your turn.", { exact: true })).toBeVisible();
   } finally {
     await firstContext.close();
     await secondContext.close();

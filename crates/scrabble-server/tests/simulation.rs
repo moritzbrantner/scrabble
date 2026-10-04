@@ -680,3 +680,83 @@ fn committed_turn_converges_privately_and_replays_with_exactly_once_scoring() {
         serde_json::from_slice(&restored.snapshot_for(1).unwrap().payload).unwrap();
     assert_eq!(restored_projection.own_rack, first.own_rack);
 }
+
+#[test]
+fn pass_is_fenced_exactly_once_and_replays_without_changing_tile_ownership() {
+    let mut runtime = MatchRuntime::new_with_replay_capture(simulation(), 100);
+    runtime.admit(ReconnectToken([1; 16])).unwrap();
+    runtime.admit(ReconnectToken([2; 16])).unwrap();
+    runtime
+        .submit_command(1, 1, 1, &command(1, 1, 0, Command::Start {}))
+        .unwrap();
+    let own: PlayerSnapshot =
+        serde_json::from_slice(&runtime.snapshot_for(1).unwrap().payload).unwrap();
+    runtime
+        .submit_command(1, 1, 2, &command(1, 2, 0, draft(&own)))
+        .unwrap();
+    let before = runtime.snapshot().unwrap();
+    let private = runtime.snapshot_for(1).unwrap();
+    for (player, sequence, turn) in [(2, 1, 0), (1, 3, 99)] {
+        assert!(
+            runtime
+                .submit_command(
+                    player,
+                    1,
+                    sequence,
+                    &command(player, sequence, turn, Command::Pass {})
+                )
+                .is_err()
+        );
+        assert_eq!(runtime.snapshot().unwrap(), before);
+        assert_eq!(runtime.snapshot_for(1).unwrap(), private);
+    }
+    let payload = command(1, 3, 0, Command::Pass {});
+    assert_eq!(
+        runtime.submit_command(1, 1, 3, &payload).unwrap(),
+        CommandOutcome::Applied
+    );
+    let passed = runtime.snapshot().unwrap();
+    assert_eq!(
+        runtime.submit_command(1, 1, 3, &payload).unwrap(),
+        CommandOutcome::IgnoredStale
+    );
+    for turn in [0, 1] {
+        assert!(
+            runtime
+                .submit_command(1, 1, 4, &command(1, 4, turn, Command::Pass {}))
+                .is_err()
+        );
+        assert_eq!(runtime.snapshot().unwrap(), passed);
+    }
+    let projection: PlayerSnapshot =
+        serde_json::from_slice(&runtime.snapshot_for(1).unwrap().payload).unwrap();
+    assert_eq!(
+        projection.public.phase,
+        Phase::Playing {
+            active_player: PlayerId::new(2),
+            turn: TurnId::new(1)
+        }
+    );
+    assert!(projection.public.preview.is_none());
+    assert_eq!(projection.own_rack, own.own_rack);
+    let before: Value = serde_json::from_slice(&before.payload).unwrap();
+    let after: Value = serde_json::from_slice(&passed.payload).unwrap();
+    for field in ["board", "bag", "players"] {
+        assert_eq!(after["game"][field], before["game"][field]);
+    }
+    runtime
+        .submit_command(2, 1, 1, &command(2, 1, 1, Command::Pass {}))
+        .unwrap();
+    runtime.advance_tick().unwrap();
+    let expected = runtime.snapshot().unwrap();
+    let log = ReplayLog::decode(&runtime.replay_log().unwrap().encode().unwrap()).unwrap();
+    assert_eq!(
+        verify_replay(simulation(), &log).unwrap().final_snapshot,
+        expected
+    );
+    runtime.freeze_for_recovery();
+    let restored =
+        MatchRuntime::restore_from_recovery(simulation(), runtime.recovery_image().unwrap())
+            .unwrap();
+    assert_eq!(restored.snapshot().unwrap(), expected);
+}
