@@ -179,3 +179,60 @@ body {
 .player-phone button {
   margin-block: 0.5rem;
 }
+
+.phone-rack {
+  margin-block: 1rem;
+}
+.phone-rack ul {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+}
+.rack-tile {
+  position: relative;
+  min-height: 44px;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  background: var(--background);
+  font-size: clamp(1.1rem, 5vw, 1.7rem);
+  font-weight: 700;
+}
+.rack-tile small {
+  position: absolute;
+  bottom: 2px;
+  right: 3px;
+  font-size: 0.65rem;
+}
+.phone-rack ul[aria-disabled="true"] .rack-tile {
+  background: var(--muted);
+}
+.phone-scores {
+  list-style: none;
+  padding: 0;
+  margin-block: 1rem;
+}
+.phone-scores li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.phone-scores li span {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+@media (max-width: 360px) {
+  .player-phone {
+    padding: 0.5rem;
+  }
+  .phone-rack ul {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}

@@ -389,12 +389,62 @@ test("phone names preserve distinct identities across refresh and full-game fail
       expect(projection?.turn).toBe(board?.turn);
       expect(projection?.remaining).toBe(board?.remaining);
       expect(projection?.gameId).toBe(board?.gameId);
+      const rack = phone.getByRole("list", { name: "Your rack", exact: true });
+      await expect(rack.getByRole("listitem")).toHaveCount(7);
+      expect(
+        await rack
+          .getByRole("listitem")
+          .evaluateAll((tiles) => tiles.map((tile) => tile.getAttribute("data-tile-id"))),
+      ).toEqual(projection?.tileIds);
+      await expect(rack).toHaveAttribute("aria-disabled", phone === first ? "false" : "true");
+      await expect(rack.getByRole("button")).toHaveCount(0);
+      await expect(phone.getByRole("textbox")).toHaveCount(0);
+      await expect(
+        phone.getByRole("list", { name: "Players and scores", exact: true }).getByRole("listitem"),
+      ).toHaveCount(4);
       for (const id of projection?.tileIds ?? []) {
         expect(tileIds.has(id)).toBe(false);
         tileIds.add(id);
       }
     }
     expect(tileIds.size).toBe(28);
+    const ownTiles = await first
+      .getByRole("list", { name: "Your rack", exact: true })
+      .getByRole("listitem")
+      .evaluateAll((tiles) => tiles.map((tile) => tile.getAttribute("data-tile-id")));
+    for (const phone of [second, third, fourth]) {
+      const rendered = await phone
+        .getByRole("list", { name: "Your rack", exact: true })
+        .getByRole("listitem")
+        .evaluateAll((tiles) => tiles.map((tile) => tile.getAttribute("data-tile-id")));
+      expect(rendered.some((id) => ownTiles.includes(id))).toBe(false);
+    }
+    for (const viewport of [
+      { width: 320, height: 568 },
+      { width: 390, height: 844 },
+      { width: 844, height: 390 },
+    ]) {
+      await first.setViewportSize(viewport);
+      expect(await first.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(
+        false,
+      );
+      const tiles = await first
+        .getByRole("list", { name: "Your rack", exact: true })
+        .getByRole("listitem")
+        .evaluateAll((elements) =>
+          elements.map((element) => {
+            const bounds = element.getBoundingClientRect();
+            return { width: bounds.width, x: bounds.x, right: bounds.right };
+          }),
+        );
+      expect(
+        tiles.every((tile) => tile.width >= 44 && tile.x >= 0 && tile.right <= viewport.width),
+      ).toBe(true);
+      await first.screenshot({
+        path: `test-results/phone-rack-${viewport.width}.png`,
+        fullPage: true,
+      });
+    }
     await page.reload();
     await expect(page.getByText("Turn 1", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Start game", exact: true })).toHaveCount(0);
@@ -405,6 +455,13 @@ test("phone names preserve distinct identities across refresh and full-game fail
     await expect(first.getByRole("heading", { name: "Ada", exact: true })).toBeVisible();
     await expect(first.getByRole("table", { name: "Scrabble board" })).toHaveCount(0);
     await expect(first.getByText("It is your turn.", { exact: true })).toBeVisible();
+    const restoredRack = first.getByRole("list", { name: "Your rack", exact: true });
+    await expect(restoredRack.getByRole("listitem")).toHaveCount(7);
+    expect(
+      await restoredRack
+        .getByRole("listitem")
+        .evaluateAll((tiles) => tiles.map((tile) => tile.getAttribute("data-tile-id"))),
+    ).toEqual(ownTiles);
   } finally {
     await Promise.all([
       firstContext.close(),
