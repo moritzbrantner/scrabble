@@ -627,8 +627,40 @@ fn committed_turn_converges_privately_and_replays_with_exactly_once_scoring() {
             turn: TurnId::new(1)
         }
     );
-    assert_eq!(first.own_rack.tiles.len(), 5);
+    assert_eq!(first.own_rack.tiles.len(), 7);
+    assert_eq!(first.public.remaining_tiles, 84);
     assert_eq!(second.own_rack.tiles.len(), 7);
+    assert!(runtime.disconnect(1, 1));
+    let tile = &second.own_rack.tiles[0];
+    runtime
+        .submit_command(
+            2,
+            1,
+            1,
+            &command(
+                2,
+                1,
+                1,
+                Command::Preview {
+                    placements: vec![Placement {
+                        tile_id: tile.id,
+                        coordinate: Coordinate::new(6, 7).unwrap(),
+                        blank_as: match tile.face {
+                            TileFace::Blank {} => Some('A'),
+                            TileFace::Letter { .. } => None,
+                        },
+                    }],
+                },
+            ),
+        )
+        .unwrap();
+    let resumed = runtime
+        .reconnect(ReconnectToken([1; 16]), ReconnectToken([3; 16]))
+        .unwrap();
+    assert_eq!(resumed.player_id, 1);
+    let resumed_projection: PlayerSnapshot =
+        serde_json::from_slice(&runtime.snapshot_for(1).unwrap().payload).unwrap();
+    assert_eq!(resumed_projection.own_rack, first.own_rack);
     runtime.advance_tick().unwrap();
     let fresh = || ScrabbleSimulation::new(GameId::new(1), english_fixture(), [seed; 32]).unwrap();
     let expected = runtime.snapshot().unwrap();
@@ -638,7 +670,13 @@ fn committed_turn_converges_privately_and_replays_with_exactly_once_scoring() {
         expected
     );
     runtime.freeze_for_recovery();
-    let restored =
+    let mut restored =
         MatchRuntime::restore_from_recovery(fresh(), runtime.recovery_image().unwrap()).unwrap();
     assert_eq!(restored.snapshot().unwrap(), expected);
+    restored
+        .reconnect(ReconnectToken([3; 16]), ReconnectToken([4; 16]))
+        .unwrap();
+    let restored_projection: PlayerSnapshot =
+        serde_json::from_slice(&restored.snapshot_for(1).unwrap().payload).unwrap();
+    assert_eq!(restored_projection.own_rack, first.own_rack);
 }

@@ -588,6 +588,7 @@ mod turn_counter_tests {
         for (turn, revision, error) in [
             (u64::MAX, 10, StateError::CounterExhausted),
             (0, u64::MAX - 1, StateError::InvariantViolation),
+            (0, u64::MAX - 2, StateError::InvariantViolation),
         ] {
             let mut state = base.clone();
             state.phase = Phase::Playing {
