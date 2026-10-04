@@ -74,6 +74,9 @@ function placementProblem(
     rules.tiles.flatMap((tile) => (tile.face.kind === "letter" ? [tile.face.letter] : [])),
   );
   for (const placement of placements) {
+    if (tiles.has(placement.tile_id)) {
+      return "duplicate";
+    }
     const { row, column } = placement.coordinate;
     if (
       !Number.isInteger(row) ||
@@ -85,16 +88,16 @@ function placementProblem(
     ) {
       return "coordinate";
     }
-    const tile = snapshot.own_rack.tiles.find((tile) => tile.id === placement.tile_id);
-    if (tile === undefined) {
-      return "not-owned";
-    }
     const square = key(placement.coordinate);
-    if (tiles.has(tile.id) || squares.has(square)) {
+    if (squares.has(square)) {
       return "duplicate";
     }
     if (committed.has(square)) {
       return "occupied";
+    }
+    const tile = snapshot.own_rack.tiles.find((tile) => tile.id === placement.tile_id);
+    if (tile === undefined) {
+      return "not-owned";
     }
     if (
       tile.face.kind === "blank"

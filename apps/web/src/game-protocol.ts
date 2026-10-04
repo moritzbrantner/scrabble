@@ -2,15 +2,8 @@ import { z } from "zod";
 import { coordinate, id, letter, playerSnapshot, type PlayerSnapshot } from "./public-state";
 import { ProtocolError } from "./transport/wire";
 
-const placements = z
-  .array(
-    z.strictObject({
-      tile_id: id,
-      coordinate,
-      blank_as: letter.nullable(),
-    }),
-  )
-  .max(15);
+export const placement = z.strictObject({ tile_id: id, coordinate, blank_as: letter.nullable() });
+const placements = z.array(placement).max(15);
 export const commandEnvelope = z.strictObject({
   version: z.literal(1),
   game_id: id,
