@@ -54,7 +54,9 @@ pub fn apply_with_dictionary(
     let score = scoring::commit_placement(&mut candidate, player, placements)
         .map_err(CommitError::Score)?;
     candidate.refill_rack(player).map_err(CommitError::State)?;
-    candidate.advance_turn().map_err(CommitError::State)?;
+    candidate
+        .complete_turn(score.total())
+        .map_err(CommitError::State)?;
     *state = candidate;
     Ok(score)
 }

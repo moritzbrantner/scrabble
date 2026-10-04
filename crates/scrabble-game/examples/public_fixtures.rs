@@ -1,7 +1,8 @@
-use scrabble_game::identity::{Coordinate, GameId, PlayerId};
-use scrabble_game::protocol::{Phase, Placement};
+use scrabble_game::identity::{Coordinate, GameId, PlayerId, ProtocolVersion};
+use scrabble_game::protocol::{Command, CommandEnvelope, Phase, Placement};
 use scrabble_game::ruleset::{TileFace, english_fixture};
 use scrabble_game::scoring::commit_placement;
+use scrabble_game::session::GameSession;
 use scrabble_game::state::GameState;
 use serde_json::{Value, json};
 
@@ -44,10 +45,30 @@ fn fixtures() -> Result<Value, Box<dyn std::error::Error>> {
     ];
     commit_placement(&mut state, PlayerId::new(1), &placements)?;
     let playing = state.public_snapshot();
-    let mut finished = playing.clone();
-    finished.phase = Phase::Finished {
-        winners: vec![PlayerId::new(1)],
-    };
+    let mut session = GameSession::new(state);
+    for sequence in 1..=rules.scoreless_turn_limit {
+        let Phase::Playing {
+            active_player,
+            turn,
+        } = *session.state().phase()
+        else {
+            return Err("fixture finished early".into());
+        };
+        let sequence = u32::from(sequence);
+        session.apply(
+            active_player,
+            sequence,
+            &CommandEnvelope {
+                version: ProtocolVersion,
+                game_id: GameId::new(1),
+                player_id: active_player,
+                sequence,
+                expected_turn: turn,
+                command: Command::Pass {},
+            },
+        )?;
+    }
+    let finished = session.public_snapshot();
     Ok(json!({"ruleset":rules,"snapshots":{"lobby":lobby,"playing":playing,"finished":finished}}))
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {

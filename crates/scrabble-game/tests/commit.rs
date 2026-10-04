@@ -328,12 +328,21 @@ fn replacement_draws_are_atomic_bounded_and_preserve_tile_conservation() {
         assert_eq!(own.public.remaining_tiles, 0);
         assert_eq!(own.public.players[0].rack_count, expected_draws as u8);
         assert_eq!(own.public.board.len(), 2);
-        assert_eq!(own.public.players[0].score, 54);
+        assert_eq!(
+            own.public.players[0].score,
+            if expected_draws == 0 { 56 } else { 54 }
+        );
         assert_eq!(
             own.public.phase,
-            Phase::Playing {
-                active_player: PlayerId::new(2),
-                turn: TurnId::new(1)
+            if expected_draws == 0 {
+                Phase::Finished {
+                    winners: vec![PlayerId::new(1)],
+                }
+            } else {
+                Phase::Playing {
+                    active_player: PlayerId::new(2),
+                    turn: TurnId::new(1),
+                }
             }
         );
     }

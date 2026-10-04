@@ -36,6 +36,18 @@ test("public boundary rejects rack injection and malformed identifiers", () => {
   ).toBe(false);
 });
 
+test("finished ties display every winner and final negative scores", () => {
+  const snapshot = publicSnapshot.parse({
+    ...fixtures.snapshots.finished,
+    phase: { kind: "finished", winners: ["1", "2"] },
+    players: fixtures.snapshots.finished.players.map((player) => ({ ...player, score: -2 })),
+  });
+  const html = renderToStaticMarkup(<SharedBoard snapshot={snapshot} rules={fixtures.ruleset} />);
+  expect(html).toContain("Tie: Ada, Lin");
+  expect((html.match(/-2 points/g) ?? []).length).toBe(2);
+  expect(html).toContain("Game finished");
+});
+
 test("tentative overlay is turn-scoped and cannot replace committed tiles", () => {
   const snapshot = fixtures.snapshots.playing;
   if (snapshot.phase.kind !== "playing") {

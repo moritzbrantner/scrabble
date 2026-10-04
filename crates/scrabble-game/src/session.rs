@@ -129,7 +129,7 @@ impl GameSession {
                         };
                     }
                     Command::Pass {} => {
-                        self.state.advance_turn()?;
+                        self.state.complete_turn(0)?;
                         self.preview = None;
                     }
                     Command::Start {} | Command::SetName { .. } | Command::ClaimBoard { .. } => {
@@ -148,7 +148,7 @@ impl GameSession {
                     Command::Exchange { tile_ids } => {
                         let mut candidate = self.state.clone();
                         candidate.exchange_tiles(player, tile_ids)?;
-                        candidate.advance_turn()?;
+                        candidate.complete_turn(0)?;
                         self.state = candidate;
                         self.preview = None;
                     }
