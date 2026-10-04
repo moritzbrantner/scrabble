@@ -128,7 +128,7 @@ test("built Pages client plays consecutive turns through isolated phones", async
     await commit(first).click();
     const openingEditor = first.getByRole("region", { name: "Move editor", exact: true });
     await expect(openingEditor.getByRole("status")).toContainText("Not in the dictionary: AT.");
-    await expect(page.locator(".letter-tile")).toHaveCount(0);
+    await expect(page.getByRole("cell", { name: /: Committed / })).toHaveCount(0);
     expect(rackIds()).toEqual(initial);
     await openingEditor.getByRole("button", { name: "Cancel move", exact: true }).click();
     await place(first, "T", 8);

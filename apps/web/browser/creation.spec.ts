@@ -556,7 +556,7 @@ test("active phones edit tentative moves and retain rejected drafts without disc
       first.getByRole("button", { name: "Retry player connection", exact: true }),
     ).toHaveCount(0);
     await expect(editor.locator(".tentative-square")).toHaveCount(2);
-    await expect(page.locator(".letter-tile")).toHaveCount(0);
+    await expect(page.getByRole("cell", { name: /: Committed / })).toHaveCount(0);
     await expect(first.getByText("It is your turn.", { exact: true })).toBeVisible();
     await expect(editor.getByRole("button", { name: "Commit move", exact: true })).toBeEnabled();
     await expect(page.locator(".tentative-tile")).toHaveCount(2);
@@ -615,7 +615,7 @@ test("closing an active phone clears its tentative board without committing tile
       "Disconnected",
     );
     await expect(page.locator(".tentative-tile")).toHaveCount(0);
-    await expect(page.locator(".letter-tile")).toHaveCount(0);
+    await expect(page.getByRole("cell", { name: /: Committed / })).toHaveCount(0);
     await expect(page.getByText("Turn 1", { exact: true })).toBeVisible();
     await expect(
       second.getByRole("list", { name: "Your rack", exact: true }).getByRole("listitem"),
