@@ -21,7 +21,7 @@ pub struct CreateGame {
 }
 impl CreateGame {
     pub fn validate(&self, now: u64) -> Result<(), GameOperationError> {
-        if self.version != 1
+        if !matches!(self.version, 1 | 2)
             || self.request_id.len() != 32
             || !self
                 .request_id
@@ -106,10 +106,16 @@ impl Games {
     ) -> Result<JoinInformation, GameOperationError> {
         request.validate(now)?;
         let _creation = self.creation.lock().await;
-        let id = self
-            .factory
-            .creation_id(&request.request_id, request.requested_at)
-            .map_err(|_| GameOperationError::Internal)?;
+        let id = match request.version {
+            1 => self
+                .factory
+                .creation_id(&request.request_id, request.requested_at),
+            2 => self
+                .factory
+                .board_creation_id(&request.request_id, request.requested_at),
+            _ => return Err(GameOperationError::InvalidRequest),
+        }
+        .map_err(|_| GameOperationError::Internal)?;
         let statuses = self.host.statuses().await;
         // Even a duplicate retry is rejected during drain. Placement remains the final authority.
         if !self.host.is_serving() {

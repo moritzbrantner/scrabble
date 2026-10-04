@@ -1,6 +1,6 @@
 # Shared board authority outside playing seats
 
-Status: implementation in progress for #15
+Status: accepted
 
 ## Decision
 
@@ -18,10 +18,12 @@ Version-one creation requests continue to derive `g_<timestamp>_<tag>` using the
 
 The separate-board mode uses `b_<timestamp>_<tag>` under `scrabble/create/v2` and canonical adapter format version two. Factory reconstruction selects the same mode from the ID, including on recovery. The opaque tag remains 128 bits, keeping IDs within the runtime's 64-byte limit. The nonce remains private; neither creation responses nor public projections carry it. Private command replay retains the authenticated ownership claim so recovery can verify it again against the persisted factory input.
 
-## Current evidence and remaining integration
+## Evidence and integration
 
 Native tests cross the factory, simulation and real runtime interfaces. They prove board proof scope and persistence, rejection atomicity for identity/sequence/turn/name errors, minimum players, four disjoint seven-tile racks, 100-tile conservation, an empty board rack, identical public projections, deterministic first turn, rejected repeated Start and late joins, replay equality and recovery. Restored connection flags are checked separately from canonical game state.
 
-The HTTP creation endpoint and browser still use version-one creation. Activating version two, submitting the private board claim, admitting names from pending phone snapshots, and checking the complete browser flow remain required before #15 is complete. Broader reconnect and departure behavior remain #26 and #27.
+The HTTP endpoint accepts both creation versions; the browser creates version two and submits the private board claim. Pending phone snapshots allow name admission before a seat exists. The board saves only its route-bound reconnect capsule under a separate `scrabble:board:v1:` tab-storage key, allowing refresh to reuse its authority without retaining the creation nonce. Phone capsules remain under `scrabble:player:v1:`. A board link without either the original private creation request or an existing board capsule cannot allocate a replacement owner.
+
+Chromium observes the decoded wire seam while starting a board and four isolated phones. It checks an empty board rack, four disjoint seven-tile phone racks, identical public game/order/active/turn/bag metadata, disabled Start with fewer than two named players, snapshot-confirmed Start and retry, full and closed game errors, and retained board/phone identity across reload. Native process coverage retains a legacy creation beside a version-two creation through restart. Broader reconnect and departure behavior remain #26 and #27.
 
 Shared convention sourceRevision: `46d8793bb3034326561f876dcc67dbaa5aa1e432`.

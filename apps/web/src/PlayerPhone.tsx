@@ -170,16 +170,28 @@ export function PlayerPhone({
               throw new ProtocolError("This client does not support the match ruleset");
             }
             const own = current.public.players.find((player) => player.id === playerId);
-            if (own === undefined) {
+            if (own === undefined && current.public.host === undefined) {
               throw new ProtocolError("Player is absent from the roster");
             }
+            if (own === undefined && current.public.phase.kind !== "lobby") {
+              clearTimeout(nameTimeout);
+              fail(
+                "The game started before your player seat was admitted. Ask the host for another invitation.",
+              );
+              return;
+            }
+            if (own === undefined && desiredName === undefined) {
+              clearTimeout(nameTimeout);
+              setState({ kind: "entry", message: "Choose a name to finish joining." });
+              return;
+            }
             setSnapshot(current);
-            if (desiredName !== undefined && own.display_name !== desiredName) {
+            if (desiredName !== undefined && own?.display_name !== desiredName) {
               if (current.public.phase.kind !== "lobby") {
                 clearTimeout(nameTimeout);
                 setState({
                   kind: "joined",
-                  message: `The game started before your name was saved. You are joined as ${own.display_name}.`,
+                  message: `The game started before your name was saved. You are joined as ${own?.display_name ?? "Player"}.`,
                 });
                 return;
               }

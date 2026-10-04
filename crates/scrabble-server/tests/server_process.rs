@@ -439,9 +439,10 @@ async fn creation_retries_capacity_origin_and_restart_keep_one_authoritative_gam
             .0,
         409
     );
-    let second = serde_json::json!({"version":1, "requestId":"02".repeat(16), "requestedAt":now});
+    let second = serde_json::json!({"version":2, "requestId":"02".repeat(16), "requestedAt":now});
     let second_join = server.api("POST", "/games", Some(&second), origin).await;
     assert_eq!(second_join.0, 200);
+    assert!(second_join.1["matchId"].as_str().unwrap().starts_with("b_"));
     assert_ne!(second_join.1["matchId"], first.1["matchId"]);
     let excess = serde_json::json!({"version":1, "requestId":"03".repeat(16), "requestedAt":now});
     assert_eq!(
@@ -478,6 +479,17 @@ async fn creation_retries_capacity_origin_and_restart_keep_one_authoritative_gam
         server.api("POST", "/games", Some(&request), origin).await,
         first
     );
+    assert_eq!(
+        server.api("POST", "/games", Some(&second), origin).await,
+        second_join
+    );
+    let board_join: scrabble_server::games::JoinInformation =
+        serde_json::from_value(second_join.1.clone()).unwrap();
+    let (pending_board, _) = server.connect(&client, &board_join.match_path).await;
+    let pending = snapshot(&pending_board, |_| true).await;
+    assert!(pending.public.players.is_empty());
+    assert!(pending.own_rack.tiles.is_empty());
+    assert_eq!(pending.public.host.unwrap().id, None);
     let route = format!(
         "{}/reconnect/{}",
         join.match_path,

@@ -14,7 +14,14 @@ export type ResumeCapability = z.infer<typeof resumeCapability>;
 
 /** Call only at the private storage boundary, never for a URL or view projection. */
 export function readPlayerSession(route: string): ResumeCapability | undefined {
-  const value = sessionStorage.getItem(`scrabble:player:v1:${route}`);
+  return readSession("player", route);
+}
+
+export function readBoardSession(route: string): ResumeCapability | undefined {
+  return readSession("board", route);
+}
+function readSession(purpose: "player" | "board", route: string): ResumeCapability | undefined {
+  const value = sessionStorage.getItem(`scrabble:${purpose}:v1:${route}`);
   if (value === null) {
     return undefined;
   }
@@ -32,4 +39,9 @@ export function savePlayerSession(capability: ResumeCapability): void {
 }
 export function forgetPlayerSession(route: string): void {
   sessionStorage.removeItem(`scrabble:player:v1:${route}`);
+}
+
+/** A board capsule is kept separate from phone identity even at the same match route. */
+export function saveBoardSession(capability: ResumeCapability): void {
+  sessionStorage.setItem(`scrabble:board:v1:${capability.route}`, JSON.stringify(capability));
 }

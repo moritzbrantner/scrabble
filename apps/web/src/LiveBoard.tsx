@@ -6,25 +6,28 @@ import { decodePlayerSnapshot, encodeGameCommand } from "./game-protocol";
 import { type PublicSnapshot } from "./public-state";
 import { PlayerInvite } from "./PlayerInvite";
 import { SharedBoard } from "./SharedBoard";
-import { BrowserMatch, type ConnectionState } from "./transport/browser-match";
+import { BrowserMatch, matchUrl, type ConnectionState } from "./transport/browser-match";
+import { readBoardSession, saveBoardSession } from "./transport/resume-capability";
 import { ProtocolError } from "./transport/wire";
 
-/** Development connection surface; endpoint discovery and player shell are later slices. */
+/** Shared board projection and authenticated Start control. */
 export function LiveBoard({
   endpoint,
   matchId,
   certificateHash,
-  playerView = false,
+  boardClaim,
 }: {
   endpoint: string;
   matchId: string;
   certificateHash?: string;
-  playerView?: boolean;
+  boardClaim?: { requestId: string; gameId: string };
 }) {
+  const separateBoard = matchId.startsWith("b_");
   const [state, setState] = useState<ConnectionState>({ kind: "idle" });
   const [snapshot, setSnapshot] = useState<PublicSnapshot>();
   const client = useRef<BrowserMatch>(undefined);
   const running = useRef<Promise<void>>(undefined);
+  const claimTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
   const timeout = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [start, setStart] = useState<
     { kind: "idle" | "pending" } | { kind: "failed"; message: string }
@@ -33,6 +36,7 @@ export function LiveBoard({
     let mounted = true;
     let playerId: string | undefined;
     let match: BrowserMatch | undefined;
+    let claimSent = false;
     try {
       let localTrust: WebTransportHash[] | undefined;
       if (certificateHash !== undefined) {
@@ -44,7 +48,13 @@ export function LiveBoard({
         );
         localTrust = [{ algorithm: "sha-256", value: bytes.buffer }];
       }
+      const resume = separateBoard ? readBoardSession(matchUrl(endpoint, matchId).href) : undefined;
+      if (separateBoard && resume === undefined && boardClaim === undefined) {
+        throw new Error("Board ownership is unavailable in this tab");
+      }
       match = new BrowserMatch({
+        ...(resume === undefined ? {} : { resume }),
+        ...(separateBoard ? { onResume: saveBoardSession } : {}),
         ...(localTrust === undefined ? {} : { serverCertificateHashes: localTrust }),
         endpoint,
         matchId,
@@ -54,6 +64,7 @@ export function LiveBoard({
           }
           if (next.kind === "connected") {
             playerId = next.admission.playerId;
+            claimSent = false;
           }
           setState(next);
         },
@@ -61,7 +72,8 @@ export function LiveBoard({
           if (!mounted || playerId === undefined) {
             return;
           }
-          const current = decodePlayerSnapshot(frame.payload, playerId).public;
+          const projection = decodePlayerSnapshot(frame.payload, playerId);
+          const current = projection.public;
           if (
             current.ruleset.name !== fixtures.ruleset.identity.name ||
             current.ruleset.revision !== fixtures.ruleset.identity.revision ||
@@ -69,6 +81,54 @@ export function LiveBoard({
             current.dictionary.revision !== fixtures.ruleset.dictionary.revision
           ) {
             throw new ProtocolError("This client does not support the match ruleset");
+          }
+          if (separateBoard) {
+            if (current.host === undefined || projection.own_rack.tiles.length !== 0) {
+              throw new ProtocolError("Invalid shared board projection");
+            }
+            if (boardClaim !== undefined && current.game_id !== boardClaim.gameId) {
+              throw new ProtocolError("Board claim belongs to a different game");
+            }
+            if (current.host.id !== null && current.host.id !== playerId) {
+              throw new ProtocolError("This connection does not own the board");
+            }
+            if (current.host.id === null && boardClaim === undefined) {
+              throw new ProtocolError("This board session has no confirmed ownership");
+            }
+            if (current.host.id === null && boardClaim !== undefined && !claimSent) {
+              claimSent = true;
+              claimTimeout.current = setTimeout(() => {
+                if (mounted) {
+                  setState({
+                    kind: "failed",
+                    message: "Board ownership was not confirmed. Reconnect and retry.",
+                  });
+                }
+              }, 5000);
+              void match
+                ?.sendCommand((sequence, authenticated) =>
+                  encodeGameCommand({
+                    version: 1,
+                    game_id: current.game_id,
+                    player_id: authenticated,
+                    sequence,
+                    expected_turn: "0",
+                    command: { kind: "claim_board", request_id: boardClaim.requestId },
+                  }),
+                )
+                .catch(() => {
+                  clearTimeout(claimTimeout.current);
+                  if (mounted) {
+                    setState({
+                      kind: "failed",
+                      message: "Unable to confirm board ownership. Reconnect and retry.",
+                    });
+                  }
+                });
+            }
+            if (current.host.id === playerId) {
+              clearTimeout(claimTimeout.current);
+            }
           }
           setSnapshot(current);
           if (current.phase.kind !== "lobby") {
@@ -92,7 +152,12 @@ export function LiveBoard({
           }
         });
     } catch {
-      setState({ kind: "failed", message: "Invalid match connection settings." });
+      setState({
+        kind: "failed",
+        message: separateBoard
+          ? "Unable to recover this board session. Use the original board tab or create a new game."
+          : "Invalid match connection settings.",
+      });
     }
     return () => {
       mounted = false;
@@ -101,21 +166,30 @@ export function LiveBoard({
         client.current = undefined;
       }
       clearTimeout(timeout.current);
+      clearTimeout(claimTimeout.current);
     };
-  }, [endpoint, matchId, certificateHash]);
+  }, [
+    endpoint,
+    matchId,
+    certificateHash,
+    separateBoard,
+    boardClaim?.requestId,
+    boardClaim?.gameId,
+  ]);
   async function reconnect() {
     const current = client.current;
     if (current === undefined) {
       return;
     }
     setState({ kind: "connecting" });
+    current.disconnect();
     await running.current;
     if (client.current === current) {
       running.current = current.run();
       await running.current;
     }
   }
-  const host = snapshot?.players[0]?.id;
+  const host = snapshot?.host === undefined ? snapshot?.players[0]?.id : snapshot.host.id;
   const canStart =
     state.kind === "connected" &&
     snapshot?.phase.kind === "lobby" &&
@@ -149,9 +223,7 @@ export function LiveBoard({
   return (
     <>
       <ConnectionStatus state={state} />
-      {!playerView && snapshot?.phase.kind === "lobby" && (
-        <PlayerInvite key={matchId} matchId={matchId} />
-      )}
+      {snapshot?.phase.kind === "lobby" && <PlayerInvite key={matchId} matchId={matchId} />}
       {(state.kind === "disconnected" || state.kind === "failed") && (
         <Button onClick={() => void reconnect()}>Reconnect</Button>
       )}
