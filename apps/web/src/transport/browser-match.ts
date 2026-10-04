@@ -21,14 +21,18 @@ export type Admission = {
 };
 export type ConnectionState =
   | { kind: "idle" | "connecting" | "disconnected" | "closed" }
+  | { kind: "reconnecting"; attempt: number }
+  | { kind: "synchronizing"; admission: Admission }
   | { kind: "connected"; admission: Admission }
-  | { kind: "incompatible" | "failed"; message: string };
+  | { kind: "incompatible" | "failed" | "resume-failed"; message: string };
 export type MatchOptions = {
   endpoint: string;
   matchId: string;
   onState: (state: ConnectionState) => void;
   onSnapshot: (snapshot: Snapshot) => void;
   onCommandRejected?: (rejection: { sequence: number; payload: Uint8Array }) => void;
+  /** Retry only an existing capability; never allocate a replacement identity. */
+  autoReconnect?: boolean;
   /** Private resume capability: pass only to the storage owner, never to a public view. */
   resume?: ResumeCapability;
   onResume?: (capability: ResumeCapability) => void;
@@ -122,6 +126,10 @@ export class BrowserMatch {
   #running = false;
   #stopped = false;
   #controls = 0;
+  #lastState: ConnectionState = { kind: "idle" };
+  #synchronized = false;
+  #interrupted = false;
+  #retryLifetime: AbortController | undefined;
 
   constructor(options: MatchOptions) {
     this.#options = options;
@@ -145,7 +153,70 @@ export class BrowserMatch {
       throw new Error("Connection already running or closed");
     }
     this.#running = true;
-    this.#options.onState({ kind: "connecting" });
+    this.#interrupted = false;
+    const retries = new AbortController();
+    this.#retryLifetime = retries;
+    let attempt = 0;
+    try {
+      while (!this.#stopped && !this.#interrupted) {
+        this.#synchronized = false;
+        await this.#connect();
+        if (this.#stopped || this.#interrupted || this.#lastState.kind === "incompatible") {
+          if (this.#interrupted && !this.#stopped && this.#lastState.kind !== "incompatible") {
+            this.#options.onState(this.#lastState);
+          }
+          return;
+        }
+        if (!this.#options.autoReconnect || this.#token === undefined) {
+          this.#options.onState(this.#lastState);
+          return;
+        }
+        if (this.#synchronized) {
+          attempt = 0;
+        }
+        const delay = [500, 1500, 3000][attempt];
+        if (delay === undefined) {
+          this.#report({
+            kind: "resume-failed",
+            message:
+              "This session could not be resumed. It may have expired or been replaced. Reconnect attempts have stopped.",
+          });
+          return;
+        }
+        attempt += 1;
+        this.#report({ kind: "reconnecting", attempt });
+        await new Promise<void>((resolve) => {
+          const finish = () => {
+            clearTimeout(timer);
+            retries.signal.removeEventListener("abort", finish);
+            resolve();
+          };
+          const timer = setTimeout(finish, delay);
+          retries.signal.addEventListener("abort", finish, { once: true });
+          if (retries.signal.aborted) {
+            finish();
+          }
+        });
+      }
+    } finally {
+      this.#running = false;
+      this.#retryLifetime = undefined;
+      if (this.#stopped && this.#lastState.kind !== "closed") {
+        this.#report({ kind: "closed" });
+      }
+    }
+  }
+
+  #report(state: ConnectionState): void {
+    this.#lastState = state;
+    if (state.kind === "failed" || state.kind === "disconnected") {
+      return;
+    }
+    this.#options.onState(state);
+  }
+
+  async #connect(): Promise<void> {
+    this.#report({ kind: "connecting" });
     const lifetime = new AbortController();
     this.#lifetime = lifetime;
     let transport: WebTransport | undefined;
@@ -194,7 +265,11 @@ export class BrowserMatch {
       this.#admission = admission;
       this.#publishResume();
       this.#writer = transport.datagrams.writable.getWriter();
-      this.#options.onState({ kind: "connected", admission });
+      this.#report({ kind: "synchronizing", admission });
+      const synchronizeTimeout = setTimeout(
+        () => lifetime.abort(new Error("Snapshot timed out")),
+        5000,
+      );
       const rejections = this.#readCommandRejections(transport, lifetime.signal).catch(
         (error: unknown) => {
           lifetime.abort(error);
@@ -211,9 +286,15 @@ export class BrowserMatch {
           const snapshot = reassembler.accept(next.value);
           if (snapshot !== undefined) {
             this.#options.onSnapshot(snapshot);
+            if (!this.#synchronized) {
+              clearTimeout(synchronizeTimeout);
+              this.#synchronized = true;
+              this.#report({ kind: "connected", admission });
+            }
           }
         }
       } finally {
+        clearTimeout(synchronizeTimeout);
         await reader.cancel().catch(() => {
           /* Connection shutdown owns the read failure. */
         });
@@ -225,11 +306,11 @@ export class BrowserMatch {
       terminalReported = true;
       if (!this.#stopped) {
         if (error instanceof ProtocolError) {
-          this.#options.onState({ kind: "incompatible", message: error.message });
+          this.#report({ kind: "incompatible", message: error.message });
         } else if (this.#admission !== undefined) {
-          this.#options.onState({ kind: "disconnected" });
+          this.#report({ kind: "disconnected" });
         } else {
-          this.#options.onState({
+          this.#report({
             kind: "failed",
             message: "Unable to connect. Check the server and browser support.",
           });
@@ -246,11 +327,10 @@ export class BrowserMatch {
       }
       this.#writer = undefined;
       this.#transport = undefined;
-      this.#running = false;
       if (this.#stopped) {
-        this.#options.onState({ kind: "closed" });
+        this.#report({ kind: "closed" });
       } else if (!terminalReported) {
-        this.#options.onState({ kind: "disconnected" });
+        this.#report({ kind: "disconnected" });
       }
     }
   }
@@ -375,6 +455,8 @@ export class BrowserMatch {
   }
 
   disconnect(): void {
+    this.#interrupted = true;
+    this.#retryLifetime?.abort();
     this.#lifetime?.abort(new Error("Disconnected"));
     this.#transport?.close();
   }
@@ -383,7 +465,7 @@ export class BrowserMatch {
     this.#token = undefined;
     this.disconnect();
     if (!this.#running) {
-      this.#options.onState({ kind: "closed" });
+      this.#report({ kind: "closed" });
     }
   }
 }

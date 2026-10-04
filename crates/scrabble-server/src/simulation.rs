@@ -236,7 +236,7 @@ impl GameSimulation for ScrabbleSimulation {
             }
         } else {
             // Expiry never donates the rack or replaces a started game's seat.
-            // Forfeit/turn resolution is the explicit policy added in #27.
+            // An expired capability cannot reclaim a started seat.
             self.session.clear_preview_for(player);
         }
         self.session.forget_actor(player);

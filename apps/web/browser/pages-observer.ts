@@ -10,7 +10,12 @@ declare global {
 }
 
 /** Inspect actual datagrams without modifying the built application's projections. */
-export async function observeSnapshots(page: Page, recipient: string, board = false) {
+export async function observeSnapshots(
+  page: Page,
+  recipient: string,
+  board = false,
+  holdRestoredSnapshot = false,
+) {
   let latest: PlayerSnapshot | undefined;
   const fragments = new SnapshotReassembler();
   await page.exposeBinding("inspectScrabbleDatagram", (_source, bytes: number[]) => {
@@ -28,15 +33,27 @@ export async function observeSnapshots(page: Page, recipient: string, board = fa
       latest = parsed.data;
     }
   });
-  await page.addInitScript(() => {
+  await page.addInitScript((hold) => {
     const NativeTransport = WebTransport;
+    let connections = 0;
     window.WebTransport = class extends NativeTransport {
       constructor(url: string | URL, options?: WebTransportOptions) {
         super(url, options);
+        connections += 1;
+        const released = new Promise<void>((resolve) => {
+          if (!hold || connections !== 2) {
+            resolve();
+            return;
+          }
+          const release = () => resolve();
+          window.addEventListener("test-release-snapshot", release, { once: true });
+          this.closed.then(release, release);
+        });
         const reader = this.datagrams.readable.getReader();
         const readable = new ReadableStream<Uint8Array>({
           async pull(controller) {
             const result = await reader.read();
+            await released;
             if (result.done) {
               controller.close();
               return;
@@ -51,6 +68,6 @@ export async function observeSnapshots(page: Page, recipient: string, board = fa
         Object.defineProperty(this.datagrams, "readable", { value: readable });
       }
     };
-  });
+  }, holdRestoredSnapshot);
   return () => latest;
 }

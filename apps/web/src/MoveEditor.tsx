@@ -53,6 +53,15 @@ export function MoveEditor({
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const handledRejection = useRef<WordRejection>(undefined);
   useEffect(() => {
+    if (!canAct && pending) {
+      clearTimeout(timer.current);
+      setState({
+        draft: current,
+        message: "Connection changed. Check the restored turn before submitting again.",
+      });
+    }
+  }, [canAct, pending, current]);
+  useEffect(() => {
     if (wordRejection === handledRejection.current) {
       return;
     }

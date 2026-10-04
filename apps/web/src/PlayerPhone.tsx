@@ -89,6 +89,7 @@ export function PlayerPhone({
     let nameSent = false;
     let selectedRules: Ruleset | undefined;
     let savedFailed = false;
+    let resumeStopped = false;
     let nameTimeout: ReturnType<typeof setTimeout> | undefined;
     const controller = new AbortController();
     const desiredName = intent.name;
@@ -130,6 +131,7 @@ export function PlayerPhone({
           ];
         }
         client = new BrowserMatch({
+          autoReconnect: true,
           endpoint,
           matchId,
           ...(trust === undefined ? {} : { serverCertificateHashes: trust }),
@@ -151,8 +153,16 @@ export function PlayerPhone({
               return;
             }
             setConnection(next);
-            if (next.kind === "connected") {
+            if (next.kind === "connected" || next.kind === "synchronizing") {
               playerId = next.admission.playerId;
+            }
+            if (next.kind === "synchronizing") {
+              nameSent = false;
+              clearTimeout(nameTimeout);
+            }
+            if (next.kind === "resume-failed") {
+              resumeStopped = true;
+              fail(next.message);
             }
             if (next.kind === "disconnected" || next.kind === "failed") {
               fail(
@@ -250,7 +260,7 @@ export function PlayerPhone({
         });
         activeClient.current = client;
         await client.run();
-        if (active && playerId === undefined && !savedFailed) {
+        if (active && playerId === undefined && !savedFailed && !resumeStopped) {
           // Recheck current authority after a raced admission rejection; never allocate a fallback identity.
           await lookupGame(
             api,

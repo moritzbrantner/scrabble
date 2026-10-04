@@ -56,6 +56,7 @@ export function LiveBoard({
         throw new Error("Board ownership is unavailable in this tab");
       }
       match = new BrowserMatch({
+        autoReconnect: true,
         ...(resume === undefined ? {} : { resume }),
         ...(separateBoard ? { onResume: saveBoardSession } : {}),
         ...(localTrust === undefined ? {} : { serverCertificateHashes: localTrust }),
@@ -65,8 +66,10 @@ export function LiveBoard({
           if (!mounted) {
             return;
           }
-          if (next.kind === "connected") {
+          if (next.kind === "connected" || next.kind === "synchronizing") {
             playerId = next.admission.playerId;
+          }
+          if (next.kind === "synchronizing") {
             claimSent = false;
           }
           setState(next);
@@ -224,7 +227,9 @@ export function LiveBoard({
     <>
       <ConnectionStatus state={state} />
       {snapshot?.phase.kind === "lobby" && <PlayerInvite key={matchId} matchId={matchId} />}
-      {(state.kind === "disconnected" || state.kind === "failed") && (
+      {(state.kind === "disconnected" ||
+        state.kind === "failed" ||
+        state.kind === "resume-failed") && (
         <Button onClick={() => void reconnect()}>Reconnect</Button>
       )}
       {snapshot?.phase.kind === "lobby" && (

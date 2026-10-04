@@ -568,6 +568,68 @@ fn runtime_grace_expiry_and_new_admission_replay_without_identity_substitution()
 }
 
 #[test]
+fn expired_started_capability_cannot_resume_or_control_retained_tiles() {
+    let mut runtime = MatchRuntime::new_with_replay_capture(simulation(), 2);
+    let first = runtime.admit(ReconnectToken([1; 16])).unwrap();
+    runtime.admit(ReconnectToken([2; 16])).unwrap();
+    runtime
+        .submit_command(1, 1, 1, &command(1, 1, 0, Command::Start {}))
+        .unwrap();
+    let before: PlayerSnapshot =
+        serde_json::from_slice(&runtime.snapshot_for(2).unwrap().payload).unwrap();
+    assert!(runtime.disconnect(1, first.connection_epoch));
+    for _ in 0..4 {
+        runtime.advance_tick().unwrap();
+    }
+    let after: PlayerSnapshot =
+        serde_json::from_slice(&runtime.snapshot_for(2).unwrap().payload).unwrap();
+    assert_eq!(after.own_rack, before.own_rack);
+    assert_eq!(after.public.phase, before.public.phase);
+    assert_eq!(after.public.board, before.public.board);
+    assert_eq!(after.public.remaining_tiles, before.public.remaining_tiles);
+    assert_eq!(
+        after
+            .public
+            .players
+            .iter()
+            .map(|player| (player.id, player.score, player.rack_count))
+            .collect::<Vec<_>>(),
+        before
+            .public
+            .players
+            .iter()
+            .map(|player| (player.id, player.score, player.rack_count))
+            .collect::<Vec<_>>()
+    );
+    let canonical = runtime.snapshot().unwrap();
+    let records = runtime.replay_log().unwrap().records().len();
+    assert!(
+        runtime
+            .reconnect(first.reconnect_token, ReconnectToken([3; 16]))
+            .is_err()
+    );
+    assert!(runtime.snapshot_for(1).is_err());
+    assert!(
+        runtime
+            .submit_command(
+                1,
+                first.connection_epoch,
+                2,
+                &command(1, 2, 0, Command::Pass {})
+            )
+            .is_err()
+    );
+    assert_eq!(runtime.snapshot().unwrap(), canonical);
+    assert_eq!(runtime.replay_log().unwrap().records().len(), records);
+    assert_eq!(
+        verify_replay(simulation(), runtime.replay_log().unwrap())
+            .unwrap()
+            .final_snapshot,
+        canonical
+    );
+}
+
+#[test]
 fn repeated_lobby_admission_does_not_accumulate_retired_player_storage() {
     let mut simulation = simulation();
     let before_length = simulation.snapshot().unwrap().payload.len();
