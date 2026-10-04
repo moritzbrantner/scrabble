@@ -1,10 +1,12 @@
 {
   "command": "030100000004000d7b2276657273696f6e223a317d",
+  "commandRejection": "03050000000400277b226b696e64223a22696e76616c69645f776f726473222c22776f726473223a5b225441225d7d",
   "contract": {
     "controlFormatVersion": 1,
     "gameProtocolVersion": 3,
     "maxBufferedSnapshotBytes": 131110,
     "maxCommandPayloadBytes": 1024,
+    "maxCommandRejectionPayloadBytes": 1024,
     "maxControlPayloadBytes": 4096,
     "maxIdleDatagrams": 256,
     "maxPendingSnapshots": 4,

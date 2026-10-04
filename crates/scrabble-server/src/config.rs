@@ -11,8 +11,14 @@ pub enum Mode {
     Local,
     Production,
 }
+pub struct DictionaryConfig {
+    pub file: PathBuf,
+    pub name: String,
+    pub revision: String,
+}
 pub struct ServerConfig {
     pub mode: Mode,
+    pub dictionary: Option<DictionaryConfig>,
     pub port: u16,
     pub status_port: u16,
     pub api_port: u16,
@@ -41,6 +47,9 @@ fn fail(message: impl Into<String>) -> ConfigError {
 }
 const KEYS: &[&str] = &[
     "SCRABBLE_MODE",
+    "SCRABBLE_DICTIONARY_FILE",
+    "SCRABBLE_DICTIONARY_NAME",
+    "SCRABBLE_DICTIONARY_REVISION",
     "SCRABBLE_PORT",
     "SCRABBLE_STATUS_PORT",
     "SCRABBLE_API_PORT",
@@ -190,8 +199,46 @@ impl ServerConfig {
                 Ok(seed)
             })
             .transpose()?;
+        let dictionary_keys = [
+            "SCRABBLE_DICTIONARY_FILE",
+            "SCRABBLE_DICTIONARY_NAME",
+            "SCRABBLE_DICTIONARY_REVISION",
+        ];
+        let dictionary = if dictionary_keys.iter().any(|key| values.contains_key(*key)) {
+            if !dictionary_keys.iter().all(|key| values.contains_key(*key)) {
+                return Err(fail(
+                    "dictionary configuration requires FILE, NAME and REVISION together",
+                ));
+            }
+            let name = value(values, "SCRABBLE_DICTIONARY_NAME", "");
+            let revision = value(values, "SCRABBLE_DICTIONARY_REVISION", "");
+            for text in [name, revision] {
+                if text.is_empty()
+                    || text.len() > 64
+                    || !text
+                        .bytes()
+                        .all(|byte| byte.is_ascii_alphanumeric() || b"-_.".contains(&byte))
+                {
+                    return Err(fail(
+                        "dictionary name and revision must be 1 to 64 ASCII letters, digits, hyphens, underscores or dots",
+                    ));
+                }
+            }
+            let file = path(values, "SCRABBLE_DICTIONARY_FILE", "")?;
+            if matches!(mode, Mode::Production) && !file.is_absolute() {
+                return Err(fail("production dictionary path must be absolute"));
+            }
+            Some(DictionaryConfig {
+                file,
+                name: name.to_owned(),
+                revision: revision.to_owned(),
+            })
+        } else {
+            None
+        };
         let config = Self {
             mode,
+            dictionary,
             port,
             status_port,
             api_port,

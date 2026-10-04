@@ -1,10 +1,11 @@
 //! One application boundary for transport-sequenced commands; no transport or UI dependency.
+use crate::dictionary::{Dictionary, authored_fixture};
 use crate::identity::{GameId, PlayerId, TurnId};
 use crate::protocol::{
     Command, CommandEnvelope, Phase, PlayerSnapshot, PublicPreview, PublicSnapshot,
 };
 use crate::state::{GameState, StateError};
-use std::{collections::BTreeMap, fmt};
+use std::{collections::BTreeMap, fmt, sync::Arc};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CommandError {
@@ -34,13 +35,18 @@ impl std::error::Error for CommandError {}
 
 pub struct GameSession {
     state: GameState,
+    dictionary: Arc<dyn Dictionary>,
     last_sequences: BTreeMap<PlayerId, u32>,
     preview: Option<PublicPreview>,
 }
 impl GameSession {
     pub fn new(state: GameState) -> Self {
+        Self::with_dictionary(state, authored_fixture())
+    }
+    pub fn with_dictionary(state: GameState, dictionary: Arc<dyn Dictionary>) -> Self {
         Self {
             state,
+            dictionary,
             last_sequences: BTreeMap::new(),
             preview: None,
         }
@@ -130,8 +136,13 @@ impl GameSession {
                         return Err(StateError::WrongPhase.into());
                     }
                     Command::Commit { placements } => {
-                        crate::commit::apply(&mut self.state, player, placements)
-                            .map_err(CommandError::Commit)?;
+                        crate::commit::apply_with_dictionary(
+                            &mut self.state,
+                            player,
+                            placements,
+                            self.dictionary.as_ref(),
+                        )
+                        .map_err(CommandError::Commit)?;
                         self.preview = None;
                     }
                     Command::Exchange { tile_ids } => {

@@ -4,7 +4,13 @@ import { createElement } from "react";
 import { ConnectionStatus } from "./ConnectionStatus";
 import { fixtures } from "./fixtures";
 import wireFixtures from "./transport/fixtures/wire.json";
-import { commandEnvelope, decodePlayerSnapshot, encodeGameCommand } from "./game-protocol";
+import {
+  commandEnvelope,
+  decodePlayerSnapshot,
+  decodeWordRejection,
+  encodeGameCommand,
+  type WordRejection,
+} from "./game-protocol";
 import { type ConnectionState } from "./transport/browser-match";
 
 const encoder = new TextEncoder();
@@ -86,4 +92,24 @@ test("Scrabble payloads match Rust-generated commands and scoped projections", (
   expect<unknown>(decodePlayerSnapshot(snapshot(wireFixtures.playerSnapshot), "1")).toEqual(
     wireFixtures.playerSnapshot,
   );
+});
+
+test("private invalid-word feedback is structured and rejects malformed responses", () => {
+  const feedback = {
+    version: 1,
+    game_id: "1",
+    expected_turn: "0",
+    error: { kind: "invalid_words", words: ["AA", "TT"] },
+  } satisfies WordRejection;
+  expect(decodeWordRejection(snapshot(feedback))).toEqual(feedback);
+  for (const error of [
+    { kind: "invalid_words", words: [] },
+    { kind: "invalid_words", words: ["TA", "TA"] },
+    { kind: "invalid_words", words: ["bad\nword"] },
+    { kind: "invalid_words", words: ["A".repeat(16)] },
+    { kind: "identity_mismatch" },
+  ]) {
+    expect(() => decodeWordRejection(snapshot({ ...feedback, error }))).toThrow("protocol");
+  }
+  expect(() => decodeWordRejection(new Uint8Array([255]))).toThrow("encoding");
 });

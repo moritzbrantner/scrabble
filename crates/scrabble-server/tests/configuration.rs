@@ -80,6 +80,22 @@ fn production_requires_private_persistent_initialization_and_explicit_tls() {
     config.insert("SCRABBLE_TEST_SEED".into(), "07".repeat(32));
     assert!(ServerConfig::from_values(&config).is_err());
     config.remove("SCRABBLE_TEST_SEED");
+    config.insert(
+        "SCRABBLE_DICTIONARY_FILE".into(),
+        "/var/lib/scrabble/words.txt".into(),
+    );
+    config.insert("SCRABBLE_DICTIONARY_NAME".into(), "deployment-list".into());
+    config.insert("SCRABBLE_DICTIONARY_REVISION".into(), "2026.1".into());
+    assert!(ServerConfig::from_values(&config).is_ok());
+    config.insert(
+        "SCRABBLE_DICTIONARY_FILE".into(),
+        "relative/words.txt".into(),
+    );
+    assert!(ServerConfig::from_values(&config).is_err());
+    config.insert(
+        "SCRABBLE_DICTIONARY_FILE".into(),
+        "/var/lib/scrabble/words.txt".into(),
+    );
     config.insert("SCRABBLE_SEED_FILE".into(), "relative/seed".into());
     assert!(ServerConfig::from_values(&config).is_err());
 }

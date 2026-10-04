@@ -2,9 +2,15 @@ import { Button, Input } from "@moritzbrantner/ui/client";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { JoinError, lookupGame } from "./create-game";
 import { ConnectionStatus } from "./ConnectionStatus";
-import { decodePlayerSnapshot, encodeGameCommand } from "./game-protocol";
+import {
+  decodePlayerSnapshot,
+  decodeWordRejection,
+  encodeGameCommand,
+  type WordRejection,
+} from "./game-protocol";
 import { fixtures } from "./fixtures";
-import { type PlayerSnapshot } from "./public-state";
+import { matchRules, requireMatchRules } from "./match-rules";
+import { type PlayerSnapshot, type Ruleset } from "./public-state";
 import { BrowserMatch, matchUrl, type ConnectionState } from "./transport/browser-match";
 import {
   forgetPlayerSession,
@@ -53,6 +59,9 @@ export function PlayerPhone({
   const [intent, setIntent] = useState<Intent>();
   const [connection, setConnection] = useState<ConnectionState>({ kind: "idle" });
   const [snapshot, setSnapshot] = useState<PlayerSnapshot>();
+  const [rules, setRules] = useState<Ruleset>(fixtures.ruleset);
+  const [wordRejection, setWordRejection] = useState<WordRejection>();
+  const submittedMove = useRef<{ gameId: string; turn: string; sequence: number }>(undefined);
   const privateResume = useRef<ResumeCapability>(undefined);
   const activeClient = useRef<BrowserMatch>(undefined);
   useEffect(() => {
@@ -78,6 +87,7 @@ export function PlayerPhone({
     let client: BrowserMatch | undefined;
     let playerId: string | undefined;
     let nameSent = false;
+    let selectedRules: Ruleset | undefined;
     let savedFailed = false;
     let nameTimeout: ReturnType<typeof setTimeout> | undefined;
     const controller = new AbortController();
@@ -155,6 +165,24 @@ export function PlayerPhone({
               fail(next.message);
             }
           },
+          onCommandRejected: ({ sequence, payload }) => {
+            if (!active) {
+              return;
+            }
+            const feedback = decodeWordRejection(payload);
+            if (feedback.game_id !== join.gameId) {
+              throw new ProtocolError("Rejection belongs to a different match");
+            }
+            const submitted = submittedMove.current;
+            if (
+              submitted?.sequence !== sequence ||
+              submitted.turn !== feedback.expected_turn ||
+              submitted.gameId !== feedback.game_id
+            ) {
+              return;
+            }
+            setWordRejection(feedback);
+          },
           onSnapshot: (frame) => {
             if (!active || playerId === undefined) {
               return;
@@ -163,14 +191,11 @@ export function PlayerPhone({
             if (current.public.game_id !== join.gameId) {
               throw new ProtocolError("Snapshot belongs to a different match");
             }
-            if (
-              current.public.ruleset.name !== fixtures.ruleset.identity.name ||
-              current.public.ruleset.revision !== fixtures.ruleset.identity.revision ||
-              current.public.dictionary.name !== fixtures.ruleset.dictionary.name ||
-              current.public.dictionary.revision !== fixtures.ruleset.dictionary.revision
-            ) {
-              throw new ProtocolError("This client does not support the match ruleset");
+            if (selectedRules === undefined) {
+              selectedRules = matchRules(current.public);
+              setRules(selectedRules);
             }
+            requireMatchRules(current.public, selectedRules);
             const own = current.public.players.find((player) => player.id === playerId);
             if (own === undefined && current.public.host === undefined) {
               throw new ProtocolError("Player is absent from the roster");
@@ -358,8 +383,9 @@ export function PlayerPhone({
               {phase?.kind === "playing" ? (
                 <MoveEditor
                   snapshot={snapshot}
-                  rules={fixtures.ruleset}
+                  rules={rules}
                   canAct={canAct}
+                  {...(wordRejection === undefined ? {} : { wordRejection })}
                   onPreview={async (placements) => {
                     const client = activeClient.current;
                     if (
@@ -391,20 +417,25 @@ export function PlayerPhone({
                       throw new Error("Turn action cannot be sent");
                     }
                     const turn = snapshot.public.phase.turn;
-                    await client.sendCommand((sequence, authenticated) =>
-                      encodeGameCommand({
+                    setWordRejection(undefined);
+                    await client.sendCommand((sequence, authenticated) => {
+                      submittedMove.current =
+                        command.kind === "commit"
+                          ? { gameId: snapshot.public.game_id, turn, sequence }
+                          : undefined;
+                      return encodeGameCommand({
                         version: 1,
                         game_id: snapshot.public.game_id,
                         player_id: authenticated,
                         sequence,
                         expected_turn: turn,
                         command,
-                      }),
-                    );
+                      });
+                    });
                   }}
                 />
               ) : (
-                <PlayerRack rack={snapshot.own_rack} rules={fixtures.ruleset} canAct={false} />
+                <PlayerRack rack={snapshot.own_rack} rules={rules} canAct={false} />
               )}
               <ol className="phone-scores" aria-label="Players and scores">
                 {snapshot.public.players.map((player) => (

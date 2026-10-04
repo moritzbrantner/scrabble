@@ -476,7 +476,7 @@ test("phone names preserve distinct identities across refresh and full-game fail
   }
 });
 
-test("active phones edit tentative moves and retain unconfirmed drafts through reconnect", async ({
+test("active phones edit tentative moves and retain rejected drafts without disconnecting", async ({
   page,
   context,
 }) => {
@@ -551,13 +551,12 @@ test("active phones edit tentative moves and retain unconfirmed drafts through r
     await placeTile(reverseAT ? 0 : 1, 9, 8);
     await expect(editor.getByRole("status")).toContainText("Ready to commit");
     await editor.getByRole("button", { name: "Commit move", exact: true }).click();
-    await expect(editor.getByRole("status")).toContainText("Waiting for move confirmation");
-    await expect(editor.getByRole("status")).toContainText("Move was not confirmed", {
-      timeout: 7000,
-    });
+    await expect(editor.getByRole("status")).toContainText("Not in the dictionary:");
+    await expect(
+      first.getByRole("button", { name: "Retry player connection", exact: true }),
+    ).toHaveCount(0);
     await expect(editor.locator(".tentative-square")).toHaveCount(2);
     await expect(page.locator(".letter-tile")).toHaveCount(0);
-    await first.getByRole("button", { name: "Retry player connection", exact: true }).click();
     await expect(first.getByText("It is your turn.", { exact: true })).toBeVisible();
     await expect(editor.getByRole("button", { name: "Commit move", exact: true })).toBeEnabled();
     await expect(page.locator(".tentative-tile")).toHaveCount(2);

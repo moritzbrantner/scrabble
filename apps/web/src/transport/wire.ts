@@ -51,6 +51,23 @@ export function encodeCommand(sequence: number, payload: Uint8Array): Uint8Array
   return bytes;
 }
 
+export function decodeCommandRejection(bytes: Uint8Array): {
+  sequence: number;
+  payload: Uint8Array;
+} {
+  header(bytes, 5, 8);
+  const data = view(bytes);
+  const sequence = data.getUint32(2);
+  const length = data.getUint16(6);
+  check(sequence > 0, "Invalid rejection sequence");
+  check(
+    length <= contract.maxCommandRejectionPayloadBytes,
+    "Command rejection exceeds payload limit",
+  );
+  check(bytes.length === 8 + length, "Incorrect command rejection length");
+  return { sequence, payload: bytes.slice(8) };
+}
+
 export function decodeWelcome(bytes: Uint8Array): Welcome {
   header(bytes, 3, 46);
   check(bytes.length === 46, "Incorrect welcome length");

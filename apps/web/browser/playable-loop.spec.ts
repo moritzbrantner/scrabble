@@ -120,11 +120,22 @@ test("built Pages client plays consecutive turns through isolated phones", async
       }
       expect(new Set(rackIds().flat()).size).toBe(14);
     };
+    expect(boardState()?.public.dictionary.name).toBe("scrabble-browser-custom");
+    expect(boardState()?.public.dictionary.revision).toMatch(/^1\+sha256:[0-9a-f]{64}$/);
+    expect(boardState()?.public.ruleset.revision).toMatch(/^1\+dictionary-sha256:[0-9a-f]{64}$/);
     await place(first, "A", 8);
     await place(first, "T", 9);
+    await commit(first).click();
+    const openingEditor = first.getByRole("region", { name: "Move editor", exact: true });
+    await expect(openingEditor.getByRole("status")).toContainText("Not in the dictionary: AT.");
+    await expect(page.locator(".letter-tile")).toHaveCount(0);
+    expect(rackIds()).toEqual(initial);
+    await openingEditor.getByRole("button", { name: "Cancel move", exact: true }).click();
+    await place(first, "T", 8);
+    await place(first, "A", 9);
     await expect(page.locator(".tentative-tile")).toHaveCount(2);
     await commit(first).click();
-    await converge("1", "AT", [4, 0], 84);
+    await converge("1", "TA", [4, 0], 84);
     const afterFirst = rackIds();
     expect(afterFirst[0]?.filter((id) => !initial[0]?.includes(id))).toHaveLength(2);
     expect(afterFirst[1]).toEqual(initial[1]);
@@ -136,7 +147,7 @@ test("built Pages client plays consecutive turns through isolated phones", async
     await expect(page.locator(".tentative-tile")).toHaveCount(1);
     await expect(page.getByRole("cell", { name: /^Row 8, column 7: Tentative C/ })).toBeVisible();
     await commit(second).click();
-    await converge("2", "CAT", [4, 5], 83);
+    await converge("2", "CTA", [4, 5], 83);
     const afterSecond = rackIds();
     expect(afterSecond[0]).toEqual(afterFirst[0]);
     expect(afterSecond[1]?.filter((id) => !afterFirst[1]?.includes(id))).toHaveLength(1);
@@ -174,7 +185,7 @@ test("built Pages client plays consecutive turns through isolated phones", async
     await expect(editor.locator(".tentative-square")).toHaveCount(1);
     await pass.click();
     await confirmation.getByRole("button", { name: "Confirm pass", exact: true }).click();
-    await converge("3", "CAT", [4, 5], 83);
+    await converge("3", "CTA", [4, 5], 83);
     expect(rackIds()).toEqual(afterSecond);
     await expect(page.locator(".tentative-tile")).toHaveCount(0);
     await expect(editor.locator(".tentative-square")).toHaveCount(0);
@@ -227,7 +238,7 @@ test("built Pages client plays consecutive turns through isolated phones", async
     }
     await confirmExchange.focus();
     await confirmExchange.press("Enter");
-    await converge("4", "CAT", [4, 5], 83);
+    await converge("4", "CTA", [4, 5], 83);
     const afterExchange = rackIds();
     expect(afterExchange[0]).toEqual(afterSecond[0]);
     expect(afterExchange[1]?.slice(0, 5)).toEqual(afterSecond[1]?.slice(2));

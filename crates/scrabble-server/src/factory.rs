@@ -5,7 +5,8 @@ use ring::{
     digest, hmac,
     rand::{SecureRandom, SystemRandom},
 };
-use scrabble_game::{identity::GameId, ruleset::english_fixture};
+use scrabble_game::{dictionary::Dictionary, identity::GameId, ruleset::Ruleset};
+use std::sync::Arc;
 use std::{
     collections::BTreeSet,
     error::Error,
@@ -113,6 +114,8 @@ fn seed(config: &ServerConfig) -> ErrorResult<[u8; 32]> {
 #[derive(Clone)]
 pub struct MatchFactory {
     key: hmac::Key,
+    rules: Ruleset,
+    dictionary: Arc<dyn Dictionary>,
 }
 impl MatchFactory {
     pub fn new(config: &ServerConfig) -> ErrorResult<Self> {
@@ -122,8 +125,11 @@ impl MatchFactory {
                 return Err("configured matches have colliding game identities".into());
             }
         }
+        let (rules, dictionary) = crate::dictionary::load(config.dictionary.as_ref())?;
         Ok(Self {
             key: hmac::Key::new(hmac::HMAC_SHA256, &seed(config)?),
+            rules,
+            dictionary,
         })
     }
 
@@ -176,7 +182,12 @@ impl MatchFactory {
         derivation.update(b"scrabble/deal/v1\0");
         derivation.update(id.as_str().as_bytes());
         let seed: [u8; 32] = derivation.sign().as_ref().try_into()?;
-        let simulation = ScrabbleSimulation::new(game_id(id), english_fixture(), seed)?;
+        let simulation = ScrabbleSimulation::with_dictionary(
+            game_id(id),
+            self.rules.clone(),
+            seed,
+            Arc::clone(&self.dictionary),
+        )?;
         let simulation = if id.as_str().starts_with("b_") {
             simulation.with_board_authority(self.board_authority(id)?)
         } else {
