@@ -56,10 +56,12 @@ test("real board and phone resume interrupted connections without changing autho
     }
     await page.getByRole("button", { name: "Start game", exact: true }).click();
     await expect.poll(() => firstState()?.own_rack.tiles.length).toBe(7);
+    await expect.poll(() => secondState()?.own_rack.tiles.length).toBe(7);
     const before = firstState();
     const other = secondState()?.own_rack;
     const gameId = boardState()?.public.game_id;
-    const route = page.url();
+    const route = new URL(page.url());
+    route.searchParams.set("lang", "en");
     const editor = first.getByRole("region", { name: "Move editor", exact: true });
     const rack = first.getByRole("list", { name: "Your rack", exact: true });
     for (const [index, letter] of ["A", "T"].entries()) {
@@ -72,6 +74,17 @@ test("real board and phone resume interrupted connections without changing autho
         .click();
     }
     await expect(page.locator(".tentative-tile")).toHaveCount(2);
+    for (const client of [page, first]) {
+      await client.getByText("Settings", { exact: true }).click();
+      await client.getByLabel("Interface language", { exact: true }).selectOption("de");
+      await expect(client.locator("html")).toHaveAttribute("lang", "de");
+      await client.getByLabel("Sprache der Oberfläche", { exact: true }).selectOption("en");
+      await expect(client.locator("html")).toHaveAttribute("lang", "en");
+      expect(await client.evaluate(() => document.documentElement.dataset.connections)).toBe("1");
+    }
+    expect(firstState()?.own_rack).toEqual(before?.own_rack);
+    expect(firstState()?.public.phase).toEqual(before?.public.phase);
+    await expect(editor.locator(".tentative-square")).toHaveCount(2);
     await first.evaluate(() => window.dispatchEvent(new Event("test-interrupt-transport")));
     await expect
       .poll(() => first.evaluate(() => document.documentElement.dataset.connections))
@@ -101,7 +114,7 @@ test("real board and phone resume interrupted connections without changing autho
     expect(boardState()?.public.game_id).toBe(gameId);
     expect(boardState()?.public.board).toEqual(committed);
     expect(boardState()?.own_rack.tiles).toEqual([]);
-    expect(page.url()).toBe(route);
+    expect(page.url()).toBe(route.href);
     await first.reload();
     await expect(first.getByText("Connected · Player 2", { exact: true })).toBeVisible();
     expect(firstState()?.own_rack).toEqual(updatedRack);

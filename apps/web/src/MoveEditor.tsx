@@ -1,11 +1,13 @@
+import { boardCommands } from "./editor-commands";
+import { copy, type Copy, type CopyKey } from "./copy";
+import { useCopy } from "./preferences";
 import { Button } from "@moritzbrantner/ui/client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { type PlayerSnapshot, type Ruleset } from "./public-state";
-import { premiums } from "./board-premiums";
 import { type CommandEnvelope, type WordRejection } from "./game-protocol";
+import { useTouchInput } from "./input-capability";
 import { PlayerRack } from "./PlayerRack";
 import {
-  draftMessages,
   draftProblem,
   editDraft,
   emptyDraft,
@@ -18,7 +20,7 @@ type EditorState = {
   draft: MoveDraft;
   selected?: string;
   blank?: { tileId: string; row: number; column: number };
-  message?: string;
+  message?: Copy;
   pending?: "move" | "pass" | "exchange";
   exchange?: string[];
   confirmPass?: true;
@@ -40,6 +42,12 @@ export function MoveEditor({
   onPreview?: (placements: MoveDraft["placements"]) => Promise<void>;
   wordRejection?: WordRejection;
 }) {
+  const { t } = useCopy();
+  const touch = useTouchInput();
+  const keyboardHelp = useId();
+  const [focusSquare, setFocusSquare] = useState(
+    () => Math.floor(rules.board_size / 2) * rules.board_size + Math.floor(rules.board_size / 2),
+  );
   const [state, setState] = useState<EditorState>(() => ({ draft: emptyDraft(snapshot) }));
   const current = reconcileDraft(snapshot, state.draft);
   const stale = current !== state.draft;
@@ -57,7 +65,7 @@ export function MoveEditor({
       clearTimeout(timer.current);
       setState({
         draft: current,
-        message: "Connection changed. Check the restored turn before submitting again.",
+        message: copy("editor.connectionChanged"),
       });
     }
   }, [canAct, pending, current]);
@@ -77,7 +85,7 @@ export function MoveEditor({
       clearTimeout(timer.current);
       setState({
         draft: current,
-        message: `Not in the dictionary: ${wordRejection.error.words.join(", ")}. Your draft is kept.`,
+        message: copy("editor.invalidWords", { words: wordRejection.error.words.join(", ") }),
       });
     }
   }, [wordRejection, stale, state.pending, current, snapshot.public]);
@@ -128,7 +136,7 @@ export function MoveEditor({
   }, [canAct, pending, current.context, previewPlacements, exchanging]);
   useEffect(() => {
     if (stale) {
-      setState({ draft: current, message: "The game changed. Your draft was cleared." });
+      setState({ draft: current, message: copy("editor.cleared") });
     }
   }, [current, stale]);
   useEffect(() => () => clearTimeout(timer.current), [current.context]);
@@ -148,7 +156,7 @@ export function MoveEditor({
     const result = editDraft(snapshot, rules, current, action);
     setState({
       draft: result.draft,
-      ...(result.problem === undefined ? {} : { message: draftMessages[result.problem] }),
+      ...(result.problem === undefined ? {} : { message: copy(`draft.${result.problem}`) }),
     });
   }
   function square(row: number, column: number) {
@@ -188,14 +196,13 @@ export function MoveEditor({
     // Fence heartbeat writes before reserving the turn action's transport sequence.
     previewPaused.current = true;
     const action = kind === "commit" ? "move" : kind;
-    const label = { commit: "Move", pass: "Pass", exchange: "Exchange" }[kind];
     setState({ draft, pending: action });
     timer.current = setTimeout(() => {
       setState((previous) =>
         previous.draft.context === draft.context
           ? {
               draft: previous.draft,
-              message: `${label} was not confirmed. Your draft is kept; you can retry.`,
+              message: copy(`editor.${action}Timeout`),
             }
           : previous,
       );
@@ -212,7 +219,7 @@ export function MoveEditor({
       clearTimeout(timer.current);
       setState((previous) =>
         previous.draft.context === draft.context
-          ? { draft: previous.draft, message: `Unable to send the ${action}. Your draft is kept.` }
+          ? { draft: previous.draft, message: copy(`editor.${action}Failed`) }
           : previous,
       );
     }
@@ -224,27 +231,65 @@ export function MoveEditor({
     current.placements.map((tile) => [`${tile.coordinate.row},${tile.coordinate.column}`, tile]),
   );
   const indices = Array.from({ length: rules.board_size }, (_, index) => index);
-  let feedback =
-    state.message ??
-    (problem === undefined
-      ? "Ready to commit. Word acceptance is checked by the server."
-      : draftMessages[problem]);
+  let feedback = state.message ?? copy(problem === undefined ? "editor.ready" : `draft.${problem}`);
   const ownTurn =
     snapshot.public.phase.kind === "playing" &&
     snapshot.public.phase.active_player === snapshot.own_rack.player_id;
   if (!ownTurn) {
-    feedback = "Wait for your turn.";
+    feedback = copy("draft.waiting");
   } else if (!canAct && state.message === undefined) {
-    feedback = "Reconnect to edit. Your draft is kept.";
+    feedback = copy("editor.reconnect");
   }
   if (exchanging && enabled) {
-    feedback = `Select rack tiles to exchange. ${exchange.length} selected.`;
+    feedback = copy("editor.exchangeSelected", { count: exchange.length });
   }
-  if (pending) {
-    feedback = `Waiting for ${state.pending} confirmation…`;
+  if (pending && state.pending !== undefined) {
+    feedback = copy(`editor.${state.pending}Pending`);
+  }
+  function cancelSelection() {
+    if (!enabled) {
+      return;
+    }
+    setState((previous) => ({
+      draft: previous.draft,
+      ...(previous.exchange === undefined ? {} : { exchange: previous.exchange }),
+      message: copy("editor.cancelled"),
+    }));
+  }
+  function moveFocus(key: string, index: number): boolean {
+    const command = boardCommands.find((entry) => entry.key === key);
+    const next = command?.target(index, rules.board_size);
+    if (next === undefined) {
+      return false;
+    }
+    setFocusSquare(next);
+    board.current?.querySelector<HTMLButtonElement>(`[data-square-index="${next}"]`)?.focus();
+    return true;
   }
   return (
-    <section ref={editor} className="move-editor" aria-label="Move editor">
+    <section
+      ref={editor}
+      className="move-editor"
+      aria-label={t("editor.title")}
+      data-input={touch ? "touch" : "pointer"}
+      onPointerCancel={cancelSelection}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          if (pending) {
+            return;
+          }
+          restoreExchangeFocus.current = exchanging;
+          if (state.confirmPass) {
+            passButton.current?.focus();
+          }
+          setState({ draft: current, message: copy("editor.cancelled") });
+          editor.current
+            ?.querySelector<HTMLButtonElement>(".phone-rack button[aria-pressed=true]")
+            ?.focus();
+        }
+      }}
+    >
       <PlayerRack
         rack={snapshot.own_rack}
         rules={rules}
@@ -269,16 +314,20 @@ export function MoveEditor({
         }}
       />
       <p role="status" aria-live="polite">
-        {feedback}
+        {t(feedback)}
       </p>
       <div
         className="phone-board"
         ref={board}
-        tabIndex={0}
-        aria-label="Scroll the board to choose a square"
+        role="region"
+        tabIndex={enabled && !exchanging ? -1 : 0}
+        aria-label={t("editor.board")}
       >
         <div
           className="phone-board-grid"
+          role="group"
+          aria-label={t("editor.chooseSquare")}
+          aria-describedby={keyboardHelp}
           style={{ gridTemplateColumns: `repeat(${rules.board_size}, 44px)` }}
         >
           {indices.flatMap((row) =>
@@ -295,31 +344,48 @@ export function MoveEditor({
               const center =
                 row === Math.floor(rules.board_size / 2) &&
                 column === Math.floor(rules.board_size / 2);
-              let description = center ? ": center" : ": empty";
+              let squareKey: CopyKey = center ? "editor.squareCenter" : "editor.squareEmpty";
               if (draft !== undefined) {
-                description = `: tentative ${letter}`;
+                squareKey = "editor.squareDraft";
               }
               if (fixed !== undefined) {
-                description = `: committed ${fixed.letter}`;
+                squareKey = "editor.squareFixed";
               }
-              const label = `Row ${row + 1}, column ${column + 1}${description}`;
+              const label = t(squareKey, {
+                row: row + 1,
+                column: column + 1,
+                letter: letter ?? "",
+              });
               return (
                 <Button
                   key={key}
                   className={`phone-square premium-${premium.replaceAll("_", "-")}${draft ? " tentative-square" : ""}${fixed ? " committed-square" : ""}`}
                   data-center={center}
+                  data-square-index={row * rules.board_size + column}
+                  tabIndex={row * rules.board_size + column === focusSquare ? 0 : -1}
+                  onFocus={() => setFocusSquare(row * rules.board_size + column)}
+                  onKeyDown={(event: KeyboardEvent<HTMLButtonElement>) => {
+                    if (moveFocus(event.key, row * rules.board_size + column)) {
+                      event.preventDefault();
+                    }
+                  }}
                   aria-label={label}
-                  aria-description={premiums[premium].label}
+                  aria-description={t(`premium.${premium}`)}
                   aria-pressed={draft !== undefined && selected === draft.tile_id}
-                  disabled={!enabled || exchanging || fixed !== undefined}
-                  onClick={() => square(row, column)}
+                  disabled={!enabled || exchanging}
+                  aria-disabled={fixed !== undefined}
+                  onClick={() => {
+                    if (fixed === undefined) {
+                      square(row, column);
+                    }
+                  }}
                 >
                   <small className="square-reference" aria-hidden="true">
                     {String.fromCharCode(65 + column)}
                     {row + 1}
                   </small>
                   <span aria-hidden="true">
-                    {letter ?? (center ? "★" : premiums[premium].short || "·")}
+                    {letter ?? (center ? "★" : t(`premiumShort.${premium}`) || "·")}
                   </span>
                 </Button>
               );
@@ -327,28 +393,69 @@ export function MoveEditor({
           )}
         </div>
       </div>
+      <details className={touch ? "sr-only keyboard-help" : "keyboard-help"}>
+        <summary>{t("command.help")}</summary>
+        <p id={keyboardHelp}>{t("editor.keyboard")}</p>
+        <dl>
+          {boardCommands.map((command) => (
+            <div key={command.key}>
+              <dt>
+                <kbd>{command.key}</kbd>
+              </dt>
+              <dd>{t(command.label)}</dd>
+            </div>
+          ))}
+          <div>
+            <dt>
+              <kbd>Enter / Space</kbd>
+            </dt>
+            <dd>{t("command.place")}</dd>
+          </div>
+          <div>
+            <dt>
+              <kbd>Escape</kbd>
+            </dt>
+            <dd>{t("command.cancel")}</dd>
+          </div>
+        </dl>
+      </details>
       {blank !== undefined && enabled && (
-        <div className="blank-choices" role="group" aria-label="Choose blank letter">
-          {rules.tiles.flatMap((tile) =>
+        <div className="blank-choices" role="group" aria-label={t("editor.blankTitle")}>
+          {rules.tiles.flatMap((tile, index) =>
             tile.face.kind === "letter"
               ? [
                   <Button
                     key={tile.face.letter}
-                    onClick={() =>
+                    autoFocus={
+                      index === rules.tiles.findIndex((entry) => entry.face.kind === "letter")
+                    }
+                    onClick={() => {
                       edit({
                         kind: "place",
                         tileId: blank.tileId,
                         coordinate: { row: blank.row, column: blank.column },
                         blankAs: tile.face.kind === "letter" ? tile.face.letter : null,
-                      })
-                    }
+                      });
+                      board.current
+                        ?.querySelector<HTMLButtonElement>(`[data-square-index="${focusSquare}"]`)
+                        ?.focus();
+                    }}
                   >
                     {tile.face.letter}
                   </Button>,
                 ]
               : [],
           )}
-          <Button onClick={() => setState({ draft: current })}>Cancel blank choice</Button>
+          <Button
+            onClick={() => {
+              setState({ draft: current });
+              board.current
+                ?.querySelector<HTMLButtonElement>(`[data-square-index="${focusSquare}"]`)
+                ?.focus();
+            }}
+          >
+            {t("editor.cancelBlank")}
+          </Button>
         </div>
       )}
       <div className="draft-actions">
@@ -361,7 +468,7 @@ export function MoveEditor({
           }
           onClick={() => selected !== undefined && edit({ kind: "remove", tileId: selected })}
         >
-          Return selected tile
+          {t("editor.return")}
         </Button>
         <Button
           disabled={
@@ -371,35 +478,33 @@ export function MoveEditor({
           }
           onClick={() => edit({ kind: "reset" })}
         >
-          Cancel move
+          {t("editor.cancel")}
         </Button>
         <Button
           disabled={!enabled || exchanging || problem !== undefined || blank !== undefined}
           onClick={() => void submit("commit")}
         >
-          Commit move
+          {t("editor.commit")}
         </Button>
         <Button
           ref={passButton}
           disabled={!enabled || exchanging}
           onClick={() => setState({ draft: current, confirmPass: true })}
         >
-          Pass turn
+          {t("editor.pass")}
         </Button>
         <Button
           ref={exchangeButton}
           disabled={!enabled || exchanging || !canExchange}
           onClick={() => setState({ draft: current, exchange: [] })}
         >
-          Exchange tiles
+          {t("editor.exchange")}
         </Button>
       </div>
-      {!canExchange && (
-        <p>Exchange requires at least {rules.exchange_minimum_bag} tiles in the bag.</p>
-      )}
+      {!canExchange && <p>{t("editor.exchangeMinimum", { count: rules.exchange_minimum_bag })}</p>}
       {exchange !== undefined && enabled && (
-        <div className="pass-confirmation" role="group" aria-label="Exchange tiles">
-          <p>Choose tiles in your rack. Exchanging ends your turn and clears your draft.</p>
+        <div className="pass-confirmation" role="group" aria-label={t("editor.exchange")}>
+          <p>{t("editor.exchangeHelp")}</p>
           <Button
             disabled={
               exchange.length === 0 ||
@@ -408,7 +513,7 @@ export function MoveEditor({
             }
             onClick={() => void submit("exchange")}
           >
-            Confirm exchange
+            {t("editor.confirmExchange")}
           </Button>
           <Button
             onClick={() => {
@@ -416,15 +521,15 @@ export function MoveEditor({
               setState({ draft: current });
             }}
           >
-            Keep playing
+            {t("editor.keep")}
           </Button>
         </div>
       )}
       {!stale && state.confirmPass === true && enabled && (
-        <div className="pass-confirmation" role="group" aria-label="Confirm pass">
-          <p>Pass this turn? Your draft will be cleared.</p>
+        <div className="pass-confirmation" role="group" aria-label={t("editor.confirmPass")}>
+          <p>{t("editor.passHelp")}</p>
           <Button autoFocus onClick={() => void submit("pass")}>
-            Confirm pass
+            {t("editor.confirmPass")}
           </Button>
           <Button
             onClick={() => {
@@ -432,7 +537,7 @@ export function MoveEditor({
               passButton.current?.focus();
             }}
           >
-            Keep playing
+            {t("editor.keep")}
           </Button>
         </div>
       )}

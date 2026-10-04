@@ -1,3 +1,4 @@
+import { copy, translate, type Copy, type CopyKey } from "./copy";
 import { z } from "zod";
 import { id } from "./public-state";
 import { matchUrl } from "./transport/browser-match";
@@ -18,11 +19,13 @@ const joinInformation = z.strictObject({
 export type JoinInformation = z.infer<typeof joinInformation>;
 
 export class CreationError extends Error {
+  readonly copy: Copy;
   constructor(
-    message: string,
+    key: CopyKey,
     readonly retryable: boolean,
   ) {
-    super(message);
+    super(translate("en", key));
+    this.copy = copy(key);
   }
 }
 export function newCreateRequest(): CreateRequest {
@@ -39,13 +42,13 @@ export function decodeJoinInformation(raw: unknown, endpoint: string): JoinInfor
     !parsed.success ||
     matchUrl(endpoint, parsed.data.matchId).pathname !== parsed.data.matchPath
   ) {
-    throw new CreationError("The server returned invalid join information.", false);
+    throw new CreationError("create.invalidInformation", false);
   }
   return parsed.data;
 }
 function creationUrl(endpoint: string): URL {
   if (!/^https?:\/\/[^/?#\\]+(?:\/[A-Za-z0-9_-]+)*$/.test(endpoint)) {
-    throw new CreationError("Invalid game creation settings.", false);
+    throw new CreationError("create.invalidSettings", false);
   }
   const url = new URL(endpoint);
   if (
@@ -53,14 +56,14 @@ function creationUrl(endpoint: string): URL {
     url.password ||
     (url.protocol === "http:" && !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))
   ) {
-    throw new CreationError("Invalid game creation settings.", false);
+    throw new CreationError("create.invalidSettings", false);
   }
   url.pathname = `${url.pathname === "/" ? "" : url.pathname}/games`;
   return url;
 }
 async function readResponse(response: Response): Promise<unknown> {
   if (response.body === null) {
-    throw new CreationError("Missing join information.", true);
+    throw new CreationError("create.missingInformation", true);
   }
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -73,7 +76,7 @@ async function readResponse(response: Response): Promise<unknown> {
       }
       length += value.length;
       if (length > 4096) {
-        throw new CreationError("The server returned invalid join information.", false);
+        throw new CreationError("create.invalidInformation", false);
       }
       chunks.push(value);
     }
@@ -86,7 +89,7 @@ async function readResponse(response: Response): Promise<unknown> {
     try {
       return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
     } catch {
-      throw new CreationError("The server returned invalid join information.", false);
+      throw new CreationError("create.invalidInformation", false);
     }
   } finally {
     await reader.cancel().catch(() => {});
@@ -104,7 +107,7 @@ export async function createGame(
   try {
     matchUrl(endpoint, "validation");
   } catch {
-    throw new CreationError("Invalid game connection settings.", false);
+    throw new CreationError("create.invalidConnection", false);
   }
   const body = createRequest.parse(request);
   try {
@@ -119,26 +122,17 @@ export async function createGame(
       await response.body?.cancel();
       switch (response.status) {
         case 410:
-          throw new CreationError(
-            "This creation request has expired. Start a new game request.",
-            false,
-          );
+          throw new CreationError("create.expired", false);
         case 429:
-          throw new CreationError("The server is full. You can retry this request.", true);
+          throw new CreationError("create.full", true);
         case 503:
-          throw new CreationError(
-            "The server cannot create a game right now. You can retry this request.",
-            true,
-          );
+          throw new CreationError("create.unavailable", true);
         case 400:
-          throw new CreationError("The creation request was rejected.", false);
+          throw new CreationError("create.rejected", false);
         case 403:
-          throw new CreationError(
-            "This board is not allowed to create games on the server.",
-            false,
-          );
+          throw new CreationError("create.forbidden", false);
         default:
-          throw new CreationError("Unable to create the game. You can retry this request.", true);
+          throw new CreationError("create.retryable", true);
       }
     }
     return decodeJoinInformation(await readResponse(response), endpoint);
@@ -146,11 +140,17 @@ export async function createGame(
     if (error instanceof CreationError) {
       throw error;
     }
-    throw new CreationError("The response was interrupted. Retry to recover the same game.", true);
+    throw new CreationError("create.interrupted", true);
   }
 }
 
-export class JoinError extends Error {}
+export class JoinError extends Error {
+  readonly copy: Copy;
+  constructor(key: CopyKey) {
+    super(translate("en", key));
+    this.copy = copy(key);
+  }
+}
 
 /** Public existence/lifetime check; never allocates a match or returns credentials. */
 export async function lookupGame(
@@ -161,7 +161,7 @@ export async function lookupGame(
   mode: "available" | "new" = "available",
 ): Promise<JoinInformation> {
   if (!joinInformation.shape.matchId.safeParse(matchId).success) {
-    throw new JoinError("This game identifier is invalid. Ask the host for a new invitation.");
+    throw new JoinError("join.invalidId");
   }
   matchUrl(endpoint, matchId);
   const url = creationUrl(api);
@@ -173,22 +173,22 @@ export async function lookupGame(
   if (!response.ok) {
     await response.body?.cancel();
     if (response.status === 429) {
-      throw new JoinError("This game is full. Ask the host for another invitation.");
+      throw new JoinError("join.full");
     }
     if (response.status === 409) {
-      throw new JoinError("This game has already started. New players cannot join.");
+      throw new JoinError("join.started");
     }
     if (response.status === 410) {
-      throw new JoinError("This game has expired. Ask the host for a new invitation.");
+      throw new JoinError("join.expired");
     }
     if (response.status === 404) {
-      throw new JoinError("This game is no longer available. Ask the host for a new invitation.");
+      throw new JoinError("join.unavailable");
     }
-    throw new JoinError("Unable to check this game. Check your connection and retry.");
+    throw new JoinError("join.checkFailed");
   }
   const join = decodeJoinInformation(await readResponse(response), endpoint);
   if (join.matchId !== matchId) {
-    throw new JoinError("The server returned a different game.");
+    throw new JoinError("join.differentGame");
   }
   return join;
 }

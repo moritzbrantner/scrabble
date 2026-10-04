@@ -1,3 +1,5 @@
+import { type Copy } from "./copy";
+import { useCopy } from "./preferences";
 import { Button } from "@moritzbrantner/ui/client";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -11,7 +13,7 @@ import { LiveBoard } from "./LiveBoard";
 
 type State =
   | { kind: "idle" | "creating" }
-  | { kind: "failed"; message: string; retryable: boolean }
+  | { kind: "failed"; message: Copy; retryable: boolean }
   | { kind: "created"; join: JoinInformation };
 export function CreateBoard({
   endpoint,
@@ -22,6 +24,7 @@ export function CreateBoard({
   api: string;
   certificateHash?: string;
 }) {
+  const { t } = useCopy();
   const [state, setState] = useState<State>({ kind: "idle" });
   const request = useRef<CreateRequest>(undefined);
   const operation = useRef<AbortController>(undefined);
@@ -47,10 +50,8 @@ export function CreateBoard({
     } catch (error) {
       if (!controller.signal.aborted) {
         const failure =
-          error instanceof CreationError
-            ? error
-            : new CreationError("Unable to create a game.", false);
-        setState({ kind: "failed", message: failure.message, retryable: failure.retryable });
+          error instanceof CreationError ? error : new CreationError("create.failed", false);
+        setState({ kind: "failed", message: failure.copy, retryable: failure.retryable });
       }
     } finally {
       controller.abort();
@@ -73,14 +74,14 @@ export function CreateBoard({
   return (
     <main className="create-board">
       <h1>Scrabble</h1>
-      <p>Create a game to get a join link for your players.</p>
-      {state.kind === "creating" && <p role="status">Creating game…</p>}
-      {state.kind === "failed" && <p role="alert">{state.message}</p>}
+      <p>{t("create.intro")}</p>
+      {state.kind === "creating" && <p role="status">{t("create.creating")}</p>}
+      {state.kind === "failed" && <p role="alert">{t(state.message)}</p>}
       <Button
         disabled={state.kind === "creating"}
         onClick={() => void create(state.kind !== "failed" || !state.retryable)}
       >
-        {state.kind === "failed" && state.retryable ? "Retry creation" : "Create game"}
+        {state.kind === "failed" && state.retryable ? t("create.retry") : t("create.action")}
       </Button>
     </main>
   );

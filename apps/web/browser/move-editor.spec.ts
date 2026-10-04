@@ -29,7 +29,23 @@ test("blank editing and authoritative updates reconcile without changing a priva
   const choices = editor.getByRole("group", { name: "Choose blank letter", exact: true });
   await expect(choices).toBeVisible();
   await expect(editor.getByRole("textbox")).toHaveCount(0);
-  await choices.getByRole("button", { name: "A", exact: true }).click();
+  await expect(choices.getByRole("button").first()).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(choices).toHaveCount(0);
+  await expect(blankButton).toBeFocused();
+  await page.keyboard.press("Enter");
+  await editor.getByRole("button", { name: "Row 8, column 8: center", exact: true }).press("Enter");
+  await expect(choices.getByRole("button", { name: "A", exact: true })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(
+    editor.getByRole("button", { name: "Row 8, column 8: tentative A", exact: true }),
+  ).toBeFocused();
+  const pass = editor.getByRole("button", { name: "Pass turn", exact: true });
+  await pass.press("Enter");
+  await expect(editor.getByRole("button", { name: "Confirm pass", exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(editor.getByRole("group", { name: "Confirm pass", exact: true })).toHaveCount(0);
+  await expect(pass).toBeFocused();
   await expect(
     editor.getByRole("button", { name: "Row 8, column 8: tentative A", exact: true }),
   ).toBeVisible();
