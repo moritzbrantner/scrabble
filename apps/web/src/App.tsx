@@ -5,6 +5,7 @@ import { fixtures } from "./fixtures";
 import { CreateBoard } from "./CreateBoard";
 import { LiveBoard } from "./LiveBoard";
 import { SharedBoard } from "./SharedBoard";
+import { connectionSettings, type ConnectionMode } from "./connection-settings";
 
 export function App() {
   const { t } = useCopy();
@@ -19,6 +20,22 @@ export function App() {
   const api: string | undefined = import.meta.env.DEV
     ? (connection?.get("api") ?? undefined)
     : import.meta.env.VITE_SCRABBLE_API || undefined;
+  let mode: ConnectionMode = "production";
+  if (import.meta.env.DEV) {
+    mode = "development";
+  } else if (import.meta.env.MODE === "test") {
+    mode = "test";
+  }
+  const route = matchId && connection?.get("view") !== "player" ? "board" : "game";
+  const settings = connectionSettings(mode, endpoint, api, route);
+  if (settings.kind === "unavailable") {
+    return (
+      <main className="create-board">
+        <h1>Scrabble</h1>
+        <p role="alert">{t(settings.message)}</p>
+      </main>
+    );
+  }
   let certificateHash: string | undefined;
   if (import.meta.env.DEV) {
     certificateHash = connection?.get("certificate") ?? undefined;

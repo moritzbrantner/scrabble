@@ -268,10 +268,11 @@ dependencies = [
 [[package]]
 name = "game-server"
 version = "0.1.0"
-source = "git+https://github.com/moritzbrantner/game-server.git?rev=99101841d87b11ac0d9ff449b576967f98e45207#99101841d87b11ac0d9ff449b576967f98e45207"
+source = "git+https://github.com/moritzbrantner/game-server.git?rev=7decf2c2f101984460b7dda7277cf5aa6039b761#7decf2c2f101984460b7dda7277cf5aa6039b761"
 dependencies = [
  "ring",
  "tokio",
+ "url",
  "wtransport",
 ]
 

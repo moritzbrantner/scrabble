@@ -303,7 +303,7 @@ mod tests {
             let serving = host.clone();
             tasks.spawn(async move { serve_live_match_host_with_control_and_shutdown(serving, RejectMatchControlService,
                 MatchHostWebTransportConfig { port, certificate_pem: cert, private_key_pem: key,
-                    route_prefix: config.route_prefix, drain_grace: Duration::ZERO }, receiver).await });
+                    route_prefix: config.route_prefix, allowed_origins: None, drain_grace: Duration::ZERO }, receiver).await });
             while !host.is_serving() {
                 tokio::select! { result = tasks.join_next() => panic!("server exited before readiness: {result:?}"), _ = tokio::task::yield_now() => {} }
             }

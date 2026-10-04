@@ -6,7 +6,7 @@ license.workspace = true
 
 [dependencies]
 scrabble-game = { path = "../scrabble-game" }
-game-server = { git = "https://github.com/moritzbrantner/game-server.git", rev = "99101841d87b11ac0d9ff449b576967f98e45207" }
+game-server = { git = "https://github.com/moritzbrantner/game-server.git", rev = "7decf2c2f101984460b7dda7277cf5aa6039b761" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["raw_value"] }
 url = "2.5.8"

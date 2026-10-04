@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --config apps/web/vite.config.ts",
+    "dev:local": "bun scripts/dev-local.ts",
     "dev:server": "cargo run -p scrabble-server --locked",
     "dev:tls": "cargo run -p scrabble-server --example local_tls --locked",
     "format": "oxfmt . && cargo fmt --all",
@@ -14,6 +15,7 @@
     "build": "vite build --config apps/web/vite.config.ts",
     "check": "bun run format:check && bun run typecheck && bun run lint && bun run test && bun run build && bun run test:browser",
     "test:browser": "bun scripts/test-browser.ts && bun scripts/test-browser.ts --pages",
+    "test:deployment": "bun scripts/test-deployment.ts",
     "fixtures:generate": "cargo run -q -p scrabble-game --example public_fixtures --locked"
   },
   "dependencies": {

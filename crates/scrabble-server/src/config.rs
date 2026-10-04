@@ -1,5 +1,5 @@
 //! One validated configuration boundary, independent of ambient environment in tests.
-use game_server::{BrowserRoutePrefix, MatchId};
+use game_server::{BrowserOriginAllowlist, BrowserRoutePrefix, MatchId};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt,
@@ -24,6 +24,7 @@ pub struct ServerConfig {
     pub status_port: u16,
     pub api_port: u16,
     pub board_origin: String,
+    pub allowed_origins: Option<BrowserOriginAllowlist>,
     pub certificate: PathBuf,
     pub private_key: PathBuf,
     pub seed_file: PathBuf,
@@ -169,6 +170,13 @@ impl ServerConfig {
             ));
         }
         let max_matches = number(values, "SCRABBLE_MAX_MATCHES", "16", 1, 64)? as usize;
+        let allowed_origins = if matches!(mode, Mode::Production) {
+            Some(BrowserOriginAllowlist::new([board_origin]).map_err(|_| {
+                fail("production board origin exceeds the supported browser-origin bound")
+            })?)
+        } else {
+            None
+        };
         let ids = value(values, "SCRABBLE_MATCH_IDS", "table-1,table-2");
         let mut unique = BTreeSet::new();
         let mut match_ids = Vec::new();
@@ -260,6 +268,7 @@ impl ServerConfig {
             status_port,
             api_port,
             board_origin: board_origin.to_owned(),
+            allowed_origins,
             match_ids,
             max_matches,
             route_prefix,

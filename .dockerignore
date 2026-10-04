@@ -1,0 +1,11 @@
+.git
+.env*
+.local
+node_modules
+target
+dist
+test-results
+apps
+docs
+deploy
+scripts

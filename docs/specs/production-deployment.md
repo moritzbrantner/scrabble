@@ -1,0 +1,81 @@
+# Production deployment
+
+The authoritative service runs separately from GitHub Pages. The committed Compose topology exposes UDP 443 for native WebTransport and TCP 443 for HTTPS creation/invite lookup. Its gateway exposes only `/api/`, `/healthz`, and `/readyz`; detailed runtime status and management endpoints stay inside the Compose network. Both services run without root privileges or writable image filesystems.
+
+The owner has selected local hosting for now; see [local game setup](server-executable.md#local-game-setup). Public hosting is deferred. This document preserves the prepared future public topology, not evidence of a deployed service. Physical phone acceptance is also outstanding.
+
+## Host prerequisites
+
+Use a host with Docker Compose, a stable public address, and inbound TCP and UDP 443. Point the chosen service domain at that host. Supply a publicly trusted certificate chain as `cert.pem` and its private key as `key.pem`; the certificate must cover the service domain. The UDP listener terminates TLS itself, so an HTTP-only reverse proxy does not provide the game transport. Do not advertise HTTP/3 for the HTTPS API on the game's UDP port.
+
+Create three host directories outside disposable containers: TLS, persistent state, and dictionary content. Copy `.env.example` to an uncommitted deployment environment file and set the `DEPLOY_*` paths to absolute host paths. Set the numeric UID/GID to the owner of these directories. Restrict private key and state access to that owner. The state directory must be writable by the server; TLS and content are mounted read-only. Initial startup creates the private initialization seed in the state directory.
+
+Place the chosen word list in `words.txt` and explicitly set its dictionary name and revision. Retain source, license notices, and preparation instructions alongside it. The authored fixture is suitable for smoke tests only; it is not a complete production dictionary. To select a custom ruleset, add `-f compose.ruleset.yaml` after `-f compose.yaml`, place `ruleset.json` in the content directory, and use the dictionary identity declared by that profile. See [configurable rulesets](configurable-rulesets.md).
+
+The browser origin is `https://moritzbrantner.github.io`, without `/scrabble/`. Set `DEPLOY_BOARD_ORIGIN` to the exact origin if Pages moves. Production rejects missing or different WebTransport origins before admission and requires the declared origin on creation requests. Origin checking is a browser boundary; it does not authenticate native clients.
+
+## Startup and public configuration
+
+### Reproducible initial English dictionary
+
+The optional initial corpus uses SCOWL's general American English spelling vocabulary, size 60 and variant level 1. This is not an official tournament Scrabble dictionary. The preparation excludes abbreviations and special categories, then keeps only lowercase ASCII words of length 2–15, uppercases them, and sorts unique entries. This excludes capitalized names, punctuation, accents, and longer words. It produces 78,026 words with SHA-256 `3e8c1a3f17f6d1a2fbad509b4454908d5edb9bf86e8ab8595a029e14418c0ad6`.
+
+Install Git, Make, Python 3, and SQLite according to the [upstream prerequisites](https://github.com/en-wl/wordlist/blob/7e99edab8e32f9f9ea2b15f249ca8d4d67237410/README.md). In an operator-owned preparation directory:
+
+```sh
+git clone --depth 1 --branch rel-2026.02.25 https://github.com/en-wl/wordlist.git scowl-source
+bun scripts/prepare-dictionary.ts scowl-source /ABSOLUTE/NEW/CONTENT_DIRECTORY
+```
+
+The script verifies the exact release commit and unmodified tracked source, rebuilds the source database, and checks the output count and hash before creating the new content directory. It refuses an existing destination. It retains the complete upstream copyright notice, source README, and a provenance manifest alongside `words.txt`. The [upstream notice](https://github.com/en-wl/wordlist/blob/7e99edab8e32f9f9ea2b15f249ca8d4d67237410/Copyright) specifies redistribution conditions; preserve these artifacts when copying the deployment content. No dictionary download or preparation runs in the serving process or Pages build.
+
+For this corpus set `DEPLOY_DICTIONARY_NAME=scowl-en-us-60`, `DEPLOY_DICTIONARY_REVISION=2026.02.25-recipe1`, and `DEPLOY_CONTENT_DIRECTORY` to the prepared directory. Keep the original content immutable for recovery and rollback. The runtime additionally fingerprints the semantic word set and ruleset; the provenance hash records the prepared file bytes.
+
+Run `bun run test:deployment /ABSOLUTE/NEW/CONTENT_DIRECTORY` to check the prepared corpus in the real container topology. This checks the provenance file hash before loading the corpus, then exercises HTTPS creation, UDP snapshots, and graceful recovery with that dictionary identity. Without this argument the smoke test uses the authored fixture.
+
+### Deploying the service
+
+From the reviewed checkout, using the deployment environment file:
+
+```sh
+docker compose --env-file .env --profile production config --quiet
+docker compose --env-file .env --profile production build server
+docker compose --env-file .env --profile production up -d --wait
+```
+
+Set `DEPLOY_VERSION` to the deployed revision before building. Record the resulting server image digest and preserve the previous image for rollback. The Dockerfile pins its builder and runtime base images by digest; the gateway is also digest-pinned.
+
+Once the service is reachable with normal TLS trust, set the two public fields in `deploy/client.json` to `https://SERVICE_DOMAIN/game` and `https://SERVICE_DOMAIN/api`. Commit and review these routing settings. The Pages workflow runs `scripts/build-pages.ts`, which validates them and builds the checked artifact. Neither field accepts credentials or private query parameters. Private TLS keys, seed bytes, dictionary files, and reconnect capabilities must never enter this file or `VITE_*` settings.
+
+An empty public configuration builds an explicit service-unavailable screen. A malformed configuration fails the release build. Development fixture routes and query endpoint overrides do not activate in a release build. Browser tests check these behaviors against compiled production assets and verify that a test certificate canary is absent. Release connections use normal browser certificate trust.
+
+## Health and rollout
+
+Check `https://SERVICE_DOMAIN/healthz` and `/readyz` independently of gameplay. Readiness becomes unavailable during draining. Internal detailed status is available to an operator through the private Compose network; do not publish the server's management TCP port.
+
+Before an upgrade, retain the running image, original dictionary/ruleset, TLS identity, and deployment settings. Stop the gateway, then stop the server gracefully:
+
+```sh
+docker compose --env-file .env --profile production stop gateway server
+```
+
+After both services stop, back up the entire state directory, including the seed and recovery bundle, with owner-only access. A hard kill does not create a fresh recovery bundle. Never copy a live directory as if it were a consistent checkpoint.
+
+Build the candidate server, then recreate both services so the gateway resolves the recreated server's network address:
+
+```sh
+docker compose --env-file .env --profile production build server
+docker compose --env-file .env --profile production up -d --wait --force-recreate server gateway
+```
+
+Recovery verifies the saved ruleset/dictionary identities and restores dynamically created matches, reconnect capabilities, and sequence cursors. The private seed remains stable. A successful startup consumes the recovery bundle, so retain the stopped-state backup before attempting an upgrade. Never delete the seed to bypass a recovery error. Existing browser sessions can reconnect within the configured one-hour grace window; a longer outage can expire their seats. Clients report disconnects and incompatible snapshots explicitly.
+
+For a failed upgrade that has accepted no new gameplay, stop both services and restore the stopped-state backup, original content, and previous image before restarting. Restoring that backup after new gameplay has been accepted would discard those actions; do not treat it as a transparent rollback. Recovery and wire compatibility must be checked for each release before rollout. See [server recovery](server-executable.md).
+
+## Verification boundaries
+
+`bun run test:deployment` builds and starts the canonical production topology on loopback ports using an owned temporary project, test certificate, fixture dictionary, and private state. It verifies HTTPS health, API origin rejection, hidden management routes, actual UDP WebTransport admission and snapshot identity, rejection of missing/wrong transport origins before seat allocation, and graceful restart preserving match and seed identity, then removes its containers and temporary files. It requires a local Unix Docker daemon and uses curl certificate verification against the generated test certificate.
+
+The repository's native process tests prove graceful recovery, private projections, and reconnect fencing. Browser checks prove real loopback WebTransport gameplay and production configuration failure behavior. The container smoke test does not prove public certificate trust or gameplay through a public deployed host. Publicly trusted Pages transport, deployed health probes, and rollout compatibility remain future public-hosting acceptance; physical phone gameplay remains separate from same-computer browser evidence.
+
+Shared convention sourceRevision: `46d8793bb3034326561f876dcc67dbaa5aa1e432`.

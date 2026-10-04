@@ -24,6 +24,7 @@ fn local_defaults_and_invalid_configuration_are_explicit() {
     assert_eq!(defaults.port, 4433);
     assert_eq!(defaults.status_port, 8080);
     assert_eq!(defaults.match_ids.len(), 2);
+    assert!(defaults.allowed_origins.is_none());
     for (key, value) in [
         ("SCRABBLE_PORT", "0"),
         ("SCRABBLE_STATUS_PORT", "65536"),
@@ -76,7 +77,11 @@ fn production_requires_private_persistent_initialization_and_explicit_tls() {
     ] {
         config.insert(key.into(), value.into());
     }
-    assert!(ServerConfig::from_values(&config).is_ok());
+    let production = ServerConfig::from_values(&config).unwrap();
+    let allowed = production.allowed_origins.unwrap();
+    assert!(allowed.allows(Some("https://board.example")));
+    assert!(!allowed.allows(None));
+    assert!(!allowed.allows(Some("https://other.example")));
     config.insert("SCRABBLE_TEST_SEED".into(), "07".repeat(32));
     assert!(ServerConfig::from_values(&config).is_err());
     config.remove("SCRABBLE_TEST_SEED");

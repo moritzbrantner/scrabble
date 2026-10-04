@@ -46,7 +46,7 @@ export function decodeJoinInformation(raw: unknown, endpoint: string): JoinInfor
   }
   return parsed.data;
 }
-function creationUrl(endpoint: string): URL {
+export function gameApiUrl(endpoint: string): URL {
   if (!/^https?:\/\/[^/?#\\]+(?:\/[A-Za-z0-9_-]+)*$/.test(endpoint)) {
     throw new CreationError("create.invalidSettings", false);
   }
@@ -103,7 +103,7 @@ export async function createGame(
   request: CreateRequest,
   signal: AbortSignal,
 ): Promise<JoinInformation> {
-  const url = creationUrl(api);
+  const url = gameApiUrl(api);
   try {
     matchUrl(endpoint, "validation");
   } catch {
@@ -164,7 +164,7 @@ export async function lookupGame(
     throw new JoinError("join.invalidId");
   }
   matchUrl(endpoint, matchId);
-  const url = creationUrl(api);
+  const url = gameApiUrl(api);
   url.pathname += `/${matchId}${mode === "new" ? "/join" : ""}`;
   const response = await fetch(url, {
     credentials: "omit",

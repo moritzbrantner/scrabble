@@ -1,6 +1,6 @@
 # Game creation and retirement
 
-The development entry point supports `?server=<HTTPS WebTransport base>&api=<HTTP(S) creation API base>`. Without a `match` parameter it offers **Create game**. Successful creation supplies a public join link and connects the shared board. Existing `?server=...&match=...` links still work. For local self-signed TLS, append `&certificate=<64 lowercase hex SHA-256 fingerprint>` from `bun run dev:tls`; fingerprint trust is accepted only by the development entry point. Production uses ordinary certificate trust and endpoint configuration in #31.
+The development entry point supports `?server=<HTTPS WebTransport base>&api=<HTTP(S) creation API base>`. Without a `match` parameter it offers **Create game**. Successful creation supplies a public join link and connects the shared board. Existing `?server=...&match=...` links still work. For local self-signed TLS, append `&certificate=<64 lowercase hex SHA-256 fingerprint>` from `bun run dev:tls`; fingerprint trust is accepted only by the development entry point. Production uses ordinary certificate trust and the prepared public endpoint configuration; actual public hosting is deferred to #67.
 
 For example, after starting the default local server and Vite:
 

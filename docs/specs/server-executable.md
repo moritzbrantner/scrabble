@@ -4,6 +4,27 @@ The executable hosts the Rust Scrabble simulation through the prepared hosted `g
 
 ## Local development
 
+### Local game setup
+
+The current owner decision is local hosting. Scrabble runs its Rust simulation through `game-server`; it does not use the separate WebRTC `multiplayer-setup-service`. Install the repository's Bun/Rust dependencies and a local Docker Engine with Compose, then prepare the dictionary once:
+
+```sh
+mkdir -p .local/deployment
+git clone --depth 1 --branch rel-2026.02.25 https://github.com/en-wl/wordlist.git .local/scowl-source
+bun scripts/prepare-dictionary.ts .local/scowl-source .local/deployment/content
+bun run dev:local
+```
+
+Dictionary preparation also needs Make, Python 3 and SQLite; see the [pinned preparation recipe](production-deployment.md#reproducible-initial-english-dictionary). If content is already prepared, reuse it instead of rerunning the commands that create it. An alternative prepared content directory can be passed as `bun run dev:local /ABSOLUTE/CONTENT_DIRECTORY`. The launcher checks its provenance hash and explicitly loads that dictionary; it never silently substitutes the small test fixture.
+
+Open the **complete URL printed by the launcher**, including its connection query, to create a game. The same URL is stored in `.local/local-server/url.txt`. The plain Vite URL without that query remains a fixture preview. Player invite links work in additional browser tabs or independent browser contexts on this computer. This loopback setup does not claim physical-phone or public-network acceptance: a phone's `localhost` refers to the phone, not this computer.
+
+The launcher uses `compose.yaml` with `compose.dev.yaml` under the dedicated `scrabble-local` project. Only loopback ports are published: UDP 4433 for WebTransport, TCP 8081 for creation/invite lookup, and TCP 8080 for management health. Vite serves `http://localhost:5173`, the exact allowed browser origin. A remote Docker context or already-running local launcher is refused. Local trust uses the public digest of a short-lived self-signed certificate only in development; production trust requirements remain intact.
+
+TLS and persistent seed/recovery storage live under ignored `.local/local-server`; the prepared content is mounted read-only. Ctrl+C stops the client and gracefully stops this project's server, preserving those files for the next run. Changing dictionary identity with existing recovery data is unsupported. Do not delete state to work around recovery failures. To renew an expired local certificate, stop the launcher and explicitly replace both `.local/local-server/tls/cert.pem` and `key.pem` together before restarting. The local override disables automatic container restart so a stopped development server stays stopped.
+
+### Native development
+
 ```sh
 cp .env.example .env
 bun run dev:tls

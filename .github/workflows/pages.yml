@@ -17,6 +17,6 @@ jobs:
     with:
       bun_version: 1.4.2
       pre_command: rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy && cargo fetch --locked && bunx playwright install --with-deps chromium
-      build_command: bun run check
+      build_command: bun scripts/build-pages.ts
       artifact_path: dist
       concurrency_group: pages

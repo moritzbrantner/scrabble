@@ -61,6 +61,7 @@ pub async fn serve(
             certificate_pem: config.certificate,
             private_key_pem: config.private_key,
             route_prefix: config.route_prefix,
+            allowed_origins: config.allowed_origins,
             drain_grace: config.drain_grace,
         },
         MatchHostStatusConfig {

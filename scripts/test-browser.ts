@@ -81,6 +81,25 @@ const taskEnv: NodeJS.ProcessEnv = {
 };
 delete taskEnv.NO_COLOR;
 let child: Bun.Subprocess | undefined;
+async function buildClient(directory: string, mode: string, environment: NodeJS.ProcessEnv) {
+  child = Bun.spawn(
+    [
+      "bunx",
+      "vite",
+      "build",
+      "--config",
+      "apps/web/vite.config.ts",
+      "--mode",
+      mode,
+      "--outDir",
+      `../../test-results/${directory}`,
+    ],
+    { env: { ...taskEnv, ...environment }, stdout: "inherit", stderr: "inherit" },
+  );
+  if ((await child.exited) !== 0) {
+    throw new Error("Pages test build failed");
+  }
+}
 const run = async () => {
   if (pages) {
     const connection = z
@@ -90,34 +109,24 @@ const run = async () => {
         certificateHash: z.array(z.number()).length(32),
       })
       .parse(await Bun.file(gameMetadataPath).json());
-    child = Bun.spawn(
-      [
-        "bunx",
-        "vite",
-        "build",
-        "--config",
-        "apps/web/vite.config.ts",
-        "--mode",
-        "test",
-        "--outDir",
-        "../../test-results/pages-build",
-      ],
-      {
-        env: {
-          ...taskEnv,
-          VITE_SCRABBLE_ENDPOINT: connection.endpoint,
-          VITE_SCRABBLE_API: connection.api,
-          VITE_SCRABBLE_TEST_CERTIFICATE_HASH: connection.certificateHash
-            .map((byte) => byte.toString(16).padStart(2, "0"))
-            .join(""),
-        },
-        stdout: "inherit",
-        stderr: "inherit",
-      },
-    );
-    if ((await child.exited) !== 0) {
-      throw new Error("Pages test build failed");
-    }
+    await buildClient("pages-build", "test", {
+      VITE_SCRABBLE_ENDPOINT: connection.endpoint,
+      VITE_SCRABBLE_API: connection.api,
+      VITE_SCRABBLE_TEST_CERTIFICATE_HASH: connection.certificateHash
+        .map((byte) => byte.toString(16).padStart(2, "0"))
+        .join(""),
+    });
+    const production = { VITE_SCRABBLE_TEST_CERTIFICATE_HASH: "private-certificate-canary" };
+    await buildClient("pages-unconfigured", "production", {
+      ...production,
+      VITE_SCRABBLE_ENDPOINT: "",
+      VITE_SCRABBLE_API: "",
+    });
+    await buildClient("pages-invalid", "production", {
+      ...production,
+      VITE_SCRABBLE_ENDPOINT: "https://game.example/game",
+      VITE_SCRABBLE_API: "http://game.example/api",
+    });
   }
   child = Bun.spawn(
     [
