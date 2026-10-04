@@ -4,6 +4,7 @@ use std::{
     error::Error,
     fs::{self, OpenOptions},
     io::Write,
+    net::Ipv4Addr,
     path::Path,
 };
 use wtransport::Identity;
@@ -38,10 +39,17 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     if !matches!(config.mode, Mode::Local) {
         return Err("local TLS provisioning is forbidden in production".into());
     }
+    let address = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "127.0.0.1".to_owned());
+    let ip: Ipv4Addr = address.parse()?;
+    if !ip.is_private() && !ip.is_loopback() {
+        return Err("local TLS requires a private LAN or loopback IPv4 address".into());
+    }
     let identity = match (config.certificate.exists(), config.private_key.exists()) {
         (true, true) => Identity::load_pemfiles(&config.certificate, &config.private_key).await?,
         (false, false) => {
-            let identity = Identity::self_signed(["localhost", "127.0.0.1", "::1"])?;
+            let identity = Identity::self_signed(["localhost", "127.0.0.1", "::1", address.as_str()])?;
             write_new(&config.private_key, identity.private_key().to_secret_pem().as_bytes(), true)?;
             write_new(&config.certificate, identity.certificate_chain().as_slice()[0].to_pem().as_bytes(), false)?;
             identity
@@ -51,7 +59,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     println!(
         "{}",
         serde_json::to_string(&serde_json::json!({
-            "endpoint": format!("https://127.0.0.1:{}{}", config.port, config.route_prefix.as_str()),
+            "endpoint": format!("https://{address}:{}{}", config.port, config.route_prefix.as_str()),
             "certificateHash": identity.certificate_chain().as_slice()[0].hash().as_ref(),
         }))?
     );
