@@ -53,6 +53,7 @@ export const publicSnapshot = z.strictObject({
     )
     .max(4),
   remaining_tiles: z.int().min(0).max(65535),
+  host: z.strictObject({ id: id.nullable() }).optional(),
   preview: z.strictObject({ player_id: id, turn: id, tiles: z.array(tile).max(15) }).nullable(),
 });
 export const ruleset = z

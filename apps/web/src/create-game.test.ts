@@ -34,5 +34,5 @@ test("a new intent produces a fresh 128-bit browser nonce and a safe Unix timest
   expect(first.requestId).toMatch(/^[0-9a-f]{32}$/);
   expect(first.requestId).not.toBe(second.requestId);
   expect(Number.isSafeInteger(first.requestedAt)).toBe(true);
-  expect(first.version).toBe(1);
+  expect(first.version).toBe(2);
 });

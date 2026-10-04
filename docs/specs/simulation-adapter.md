@@ -13,3 +13,5 @@ Canonical evidence wrapper version 1 has `version`, `admitted`, `last_admitted_p
 See [the simulation decision](../adr/0005-simulation-adapter.md) for grace expiry and removal policy. `GameState::remove_lobby_player` permits only an undealt lobby seat and preserves bag/inventory. Started seats retain ownership while retired identities lose private access. Explicit forfeit resolution remains #27, and immediate disconnect/reconnect preview notifications remain #26 because upstream's current trait has no such hook.
 
 Run `cargo test -p scrabble-server --locked` for adapter, real-runtime replay/recovery and wire-fixture compatibility evidence; these tests need no browser or network listener. Full repository checks remain `bun run check`. Shared convention sourceRevision: `46d8793bb3034326561f876dcc67dbaa5aa1e432`.
+
+New version-two created matches use a separate shared board actor and named phone seats. Their role authority, canonical reconstruction and rack isolation are specified in [ADR 0007](../adr/0007-shared-board-authority.md). Legacy configured and version-one created matches retain the existing construction and replay behavior.

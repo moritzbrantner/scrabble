@@ -15,19 +15,21 @@ http://localhost:5173/scrabble/?server=https%3A%2F%2F127.0.0.1%3A4433%2Fgame&api
 `POST /games` requires `Content-Type: application/json` and this strict versioned body:
 
 ```json
-{ "version": 1, "requestId": "0123456789abcdef0123456789abcdef", "requestedAt": 1791070000 }
+{ "version": 2, "requestId": "0123456789abcdef0123456789abcdef", "requestedAt": 1791070000 }
 ```
 
 The board generates 16 cryptographically random bytes and a Unix-seconds timestamp once per creation intent. Retries reuse both fields. The server accepts requests less than 120 seconds old and at most 10 seconds ahead of its clock. Invalid/future requests return 400; expired requests return 410 even if the game still exists. An expired request requires an explicit new intent; the board never silently allocates another game after losing a response.
+
+Version two uses the `scrabble/create/v2` HMAC domain and `b_` match namespace to keep the shared board outside the playing roster. The board proves its role using the private creation nonce; it receives no playing rack. Version one remains accepted with its unchanged `scrabble/create/v1` domain and `g_` construction rules for old retries and replay histories. See [shared board authority](../adr/0007-shared-board-authority.md).
 
 A domain-separated HMAC-SHA256 under the persisted private initialization key derives the ID's 128-bit opaque suffix. The canonical ID also embeds the original timestamp, allowing the factory to reconstruct lifecycle inputs during replay. It is independent of player/reconnect credentials. Successful first creation and duplicate retry both return 200:
 
 ```json
 {
   "version": 1,
-  "matchId": "g_000000006ac18f30_0123456789abcdef0123456789abcdef",
+  "matchId": "b_000000006ac18f30_0123456789abcdef0123456789abcdef",
   "gameId": "123456789",
-  "matchPath": "/game/matches/g_000000006ac18f30_0123456789abcdef0123456789abcdef",
+  "matchPath": "/game/matches/b_000000006ac18f30_0123456789abcdef0123456789abcdef",
   "expiresAt": 1791091600
 }
 ```
@@ -48,7 +50,7 @@ Lifecycle is stored only inside `ScrabbleSimulation`'s canonical snapshot. Initi
 
 ## HTTP bounds and evidence
 
-Headers are limited to 4 KiB, bodies to 512 bytes, concurrent requests to 32, and request/response work to five seconds each. Duplicate framing headers, transfer encoding, malformed/oversized bodies and trailing buffered data fail before game operations. The configured origin is the only browser origin accepted; origin checks are not authentication. Non-browser requests can omit `Origin`. No cookies or browser storage hold creation requests or reconnect capabilities.
+Headers are limited to 4 KiB, bodies to 512 bytes, concurrent requests to 32, and request/response work to five seconds each. Duplicate framing headers, transfer encoding, malformed/oversized bodies and trailing buffered data fail before game operations. The configured origin is the only browser origin accepted; origin checks are not authentication. Non-browser requests can omit `Origin`. Creation requests are not retained in cookies, browser storage or URLs. Board and phone reconnect capsules use separate tab-scoped session-storage keys; each contains only its version, canonical route, authenticated actor ID, reconnect token and next-command sequence state. No canonical snapshots, rack contents or creation nonces enter storage.
 
 Real-process tests cover zero-match startup, concurrent retries, public-only responses, immediate canonical admission, origin/capacity/drain rejection, and retry/reconnect after restart. A real-runtime Scrabble test advances the supplied clock to retirement, then proves active-session closure, admission/reconnect rejection, freed capacity and expired-retry refusal. Chromium deliberately loses a successful creation response, recovers the same game from the board UI, and renders its live public board. Protocol, lifecycle projection/replay and malformed HTTP framing tests cover the remaining boundaries.
 

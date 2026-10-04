@@ -62,6 +62,9 @@ export function CreateBoard({
         <LiveBoard
           endpoint={endpoint}
           matchId={state.join.matchId}
+          {...(request.current === undefined
+            ? {}
+            : { boardClaim: { requestId: request.current.requestId, gameId: state.join.gameId } })}
           {...(certificateHash === undefined ? {} : { certificateHash })}
         />
       </>

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { z } from "zod";
 import jsQR from "jsqr";
@@ -14,6 +14,68 @@ const fixture = z
     certificateHash: z.array(z.int().min(0).max(255)).length(32),
   })
   .parse(JSON.parse(readFileSync(path, "utf8")));
+
+type Observed = {
+  gameId: string;
+  order: string[];
+  active: string | null;
+  turn: string | null;
+  remaining: number;
+  rackCount: number;
+  tileIds: string[];
+  recipient: string;
+};
+declare global {
+  // oxlint-disable-next-line typescript/consistent-type-definitions -- DOM Window requires declaration merging.
+  interface Window {
+    scrabbleObserved?: Observed;
+  }
+}
+/** Observe the decoded wire seam without persisting payloads or exposing credentials. */
+async function observeProjection(page: Page) {
+  await page.evaluate(async () => {
+    const wirePath = "/scrabble/src/transport/wire.ts";
+    const { SnapshotReassembler } = (await import(
+      wirePath
+    )) as typeof import("../src/transport/wire");
+    const gamePath = "/scrabble/src/game-protocol.ts";
+    const { decodePlayerSnapshot } = (await import(
+      gamePath
+    )) as typeof import("../src/game-protocol");
+    // oxlint-disable-next-line typescript/unbound-method -- The wrapper explicitly binds each reassembler below.
+    const original = SnapshotReassembler.prototype.accept;
+    SnapshotReassembler.prototype.accept = function (bytes: Uint8Array) {
+      const frame = original.call(this, bytes);
+      if (frame !== undefined) {
+        const raw: unknown = JSON.parse(new TextDecoder().decode(frame.payload));
+        // The application independently validates the recipient against its welcome.
+        if (
+          raw !== null &&
+          typeof raw === "object" &&
+          "own_rack" in raw &&
+          raw.own_rack !== null &&
+          typeof raw.own_rack === "object" &&
+          "player_id" in raw.own_rack &&
+          typeof raw.own_rack.player_id === "string"
+        ) {
+          const snapshot = decodePlayerSnapshot(frame.payload, raw.own_rack.player_id);
+          window.scrabbleObserved = {
+            gameId: snapshot.public.game_id,
+            order: snapshot.public.players.map((player) => player.id),
+            active:
+              snapshot.public.phase.kind === "playing" ? snapshot.public.phase.active_player : null,
+            turn: snapshot.public.phase.kind === "playing" ? snapshot.public.phase.turn : null,
+            remaining: snapshot.public.remaining_tiles,
+            rackCount: snapshot.own_rack.tiles.length,
+            tileIds: snapshot.own_rack.tiles.map((tile) => tile.id),
+            recipient: snapshot.own_rack.player_id,
+          };
+        }
+      }
+      return frame;
+    };
+  });
+}
 
 test("board recovers a lost creation response with one game, then joins its real canonical route", async ({
   page,
@@ -127,13 +189,12 @@ test("board recovers a lost creation response with one game, then joins its real
   );
   expect(result.phase).toBe("lobby");
   expect(result.gameId).toMatch(/^[0-9]+$/);
-  expect(
-    await page.evaluate(() => ({
-      local: Object.keys(localStorage),
-      session: Object.keys(sessionStorage),
-      url: location.href,
-    })),
-  ).toEqual({ local: [], session: [], url: page.url() });
+  const storage = await page.evaluate(() => ({
+    local: Object.keys(localStorage),
+    purposes: Object.keys(sessionStorage).map((key) => key.split(":")[1]),
+    privateUrl: /requestId|token|reconnect|sequence/.test(location.href),
+  }));
+  expect(storage).toEqual({ local: [], purposes: ["board"], privateUrl: false });
   expect(href).not.toContain("requestId");
   await page.reload();
   await expect(page.getByRole("table", { name: "Scrabble board" })).toBeVisible();
@@ -165,10 +226,17 @@ test("lobby tracks joined players and confirms Start from authoritative snapshot
   await guest.getByLabel("Player name", { exact: true }).fill("Lin");
   await guest.getByRole("button", { name: "Join game", exact: true }).click();
   const roster = page.getByRole("list", { name: "Players and scores" });
+  await expect(roster.getByRole("listitem")).toHaveCount(1);
+  await expect(start).toBeDisabled();
+  const secondGuest = await context.newPage();
+  await secondGuest.goto(invite ?? "");
+  await secondGuest.getByLabel("Player name", { exact: true }).fill("Max");
+  await secondGuest.getByRole("button", { name: "Join game", exact: true }).click();
   await expect(roster.getByRole("listitem")).toHaveCount(2);
   await expect(start).toBeEnabled();
   await expect(guest.getByRole("button", { name: "Start game", exact: true })).toHaveCount(0);
-  await expect(roster).toContainText("Player 1");
+  await expect(roster).not.toContainText("Player 1");
+  await expect(roster).toContainText("Max");
   await expect(roster).toContainText("Lin");
   await expect(roster.getByRole("listitem").filter({ hasText: "Connected" })).toHaveCount(2);
   await page.evaluate(async () => {
@@ -191,11 +259,13 @@ test("lobby tracks joined players and confirms Start from authoritative snapshot
   await expect(start).toBeEnabled();
   await start.click();
   await expect(page.getByText("Turn 1", { exact: true })).toBeVisible();
-  await expect(guest.getByText("Waiting for Player 1.", { exact: true })).toBeVisible();
+  await expect(guest.getByText("It is your turn.", { exact: true })).toBeVisible();
+  await expect(secondGuest.getByText("Waiting for Lin.", { exact: true })).toBeVisible();
   await expect(start).toHaveCount(0);
   await guest.close();
   await expect(roster.getByRole("listitem").filter({ hasText: "Disconnected" })).toHaveCount(1);
   await expect(roster.getByRole("listitem")).toHaveCount(2);
+  await secondGuest.close();
 });
 
 test("player invitations reject malformed and expired games before transport admission", async ({
@@ -227,6 +297,7 @@ test("phone names preserve distinct identities across refresh and full-game fail
   await page.goto(
     `./?server=${encodeURIComponent(fixture.endpoint)}&api=${encodeURIComponent(fixture.api)}&certificate=${certificate}`,
   );
+  await observeProjection(page);
   await page.getByRole("button", { name: "Create game", exact: true }).click();
   const href = await page
     .getByRole("link", { name: "Join this game", exact: true })
@@ -234,12 +305,14 @@ test("phone names preserve distinct identities across refresh and full-game fail
   const firstContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const secondContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const thirdContext = await browser.newContext();
+  const fourthContext = await browser.newContext();
   const fullContext = await browser.newContext();
   try {
     const first = await firstContext.newPage();
     const second = await secondContext.newPage();
     for (const phone of [first, second]) {
       await phone.goto(href ?? "");
+      await observeProjection(phone);
       await expect(phone.getByRole("table", { name: "Scrabble board" })).toHaveCount(0);
       await phone.getByLabel("Player name", { exact: true }).fill("Ada");
       await phone.getByRole("button", { name: "Join game", exact: true }).click();
@@ -252,6 +325,7 @@ test("phone names preserve distinct identities across refresh and full-game fail
     await expect(roster.getByRole("listitem").filter({ hasText: "Ada" })).toHaveCount(2);
     for (let refresh = 0; refresh < 2; refresh++) {
       await first.reload();
+      await observeProjection(first);
       await expect(first.getByRole("heading", { name: "Ada", exact: true })).toBeVisible();
       await expect(first.getByTestId("player-identity")).toHaveText(firstId ?? "");
       await expect(first.getByLabel("Player name", { exact: true })).toHaveCount(0);
@@ -276,31 +350,67 @@ test("phone names preserve distinct identities across refresh and full-game fail
     });
     const third = await thirdContext.newPage();
     await third.goto(href ?? "");
+    await observeProjection(third);
     await third.getByLabel("Player name", { exact: true }).fill("Lin");
     await third.getByRole("button", { name: "Join game", exact: true }).click();
     await expect(third.getByRole("heading", { name: "Lin", exact: true })).toBeVisible();
+    const fourth = await fourthContext.newPage();
+    await fourth.goto(href ?? "");
+    await observeProjection(fourth);
+    await fourth.getByLabel("Player name", { exact: true }).fill("Jo");
+    await fourth.getByRole("button", { name: "Join game", exact: true }).click();
+    await expect(fourth.getByRole("heading", { name: "Jo", exact: true })).toBeVisible();
     const full = await fullContext.newPage();
     await full.goto(href ?? "");
-    await full.getByLabel("Player name", { exact: true }).fill("Fourth");
+    await full.getByLabel("Player name", { exact: true }).fill("Fifth");
     await full.getByRole("button", { name: "Join game", exact: true }).click();
     await expect(full.getByRole("alert")).toContainText("game is full");
     await expect(full.getByTestId("player-identity")).toHaveCount(0);
     await expect(roster.getByRole("listitem")).toHaveCount(4);
     await page.getByRole("button", { name: "Start game", exact: true }).click();
     await expect(page.getByText("Turn 1", { exact: true })).toBeVisible();
-    await expect(first.getByText("Waiting for Player 1.", { exact: true })).toBeVisible();
+    await expect(first.getByText("It is your turn.", { exact: true })).toBeVisible();
+    for (const phone of [second, third, fourth]) {
+      await expect(phone.getByText("Waiting for Ada.", { exact: true })).toBeVisible();
+    }
+    await expect.poll(() => page.evaluate(() => window.scrabbleObserved?.turn)).toBe("0");
+    const board = await page.evaluate(() => window.scrabbleObserved);
+    expect(board?.rackCount).toBe(0);
+    expect(board?.tileIds).toEqual([]);
+    expect(board?.order).not.toContain(board?.recipient);
+    expect(board?.remaining).toBe(72);
+    const tileIds = new Set<string>();
+    for (const phone of [first, second, third, fourth]) {
+      await expect.poll(() => phone.evaluate(() => window.scrabbleObserved?.turn)).toBe("0");
+      const projection = await phone.evaluate(() => window.scrabbleObserved);
+      expect(projection?.rackCount).toBe(7);
+      expect(projection?.order).toEqual(board?.order);
+      expect(projection?.active).toBe(board?.active);
+      expect(projection?.turn).toBe(board?.turn);
+      expect(projection?.remaining).toBe(board?.remaining);
+      expect(projection?.gameId).toBe(board?.gameId);
+      for (const id of projection?.tileIds ?? []) {
+        expect(tileIds.has(id)).toBe(false);
+        tileIds.add(id);
+      }
+    }
+    expect(tileIds.size).toBe(28);
+    await page.reload();
+    await expect(page.getByText("Turn 1", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Start game", exact: true })).toHaveCount(0);
     await full.getByRole("button", { name: "Retry player connection", exact: true }).click();
     await expect(full.getByRole("alert")).toContainText("game has already started");
     await first.reload();
     await expect(first.getByTestId("player-identity")).toHaveText(firstId ?? "");
     await expect(first.getByRole("heading", { name: "Ada", exact: true })).toBeVisible();
     await expect(first.getByRole("table", { name: "Scrabble board" })).toHaveCount(0);
-    await expect(first.getByText("Waiting for Player 1.", { exact: true })).toBeVisible();
+    await expect(first.getByText("It is your turn.", { exact: true })).toBeVisible();
   } finally {
     await Promise.all([
       firstContext.close(),
       secondContext.close(),
       thirdContext.close(),
+      fourthContext.close(),
       fullContext.close(),
     ]);
   }

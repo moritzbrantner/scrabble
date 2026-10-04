@@ -3,14 +3,14 @@ import { id } from "./public-state";
 import { matchUrl } from "./transport/browser-match";
 
 const createRequest = z.strictObject({
-  version: z.literal(1),
+  version: z.literal(2),
   requestId: z.string().regex(/^[0-9a-f]{32}$/),
   requestedAt: z.int().min(0).max(Number.MAX_SAFE_INTEGER),
 });
 export type CreateRequest = z.infer<typeof createRequest>;
 const joinInformation = z.strictObject({
   version: z.literal(1),
-  matchId: z.string().regex(/^g_[0-9a-f]{16}_[0-9a-f]{32}$/),
+  matchId: z.string().regex(/^[gb]_[0-9a-f]{16}_[0-9a-f]{32}$/),
   gameId: id,
   matchPath: z.string(),
   expiresAt: z.int().min(0).max(Number.MAX_SAFE_INTEGER),
@@ -28,7 +28,7 @@ export class CreationError extends Error {
 export function newCreateRequest(): CreateRequest {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   return {
-    version: 1,
+    version: 2,
     requestId: Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(""),
     requestedAt: Math.floor(Date.now() / 1000),
   };

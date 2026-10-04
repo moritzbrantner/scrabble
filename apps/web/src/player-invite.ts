@@ -2,7 +2,7 @@ import QRCode from "qrcode";
 import { matchUrl } from "./transport/browser-match";
 
 export function validInviteId(value: string): boolean {
-  return /^g_[0-9a-f]{16}_[0-9a-f]{32}$/.test(value);
+  return /^[gb]_[0-9a-f]{16}_[0-9a-f]{32}$/.test(value);
 }
 
 /** Rebuild public routing; never forward arbitrary query fields or fragments. */
