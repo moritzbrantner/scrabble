@@ -19,6 +19,7 @@ pub struct Placement {
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
     Start {},
+    ClaimBoard { request_id: String },
     SetName { display_name: String },
     Preview { placements: Vec<Placement> },
     Commit { placements: Vec<Placement> },
@@ -48,7 +49,10 @@ impl CommandEnvelope {
         let count = match &envelope.command {
             Command::Preview { placements } | Command::Commit { placements } => placements.len(),
             Command::Exchange { tile_ids } => tile_ids.len(),
-            Command::Start {} | Command::Pass {} | Command::SetName { .. } => 0,
+            Command::Start {}
+            | Command::Pass {}
+            | Command::SetName { .. }
+            | Command::ClaimBoard { .. } => 0,
         };
         if count > 15 {
             return Err(ContractError("command exceeds tile limit".into()));
@@ -115,6 +119,14 @@ pub struct PublicSnapshot {
     pub remaining_tiles: u16,
     /// Ephemeral projection. Never part of canonical replay or score calculation.
     pub preview: Option<PublicPreview>,
+    /// Present only for matches with a shared board outside the playing roster.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<PublicHost>,
+}
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PublicHost {
+    pub id: Option<PlayerId>,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

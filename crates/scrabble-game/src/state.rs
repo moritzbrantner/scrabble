@@ -488,6 +488,7 @@ impl GameState {
             })
             .collect();
         PublicSnapshot {
+            host: None,
             version: ProtocolVersion,
             game_id: self.game_id,
             revision: self.revision,

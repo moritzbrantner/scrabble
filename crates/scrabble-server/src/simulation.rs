@@ -1,7 +1,7 @@
 use game_server::{GameSimulation, SimulationError, SimulationSnapshot, SnapshotScope};
 use scrabble_game::{
     identity::{GameId, PlayerId},
-    protocol::{CommandEnvelope, Phase},
+    protocol::{Command, CommandEnvelope, Phase, PlayerSnapshot, PrivateRack, PublicHost},
     ruleset::Ruleset,
     session::GameSession,
     state::{GameState, StateError},
@@ -19,6 +19,12 @@ pub struct ScrabbleSimulation {
     admitted: BTreeSet<u32>,
     last_admitted_player: Option<u32>,
     lifecycle: Option<MatchLifecycle>,
+    board: Option<BoardLobby>,
+}
+
+struct BoardLobby {
+    authority: crate::factory::BoardAuthority,
+    owner: Option<u32>,
 }
 
 pub const MATCH_LIFETIME_SECONDS: u64 = 6 * 60 * 60;
@@ -68,7 +74,39 @@ impl ScrabbleSimulation {
             admitted: BTreeSet::new(),
             last_admitted_player: None,
             lifecycle: None,
+            board: None,
         })
+    }
+
+    pub(crate) fn with_board_authority(
+        mut self,
+        authority: crate::factory::BoardAuthority,
+    ) -> Self {
+        self.board = Some(BoardLobby {
+            authority,
+            owner: None,
+        });
+        self
+    }
+
+    fn player_projection(&self, player: PlayerId) -> Result<PlayerSnapshot, SimulationError> {
+        let mut snapshot = if self.board.is_some() && self.session.state().rack(player).is_none() {
+            PlayerSnapshot {
+                public: self.session.public_snapshot(),
+                own_rack: PrivateRack {
+                    player_id: player,
+                    tiles: vec![],
+                },
+            }
+        } else {
+            self.session.player_snapshot(player).map_err(error)?
+        };
+        if let Some(board) = &self.board {
+            snapshot.public.host = Some(PublicHost {
+                id: board.owner.map(|id| PlayerId::new(u64::from(id))),
+            });
+        }
+        Ok(snapshot)
     }
 
     pub fn with_lifecycle(mut self, created_at: u64) -> Self {
@@ -95,6 +133,7 @@ impl GameSimulation for ScrabbleSimulation {
     }
     fn max_players(&self) -> usize {
         usize::from(self.session.state().ruleset().maximum_players)
+            + usize::from(self.board.is_some())
     }
     fn current_tick(&self) -> u64 {
         self.tick
@@ -109,12 +148,21 @@ impl GameSimulation for ScrabbleSimulation {
                 "player identities must increase and cannot be reassigned",
             ));
         }
-        self.session
-            .add_player(
-                PlayerId::new(u64::from(player_id)),
-                format!("Player {player_id}"),
-            )
-            .map_err(error)?;
+        if self.board.is_some() {
+            if !matches!(self.session.state().phase(), Phase::Lobby {}) {
+                return Err(error(StateError::WrongPhase));
+            }
+            if self.admitted.len() >= self.max_players() {
+                return Err(error(StateError::PlayerLimit));
+            }
+        } else {
+            self.session
+                .add_player(
+                    PlayerId::new(u64::from(player_id)),
+                    format!("Player {player_id}"),
+                )
+                .map_err(error)?;
+        }
         self.admitted.insert(player_id);
         self.last_admitted_player = Some(player_id);
         Ok(())
@@ -131,13 +179,21 @@ impl GameSimulation for ScrabbleSimulation {
         }
         let player = PlayerId::new(u64::from(player_id));
         if matches!(self.session.state().phase(), Phase::Lobby {}) {
-            self.session.remove_lobby_player(player).map_err(error)?;
+            if self.session.state().rack(player).is_some() {
+                self.session.remove_lobby_player(player).map_err(error)?;
+            }
         } else {
             // Expiry never donates the rack or replaces a started game's seat.
             // Forfeit/turn resolution is the explicit policy added in #27.
             self.session.clear_preview_for(player);
         }
+        self.session.forget_actor(player);
         self.admitted.remove(&player_id);
+        if let Some(board) = &mut self.board
+            && board.owner == Some(player_id)
+        {
+            board.owner = None;
+        }
 
         Ok(true)
     }
@@ -155,9 +211,48 @@ impl GameSimulation for ScrabbleSimulation {
             ));
         }
         let envelope = CommandEnvelope::decode(payload).map_err(error)?;
-        self.session
-            .apply(player, sequence, &envelope)
-            .map_err(error)?;
+        if let Some(board) = &mut self.board {
+            match &envelope.command {
+                Command::ClaimBoard { request_id } => {
+                    if self.session.state().rack(player).is_some()
+                        || board.owner.is_some_and(|owner| owner != player_id)
+                        || !board.authority.verify(request_id)
+                    {
+                        return Err(SimulationError::new("board ownership proof rejected"));
+                    }
+                    self.session
+                        .accept_board_claim(player, sequence, &envelope)
+                        .map_err(error)?;
+                    board.owner = Some(player_id);
+                }
+                Command::SetName { .. } => {
+                    if board.owner == Some(player_id) {
+                        return Err(SimulationError::new("board cannot occupy a playing seat"));
+                    }
+                    self.session
+                        .join_named_player(player, sequence, &envelope)
+                        .map_err(error)?;
+                }
+                Command::Start {} => {
+                    if board.owner != Some(player_id) {
+                        return Err(SimulationError::new(
+                            "only the shared board can start this match",
+                        ));
+                    }
+                    self.session
+                        .start_by_authorized_board(player, sequence, &envelope)
+                        .map_err(error)?;
+                }
+                _ => self
+                    .session
+                    .apply(player, sequence, &envelope)
+                    .map_err(error)?,
+            }
+        } else {
+            self.session
+                .apply(player, sequence, &envelope)
+                .map_err(error)?;
+        }
         if matches!(self.session.state().phase(), Phase::Finished { .. })
             && let Some(lifecycle) = &mut self.lifecycle
             && lifecycle.finished_at_tick.is_none()
@@ -188,15 +283,25 @@ impl GameSimulation for ScrabbleSimulation {
             game: &'a RawValue,
             #[serde(skip_serializing_if = "Option::is_none")]
             lifecycle: Option<&'a MatchLifecycle>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            board: Option<CanonicalBoard>,
+        }
+        #[derive(Serialize)]
+        struct CanonicalBoard {
+            owner: Option<u32>,
         }
         let game = self.session.state().canonical_bytes().map_err(error)?;
         let game: Box<RawValue> = serde_json::from_slice(&game).map_err(error)?;
         let payload = serde_json::to_vec(&Canonical {
-            version: 1,
+            version: if self.board.is_some() { 2 } else { 1 },
             admitted: &self.admitted,
             last_admitted_player: self.last_admitted_player,
             game: &game,
             lifecycle: self.lifecycle.as_ref(),
+            board: self
+                .board
+                .as_ref()
+                .map(|board| CanonicalBoard { owner: board.owner }),
         })
         .map_err(error)?;
         Ok(SimulationSnapshot::new(self.tick, payload))
@@ -204,7 +309,7 @@ impl GameSimulation for ScrabbleSimulation {
 
     fn snapshot_for(&self, player_id: u32) -> Result<SimulationSnapshot, SimulationError> {
         let player = self.require_admitted(player_id)?;
-        let snapshot = self.session.player_snapshot(player).map_err(error)?;
+        let snapshot = self.player_projection(player)?;
         let payload = serde_json::to_vec(&snapshot).map_err(error)?;
         Ok(SimulationSnapshot::new(self.tick, payload))
     }
@@ -214,7 +319,7 @@ impl GameSimulation for ScrabbleSimulation {
         context: game_server::PlayerSnapshotContext<'_>,
     ) -> Result<SimulationSnapshot, SimulationError> {
         let player = self.require_admitted(player_id)?;
-        let mut snapshot = self.session.player_snapshot(player).map_err(error)?;
+        let mut snapshot = self.player_projection(player)?;
         for player in &mut snapshot.public.players {
             let id = u32::try_from(player.id.get()).map_err(error)?;
             player.connected = Some(context.is_connected(id));

@@ -127,10 +127,38 @@ impl MatchFactory {
         })
     }
 
+    /// Version two separates the shared board from playing seats. The private creation
+    /// nonce also proves board ownership; it never becomes public join information.
+    pub fn board_creation_id(&self, request_id: &str, requested_at: u64) -> ErrorResult<MatchId> {
+        self.derive_creation_id(request_id, requested_at, b"scrabble/create/v2\0", "b")
+    }
+
+    pub fn board_authority(&self, id: &MatchId) -> ErrorResult<BoardAuthority> {
+        if !id.as_str().starts_with("b_") {
+            return Err("match does not support a separate board".into());
+        }
+        let created_at = creation_time(id).ok_or("invalid board match identity")?;
+        Ok(BoardAuthority {
+            factory: self.clone(),
+            id: id.clone(),
+            created_at,
+        })
+    }
+
     /// A domain-separated MAC allocates an opaque ID without retaining a retry-key table.
     pub fn creation_id(&self, request_id: &str, requested_at: u64) -> ErrorResult<MatchId> {
+        self.derive_creation_id(request_id, requested_at, b"scrabble/create/v1\0", "g")
+    }
+
+    fn derive_creation_id(
+        &self,
+        request_id: &str,
+        requested_at: u64,
+        domain: &[u8],
+        prefix: &str,
+    ) -> ErrorResult<MatchId> {
         let mut derivation = hmac::Context::with_key(&self.key);
-        derivation.update(b"scrabble/create/v1\0");
+        derivation.update(domain);
         derivation.update(&requested_at.to_be_bytes());
         derivation.update(request_id.as_bytes());
         let tag = derivation.sign();
@@ -138,7 +166,9 @@ impl MatchFactory {
             .iter()
             .map(|byte| format!("{byte:02x}"))
             .collect();
-        Ok(MatchId::new(format!("g_{requested_at:016x}_{suffix}"))?)
+        Ok(MatchId::new(format!(
+            "{prefix}_{requested_at:016x}_{suffix}"
+        ))?)
     }
 
     pub fn create(&self, id: &MatchId) -> ErrorResult<ScrabbleSimulation> {
@@ -147,6 +177,11 @@ impl MatchFactory {
         derivation.update(id.as_str().as_bytes());
         let seed: [u8; 32] = derivation.sign().as_ref().try_into()?;
         let simulation = ScrabbleSimulation::new(game_id(id), english_fixture(), seed)?;
+        let simulation = if id.as_str().starts_with("b_") {
+            simulation.with_board_authority(self.board_authority(id)?)
+        } else {
+            simulation
+        };
         Ok(match creation_time(id) {
             Some(created_at) => simulation.with_lifecycle(created_at),
             None => simulation,
@@ -155,7 +190,10 @@ impl MatchFactory {
 }
 
 pub fn creation_time(id: &MatchId) -> Option<u64> {
-    let value = id.as_str().strip_prefix("g_")?;
+    let value = id
+        .as_str()
+        .strip_prefix("g_")
+        .or_else(|| id.as_str().strip_prefix("b_"))?;
     let (timestamp, tag) = value.split_once('_')?;
     if timestamp.len() != 16
         || tag.len() != 32
@@ -186,4 +224,24 @@ pub fn create_matches(config: &ServerConfig) -> ErrorResult<Vec<(MatchId, Scrabb
         matches.push((id.clone(), factory.create(id)?));
     }
     Ok(matches)
+}
+
+/// Immutable factory input, excluded from Debug, canonical snapshots and public projections.
+/// Comparing MAC-derived IDs compares public values, not the private derivation key.
+pub struct BoardAuthority {
+    factory: MatchFactory,
+    id: MatchId,
+    created_at: u64,
+}
+impl BoardAuthority {
+    pub fn verify(&self, request_id: &str) -> bool {
+        request_id.len() == 32
+            && request_id
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+            && self
+                .factory
+                .board_creation_id(request_id, self.created_at)
+                .is_ok_and(|id| id == self.id)
+    }
 }

@@ -52,8 +52,7 @@ impl GameSession {
     }
     pub fn remove_lobby_player(&mut self, player: PlayerId) -> Result<(), StateError> {
         self.state.remove_lobby_player(player)?;
-        self.last_sequences.remove(&player);
-        self.clear_preview_for(player);
+        self.forget_actor(player);
         Ok(())
     }
     pub fn public_snapshot(&self) -> PublicSnapshot {
@@ -74,18 +73,7 @@ impl GameSession {
         sequence: u32,
         envelope: &CommandEnvelope,
     ) -> Result<(), CommandError> {
-        if envelope.game_id != self.state.game_id() {
-            return Err(CommandError::WrongGame);
-        }
-        if player != envelope.player_id {
-            return Err(CommandError::WrongIdentity);
-        }
-        if sequence == 0 || sequence != envelope.sequence {
-            return Err(CommandError::WrongSequence);
-        }
-        if sequence <= self.last_sequences.get(&player).copied().unwrap_or(0) {
-            return Err(CommandError::StaleSequence);
-        }
+        self.validate_actor(player, sequence, envelope)?;
         if self.state.rack(player).is_none() {
             return Err(StateError::UnknownPlayer.into());
         }
@@ -137,7 +125,7 @@ impl GameSession {
                         self.state.advance_turn()?;
                         self.preview = None;
                     }
-                    Command::Start {} | Command::SetName { .. } => {
+                    Command::Start {} | Command::SetName { .. } | Command::ClaimBoard { .. } => {
                         return Err(StateError::WrongPhase.into());
                     }
                     // Commit requires structural/dictionary/scoring integration (#5, #6, #19, #24).
@@ -151,6 +139,101 @@ impl GameSession {
         self.last_sequences.insert(player, sequence);
         Ok(())
     }
+    fn validate_actor(
+        &self,
+        player: PlayerId,
+        sequence: u32,
+        envelope: &CommandEnvelope,
+    ) -> Result<(), CommandError> {
+        if envelope.game_id != self.state.game_id() {
+            return Err(CommandError::WrongGame);
+        }
+        if player != envelope.player_id {
+            return Err(CommandError::WrongIdentity);
+        }
+        if sequence == 0 || sequence != envelope.sequence {
+            return Err(CommandError::WrongSequence);
+        }
+        if sequence <= self.last_sequences.get(&player).copied().unwrap_or(0) {
+            return Err(CommandError::StaleSequence);
+        }
+        Ok(())
+    }
+
+    /// Separate-board matches admit transport actors before assigning playing seats.
+    /// The simulation has already ruled out the board identity before calling this.
+    pub fn join_named_player(
+        &mut self,
+        player: PlayerId,
+        sequence: u32,
+        envelope: &CommandEnvelope,
+    ) -> Result<(), CommandError> {
+        self.validate_lobby_actor(player, sequence, envelope)?;
+        let Command::SetName { display_name } = &envelope.command else {
+            return Err(CommandError::UnsupportedCommand);
+        };
+        if self.state.rack(player).is_some() {
+            self.state.set_display_name(player, display_name.clone())?;
+        } else {
+            self.state.add_player(player, display_name.clone())?;
+        }
+        self.last_sequences.insert(player, sequence);
+        Ok(())
+    }
+
+    /// The adapter must verify board ownership before this trusted operation.
+    pub fn start_by_authorized_board(
+        &mut self,
+        player: PlayerId,
+        sequence: u32,
+        envelope: &CommandEnvelope,
+    ) -> Result<(), CommandError> {
+        self.validate_lobby_actor(player, sequence, envelope)?;
+        if !matches!(envelope.command, Command::Start {}) {
+            return Err(CommandError::UnsupportedCommand);
+        }
+        self.state.deal_initial_racks()?;
+        self.last_sequences.insert(player, sequence);
+        Ok(())
+    }
+
+    /// Record an authenticated board claim only after its private proof is verified.
+    pub fn accept_board_claim(
+        &mut self,
+        player: PlayerId,
+        sequence: u32,
+        envelope: &CommandEnvelope,
+    ) -> Result<(), CommandError> {
+        self.validate_lobby_actor(player, sequence, envelope)?;
+        if !matches!(envelope.command, Command::ClaimBoard { .. }) {
+            return Err(CommandError::UnsupportedCommand);
+        }
+        self.last_sequences.insert(player, sequence);
+        Ok(())
+    }
+
+    fn validate_lobby_actor(
+        &self,
+        player: PlayerId,
+        sequence: u32,
+        envelope: &CommandEnvelope,
+    ) -> Result<(), CommandError> {
+        self.validate_actor(player, sequence, envelope)?;
+        if !matches!(self.state.phase(), Phase::Lobby {}) {
+            return Err(StateError::WrongPhase.into());
+        }
+        if envelope.expected_turn != TurnId::new(0) {
+            return Err(CommandError::StaleTurn);
+        }
+        Ok(())
+    }
+
+    /// Transport expiry ends command-sequence retention, including actors without seats.
+    pub fn forget_actor(&mut self, player: PlayerId) {
+        self.last_sequences.remove(&player);
+        self.clear_preview_for(player);
+    }
+
     /// Connection replacement/loss clears presentation evidence without changing the game.
     pub fn clear_preview_for(&mut self, player: PlayerId) {
         if self

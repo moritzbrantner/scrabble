@@ -30,6 +30,9 @@ fn v1_command_roundtrips_without_identifier_rounding() {
 fn every_command_has_an_unambiguous_v1_encoding() {
     for command in [
         Command::Start {},
+        Command::ClaimBoard {
+            request_id: "07".repeat(16),
+        },
         Command::SetName {
             display_name: "Ada".into(),
         },
@@ -94,6 +97,7 @@ fn invalid_coordinates_and_bounded_commands_are_rejected_before_gameplay() {
 fn public_snapshot_has_no_private_fields_and_rejects_injected_racks() {
     let rules = english_fixture();
     let snapshot = PublicSnapshot {
+        host: None,
         version: ProtocolVersion,
         game_id: GameId::new(1),
         revision: TurnId::new(0),
