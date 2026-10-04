@@ -16,7 +16,10 @@ use wtransport::Identity;
 
 /// Select real creation inputs whose native deal supports the authored AT opening.
 /// No rack, seed key, or alternate gameplay implementation enters browser metadata.
-fn opening(factory: &MatchFactory) -> Result<serde_json::Value, Box<dyn Error + Send + Sync>> {
+fn opening(
+    factory: &MatchFactory,
+    consecutive: bool,
+) -> Result<serde_json::Value, Box<dyn Error + Send + Sync>> {
     let requested_at = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)?
         .as_secs();
@@ -62,12 +65,20 @@ fn opening(factory: &MatchFactory) -> Result<serde_json::Value, Box<dyn Error + 
             simulation.apply_command(player, sequence, &payload)?;
         }
         let own: PlayerSnapshot = serde_json::from_slice(&simulation.snapshot_for(2)?.payload)?;
+        let next: PlayerSnapshot = serde_json::from_slice(&simulation.snapshot_for(3)?.payload)?;
+        let next_can_extend = !consecutive
+            || next
+                .own_rack
+                .tiles
+                .iter()
+                .any(|tile| tile.face == (TileFace::Letter { letter: 'C' }));
         if ['A', 'T'].into_iter().all(|letter| {
             own.own_rack
                 .tiles
                 .iter()
                 .any(|tile| tile.face == (TileFace::Letter { letter }))
-        }) {
+        }) && next_can_extend
+        {
             return Ok(serde_json::json!({ "requestId": request_id, "requestedAt": requested_at }));
         }
     }
@@ -136,7 +147,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 .into(),
         ),
     ]))?;
-    let opening = opening(&MatchFactory::new(&config)?)?;
+    let opening = opening(
+        &MatchFactory::new(&config)?,
+        std::env::args().nth(3).as_deref() == Some("playable"),
+    )?;
     let metadata = serde_json::json!({ "endpoint": format!("https://127.0.0.1:{port}/game"),
         "api": format!("http://127.0.0.1:{api_port}"), "status": format!("http://127.0.0.1:{status_port}"),
         "certificateHash": identity.certificate_chain().as_slice()[0].hash().as_ref(), "opening": opening });

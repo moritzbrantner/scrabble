@@ -2,6 +2,8 @@ import { createServer } from "node:net";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
+const pages = Bun.argv.includes("--pages");
 const server = createServer();
 await new Promise<void>((resolve, reject) => {
   server.once("error", reject);
@@ -45,7 +47,12 @@ const fixture = Bun.spawn(["target/debug/examples/browser_transport_fixture", fi
 });
 const gameDirectory = join(fixtureDirectory, "games");
 const games = Bun.spawn(
-  ["target/debug/examples/browser_game_fixture", gameDirectory, `http://127.0.0.1:${port}`],
+  [
+    "target/debug/examples/browser_game_fixture",
+    gameDirectory,
+    `http://127.0.0.1:${port}`,
+    ...(pages ? ["playable"] : []),
+  ],
   { stdout: "inherit", stderr: "inherit" },
 );
 const gameMetadataPath = join(gameDirectory, "connection.json");
@@ -72,19 +79,66 @@ const taskEnv: NodeJS.ProcessEnv = {
   SCRABBLE_GAME_FIXTURE: gameMetadataPath,
 };
 delete taskEnv.NO_COLOR;
-const child = Bun.spawn(
-  ["bunx", "playwright", "test", "--config", "apps/web/playwright.config.ts"],
-  { env: taskEnv, stdout: "inherit", stderr: "inherit" },
-);
+let child: Bun.Subprocess | undefined;
+const run = async () => {
+  if (pages) {
+    const connection = z
+      .object({
+        endpoint: z.string(),
+        api: z.string(),
+        certificateHash: z.array(z.number()).length(32),
+      })
+      .parse(await Bun.file(gameMetadataPath).json());
+    child = Bun.spawn(
+      [
+        "bunx",
+        "vite",
+        "build",
+        "--config",
+        "apps/web/vite.config.ts",
+        "--mode",
+        "test",
+        "--outDir",
+        "../../test-results/pages-build",
+      ],
+      {
+        env: {
+          ...taskEnv,
+          VITE_SCRABBLE_ENDPOINT: connection.endpoint,
+          VITE_SCRABBLE_API: connection.api,
+          VITE_SCRABBLE_TEST_CERTIFICATE_HASH: connection.certificateHash
+            .map((byte) => byte.toString(16).padStart(2, "0"))
+            .join(""),
+        },
+        stdout: "inherit",
+        stderr: "inherit",
+      },
+    );
+    if ((await child.exited) !== 0) {
+      throw new Error("Pages test build failed");
+    }
+  }
+  child = Bun.spawn(
+    [
+      "bunx",
+      "playwright",
+      "test",
+      "--config",
+      pages ? "apps/web/playwright.pages.config.ts" : "apps/web/playwright.config.ts",
+    ],
+    { env: taskEnv, stdout: "inherit", stderr: "inherit" },
+  );
+  process.exitCode = await child.exited;
+};
 const stop = () => {
-  child.kill("SIGTERM");
+  child?.kill("SIGTERM");
   fixture.kill("SIGINT");
   games.kill("SIGINT");
 };
 process.once("SIGINT", stop);
 process.once("SIGTERM", stop);
 try {
-  process.exitCode = await child.exited;
+  await run();
 } finally {
   fixture.kill("SIGINT");
   games.kill("SIGINT");

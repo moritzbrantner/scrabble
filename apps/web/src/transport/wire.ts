@@ -1,4 +1,6 @@
-import { contract } from "./fixtures/wire.json";
+import fixtures from "./fixtures/wire.json" with { type: "json" };
+
+const contract = fixtures.contract;
 
 export { contract };
 export class ProtocolError extends Error {
