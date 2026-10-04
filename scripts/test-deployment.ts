@@ -1,5 +1,6 @@
 import { mkdtemp, mkdir, copyFile, readFile, rm } from "node:fs/promises";
 import { createServer } from "node:net";
+import { createSocket } from "node:dgram";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decodeJoinInformation, newCreateRequest } from "../apps/web/src/create-game";
@@ -61,7 +62,13 @@ const tls = join(directory, "tls");
 const state = join(directory, "state");
 const content = join(directory, "content");
 const httpsPort = await port();
-const quicPort = await port();
+const quicSocket = createSocket("udp4");
+await new Promise<void>((resolve, reject) => {
+  quicSocket.once("error", reject);
+  quicSocket.bind(0, "127.0.0.1", resolve);
+});
+const quicPort = quicSocket.address().port;
+await new Promise<void>((resolve) => quicSocket.close(resolve));
 Object.assign(env, {
   DEPLOY_TLS_DIRECTORY: tls,
   DEPLOY_STATE_DIRECTORY: state,

@@ -4,6 +4,7 @@ import { matchUrl } from "./transport/browser-match";
 export type ConnectionMode = "development" | "test" | "production";
 export type ConnectionSettings =
   | { kind: "configured"; endpoint: string; api: string }
+  | { kind: "board"; endpoint: string }
   | { kind: "preview" }
   | { kind: "unavailable"; message: "app.serviceUnavailable" | "create.invalidConnection" };
 
@@ -12,7 +13,19 @@ export function connectionSettings(
   mode: ConnectionMode,
   endpoint: string | undefined,
   api: string | undefined,
+  route: "game" | "board" = "game",
 ): ConnectionSettings {
+  if (mode === "development" && route === "board") {
+    try {
+      if (!endpoint) {
+        throw new Error("Missing board endpoint");
+      }
+      matchUrl(endpoint, "validation");
+      return { kind: "board", endpoint };
+    } catch {
+      return { kind: "unavailable", message: "create.invalidConnection" };
+    }
+  }
   if (!endpoint && !api) {
     return mode === "development"
       ? { kind: "preview" }

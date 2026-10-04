@@ -202,6 +202,25 @@ test("board recovers a lost creation response with one game, then joins its real
   expect(restoredStatus.capacity.hostedMatches).toBe(before + 1);
 });
 
+test("an existing development board reconnects without a creation API address", async ({
+  page,
+}) => {
+  const certificate = fixture.certificateHash
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+  await page.goto(
+    `./?server=${encodeURIComponent(fixture.endpoint)}&api=${encodeURIComponent(fixture.api)}&certificate=${certificate}`,
+  );
+  await page.getByRole("button", { name: "Create game", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Join this game", exact: true })).toBeVisible();
+  const board = new URL(page.url());
+  board.searchParams.delete("api");
+  await page.goto(board.href);
+  await expect(page.getByRole("table", { name: "Scrabble board", exact: true })).toBeVisible();
+  await expect(page.getByText(/^Connected · Player/)).toBeVisible();
+  await expect(page.getByText("The game service is unavailable.", { exact: true })).toHaveCount(0);
+});
+
 test("lobby tracks joined players and confirms Start from authoritative snapshots", async ({
   page,
   context,

@@ -26,7 +26,8 @@ export function App() {
   } else if (import.meta.env.MODE === "test") {
     mode = "test";
   }
-  const settings = connectionSettings(mode, endpoint, api);
+  const route = matchId && connection?.get("view") !== "player" ? "board" : "game";
+  const settings = connectionSettings(mode, endpoint, api, route);
   if (settings.kind === "unavailable") {
     return (
       <main className="create-board">
