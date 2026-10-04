@@ -12,6 +12,7 @@ import {
   savePlayerSession,
   type ResumeCapability,
 } from "./transport/resume-capability";
+import { PlayerRack } from "./PlayerRack";
 import { ProtocolError } from "./transport/wire";
 
 type Intent =
@@ -300,6 +301,11 @@ export function PlayerPhone({
   }
   const own = snapshot?.public.players.find((player) => player.id === snapshot.own_rack.player_id);
   const phase = snapshot?.public.phase;
+  const canAct =
+    state.kind === "joined" &&
+    connection.kind === "connected" &&
+    phase?.kind === "playing" &&
+    phase.active_player === snapshot?.own_rack.player_id;
   return (
     <main className="player-phone">
       <h1>{state.kind === "joined" ? (own?.display_name ?? "Player") : "Join game"}</h1>
@@ -339,13 +345,33 @@ export function PlayerPhone({
           <ConnectionStatus state={connection} />
           {phase?.kind === "lobby" && <p>Waiting for the host to start.</p>}
           {phase?.kind === "playing" && (
-            <p>
+            <p role="status" aria-live="polite">
               {phase.active_player === snapshot.own_rack.player_id
                 ? "It is your turn."
                 : `Waiting for ${snapshot.public.players.find((player) => player.id === phase.active_player)?.display_name ?? "the active player"}.`}
             </p>
           )}
           {phase?.kind === "finished" && <p>Game finished.</p>}
+          {own !== undefined && phase?.kind !== "lobby" && (
+            <>
+              <PlayerRack rack={snapshot.own_rack} rules={fixtures.ruleset} canAct={canAct} />
+              <ol className="phone-scores" aria-label="Players and scores">
+                {snapshot.public.players.map((player) => (
+                  <li
+                    key={player.id}
+                    className={
+                      phase?.kind === "playing" && phase.active_player === player.id
+                        ? "active-player"
+                        : ""
+                    }
+                  >
+                    <span>{player.display_name}</span>
+                    <strong aria-label={`${player.score} points`}>{player.score}</strong>
+                  </li>
+                ))}
+              </ol>
+            </>
+          )}
         </>
       )}
     </main>
