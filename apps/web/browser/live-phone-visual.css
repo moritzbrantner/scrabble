@@ -1,0 +1,6 @@
+/* Real deals vary with the generated match identity. Keep target geometry and state visible;
+   deterministic editor screenshots cover the letters and values. */
+.phone-rack .rack-tile span,
+.phone-rack .rack-tile small {
+  visibility: hidden;
+}

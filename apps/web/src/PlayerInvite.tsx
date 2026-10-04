@@ -1,8 +1,10 @@
+import { useCopy } from "./preferences";
 import { Button } from "@moritzbrantner/ui/client";
 import { useMemo, useState } from "react";
 import { inviteQr, playerInviteUrl } from "./player-invite";
 
 export function PlayerInvite({ matchId }: { matchId: string }) {
+  const { t, locale } = useCopy();
   const [copy, setCopy] = useState<"idle" | "copied" | "failed">("idle");
   const invitation = useMemo(() => {
     try {
@@ -16,9 +18,9 @@ export function PlayerInvite({ matchId }: { matchId: string }) {
     } catch {
       return undefined;
     }
-  }, [matchId]);
+  }, [matchId, locale]);
   if (invitation === undefined) {
-    return <p role="alert">Unable to create a player invitation for this game.</p>;
+    return <p role="alert">{t("invite.failed")}</p>;
   }
   const url = invitation.url;
   async function copyLink() {
@@ -30,11 +32,11 @@ export function PlayerInvite({ matchId }: { matchId: string }) {
     }
   }
   return (
-    <section className="player-invite" aria-label="Player invitation">
+    <section className="player-invite" aria-label={t("invite.title")}>
       <svg
         xmlns="http://www.w3.org/2000/svg"
         role="img"
-        aria-label="Scan to join this game"
+        aria-label={t("invite.scan")}
         viewBox={`0 0 ${invitation.qr.size} ${invitation.qr.size}`}
         width={invitation.qr.width}
         height={invitation.qr.width}
@@ -44,12 +46,10 @@ export function PlayerInvite({ matchId }: { matchId: string }) {
         <path d={invitation.qr.path} fill="#000" />
       </svg>
       <div>
-        <a href={invitation.url}>Join this game</a>
-        <Button onClick={() => void copyLink()}>Copy player link</Button>
-        {copy === "copied" && <p role="status">Player link copied.</p>}
-        {copy === "failed" && (
-          <p role="alert">Unable to copy. Open the join link and copy its address.</p>
-        )}
+        <a href={invitation.url}>{t("invite.link")}</a>
+        <Button onClick={() => void copyLink()}>{t("invite.copy")}</Button>
+        {copy === "copied" && <p role="status">{t("invite.copied")}</p>}
+        {copy === "failed" && <p role="alert">{t("invite.copyFailed")}</p>}
       </div>
     </section>
   );

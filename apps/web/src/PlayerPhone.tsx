@@ -1,3 +1,5 @@
+import { copy, type Copy } from "./copy";
+import { useCopy } from "./preferences";
 import { Button, Input } from "@moritzbrantner/ui/client";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { JoinError, lookupGame } from "./create-game";
@@ -26,10 +28,10 @@ type Intent =
   | { mode: "new"; name: string }
   | { mode: "resume"; resume: ResumeCapability; name?: string };
 type State =
-  | { kind: "entry"; message?: string }
+  | { kind: "entry"; message?: Copy }
   | { kind: "joining" }
-  | { kind: "joined"; message?: string }
-  | { kind: "failed"; message: string };
+  | { kind: "joined"; message?: Copy }
+  | { kind: "failed"; message: Copy };
 function validName(name: string): boolean {
   const characters = Array.from(name.trim());
   return (
@@ -53,6 +55,7 @@ export function PlayerPhone({
   matchId: string;
   certificateHash?: string;
 }) {
+  const { t, number } = useCopy();
   const route = matchUrl(endpoint, matchId).href;
   const [name, setName] = useState("");
   const [state, setState] = useState<State>({ kind: "entry" });
@@ -74,8 +77,7 @@ export function PlayerPhone({
     } catch {
       setState({
         kind: "failed",
-        message:
-          "The saved player session cannot be read. You can explicitly join as a new player.",
+        message: copy("phone.savedUnreadable"),
       });
     }
   }, [route]);
@@ -93,7 +95,7 @@ export function PlayerPhone({
     let nameTimeout: ReturnType<typeof setTimeout> | undefined;
     const controller = new AbortController();
     const desiredName = intent.name;
-    const fail = (message: string) => {
+    const fail = (message: Copy) => {
       if (active) {
         setState({ kind: "failed", message });
       }
@@ -162,17 +164,13 @@ export function PlayerPhone({
             }
             if (next.kind === "resume-failed") {
               resumeStopped = true;
-              fail(next.message);
+              fail(copy("session.resumeStopped"));
             }
             if (next.kind === "disconnected" || next.kind === "failed") {
-              fail(
-                savedFailed
-                  ? "Unable to save this player session. Allow tab storage and reconnect."
-                  : "The player connection ended. Reconnect to keep your identity.",
-              );
+              fail(savedFailed ? copy("phone.saveFailed") : copy("phone.ended"));
             }
             if (next.kind === "incompatible") {
-              fail(next.message);
+              fail(copy("connection.incompatible"));
             }
           },
           onCommandRejected: ({ sequence, payload }) => {
@@ -212,14 +210,12 @@ export function PlayerPhone({
             }
             if (own === undefined && current.public.phase.kind !== "lobby") {
               clearTimeout(nameTimeout);
-              fail(
-                "The game started before your player seat was admitted. Ask the host for another invitation.",
-              );
+              fail(copy("phone.lateSeat"));
               return;
             }
             if (own === undefined && desiredName === undefined) {
               clearTimeout(nameTimeout);
-              setState({ kind: "entry", message: "Choose a name to finish joining." });
+              setState({ kind: "entry", message: copy("phone.chooseName") });
               return;
             }
             setSnapshot(current);
@@ -228,17 +224,13 @@ export function PlayerPhone({
                 clearTimeout(nameTimeout);
                 setState({
                   kind: "joined",
-                  message: `The game started before your name was saved. You are joined as ${own?.display_name ?? "Player"}.`,
+                  message: copy("phone.lateName", { name: own?.display_name ?? String(playerId) }),
                 });
                 return;
               }
               if (!nameSent && current.public.phase.kind === "lobby") {
                 nameSent = true;
-                nameTimeout = setTimeout(
-                  () =>
-                    fail("Your name was not confirmed. Reconnect to retry with the same identity."),
-                  5000,
-                );
+                nameTimeout = setTimeout(() => fail(copy("phone.nameUnconfirmed")), 5000);
                 void client
                   ?.sendCommand((sequence, authenticated) =>
                     encodeGameCommand({
@@ -250,7 +242,7 @@ export function PlayerPhone({
                       command: { kind: "set_name", display_name: desiredName },
                     }),
                   )
-                  .catch(() => fail("Unable to send your name. Reconnect to retry."));
+                  .catch(() => fail(copy("phone.nameSendFailed")));
               }
               return;
             }
@@ -269,19 +261,11 @@ export function PlayerPhone({
             controller.signal,
             intent.mode === "new" ? "new" : "available",
           );
-          fail(
-            intent.mode === "resume"
-              ? "This player session could not reconnect. Retry, or explicitly join as a new player."
-              : "Unable to establish the player connection. Check your browser and network, then retry.",
-          );
+          fail(intent.mode === "resume" ? copy("phone.resumeFailed") : copy("phone.connectFailed"));
         }
       } catch (error) {
         if (active) {
-          fail(
-            error instanceof JoinError
-              ? error.message
-              : "Unable to establish the player connection. Check your browser and network, then retry.",
-          );
+          fail(error instanceof JoinError ? error.copy : copy("phone.connectFailed"));
         }
       }
     });
@@ -300,7 +284,7 @@ export function PlayerPhone({
     if (!validName(name)) {
       setState({
         kind: "entry",
-        message: "Choose a name of 1 to 32 characters without control characters.",
+        message: copy("phone.invalidName"),
       });
       return;
     }
@@ -331,7 +315,7 @@ export function PlayerPhone({
     } catch {
       setState({
         kind: "failed",
-        message: "Unable to clear the saved session. Allow tab storage and retry.",
+        message: copy("phone.clearFailed"),
       });
     }
   }
@@ -344,8 +328,10 @@ export function PlayerPhone({
     phase.active_player === snapshot?.own_rack.player_id;
   return (
     <main className="player-phone">
-      <h1>{state.kind === "joined" ? (own?.display_name ?? "Player") : "Join game"}</h1>
-      {state.kind === "entry" && state.message !== undefined && <p role="alert">{state.message}</p>}
+      <h1>{state.kind === "joined" ? (own?.display_name ?? t("app.player")) : t("join.title")}</h1>
+      {state.kind === "entry" && state.message !== undefined && (
+        <p role="alert">{t(state.message)}</p>
+      )}
       {state.kind === "entry" && (
         <form
           onSubmit={(event) => {
@@ -353,7 +339,7 @@ export function PlayerPhone({
             join();
           }}
         >
-          <label htmlFor="player-name">Player name</label>
+          <label htmlFor="player-name">{t("join.name")}</label>
           <Input
             id="player-name"
             value={name}
@@ -361,35 +347,39 @@ export function PlayerPhone({
             autoComplete="nickname"
             maxLength={128}
           />
-          <Button type="submit">Join game</Button>
+          <Button type="submit">{t("join.title")}</Button>
         </form>
       )}
-      {state.kind === "joining" && <p role="status">Joining game…</p>}
+      {state.kind === "joining" && <p role="status">{t("join.joining")}</p>}
       {state.kind === "joined" && state.message !== undefined && (
-        <p role="alert">{state.message}</p>
+        <p role="alert">{t(state.message)}</p>
       )}
       {state.kind === "failed" && (
         <>
-          <p role="alert">{state.message}</p>
-          <Button onClick={retry}>Retry player connection</Button>
-          <Button onClick={reset}>Join as a new player</Button>
+          <p role="alert">{t(state.message)}</p>
+          <Button onClick={retry}>{t("phone.retry")}</Button>
+          <Button onClick={reset}>{t("phone.new")}</Button>
         </>
       )}
       {snapshot !== undefined && (
         <>
           <p className="sr-only" data-testid="player-identity">
-            Player {snapshot.own_rack.player_id}
+            {t("phone.identity", { player: snapshot.own_rack.player_id })}
           </p>
           <ConnectionStatus state={connection} />
-          {phase?.kind === "lobby" && <p>Waiting for the host to start.</p>}
+          {phase?.kind === "lobby" && <p>{t("phone.waitHost")}</p>}
           {phase?.kind === "playing" && (
             <p role="status" aria-live="polite">
               {phase.active_player === snapshot.own_rack.player_id
-                ? "It is your turn."
-                : `Waiting for ${snapshot.public.players.find((player) => player.id === phase.active_player)?.display_name ?? "the active player"}.`}
+                ? t("phone.yourTurn")
+                : t("phone.waitPlayer", {
+                    name:
+                      snapshot.public.players.find((player) => player.id === phase.active_player)
+                        ?.display_name ?? t("app.activePlayer"),
+                  })}
             </p>
           )}
-          {phase?.kind === "finished" && <p>Game finished.</p>}
+          {phase?.kind === "finished" && <p>{t("phone.finished")}</p>}
           {own !== undefined && phase?.kind !== "lobby" && (
             <>
               {phase?.kind === "playing" ? (
@@ -449,7 +439,7 @@ export function PlayerPhone({
               ) : (
                 <PlayerRack rack={snapshot.own_rack} rules={rules} canAct={false} />
               )}
-              <ol className="phone-scores" aria-label="Players and scores">
+              <ol className="phone-scores" aria-label={t("board.players")}>
                 {snapshot.public.players.map((player) => (
                   <li
                     key={player.id}
@@ -460,7 +450,9 @@ export function PlayerPhone({
                     }
                   >
                     <span>{player.display_name}</span>
-                    <strong aria-label={`${player.score} points`}>{player.score}</strong>
+                    <strong aria-label={t("score.points", { count: player.score })}>
+                      {number(player.score)}
+                    </strong>
                   </li>
                 ))}
               </ol>

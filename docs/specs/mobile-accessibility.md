@@ -1,0 +1,19 @@
+# Mobile interaction and accessibility
+
+The player controller uses tap-to-select rack tiles and a scrollable placement board. Rack selection, tentative placements, committed tiles, invalid drafts, waiting turns, reconnecting sessions, and unconfirmed commands remain separate states. Pointer cancellation clears an unfinished selection or confirmation while retaining the draft; it cannot cancel a command awaiting authority.
+
+Layout follows the viewport. Interaction affordances follow `any-pointer: coarse`, including changes while the page is open. Coarse input uses rack targets of at least 48 pixels. Board cells and turn actions remain at least 44 pixels. Portrait layouts stack the rack, board, and actions; short landscape layouts put the board beside the controls. Player identity remains available to assistive technology without taking space from gameplay.
+
+The board has one tab stop for its current square. Arrow keys navigate; Home and End select the first and last square in a row. Native Enter and Space select a rack tile or place it on the focused square. Tab reaches the turn controls. Escape cancels selection or confirmation without discarding a draft. Blank choices receive focus and return it to the board; cancelled pass and exchange confirmations restore their initiating controls. The navigation registry also supplies the expandable keyboard help. Pending and unavailable actions remain disabled until the authoritative state permits them.
+
+Settings offer light, dark, and system appearance and English, German, and Spanish interface languages. Explicit choices persist as only `{locale, theme}` under `scrabble:preferences:v1`; a storage failure keeps this page usable and explains that persistence failed. Unsupported languages and invalid stored preferences fall back to English. A single supported `lang` URL parameter selects the interface language and is safe to include in player invitations. Interface language does not select the match dictionary or change tile faces.
+
+Messages retain semantic keys and parameters until rendering. Existing errors therefore change language with the page. Numeric values use the selected locale. Changing preferences does not remount the match connection, alter credentials or identity, or discard drafts. System appearance follows operating-system changes. Reduced-motion preferences disable animated transitions and smooth scrolling.
+
+## Verification
+
+`bun run check` includes full axe scans with no rule exclusions for the shared board in all phases, creation, lobby, join, waiting and active controllers, and light/dark translated settings. Browser checks cover blocked preference storage, persistence, English fallback, keyboard command discovery, blank/pass focus, pointer cancellation, and language changes on real native connections without reconnecting or losing authority or drafts.
+
+Deterministic editor screenshots cover 320×568, 390×844, and 844×390 touch layouts. The built Pages test checks complete portrait and landscape phone screens, composes and commits accepted moves using Tab/arrow/Enter alone, and completes the native game across isolated clients. Only varying private rack glyphs are hidden during those full-screen layout captures; deterministic editor screenshots retain glyphs, and protocol/rack assertions continue to inspect the actual deal. Screenshot styling is removed immediately after capture. These are Chromium viewport checks; deployment and physical-device acceptance remain separate MVP issues.
+
+Shared convention resolution used source revision `46d8793bb3034326561f876dcc67dbaa5aa1e432`.

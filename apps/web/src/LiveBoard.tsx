@@ -1,3 +1,5 @@
+import { copy, type Copy } from "./copy";
+import { useCopy } from "./preferences";
 import { Button } from "@moritzbrantner/ui/client";
 import { useEffect, useRef, useState } from "react";
 import { ConnectionStatus } from "./ConnectionStatus";
@@ -23,6 +25,8 @@ export function LiveBoard({
   certificateHash?: string;
   boardClaim?: { requestId: string; gameId: string };
 }) {
+  const { t } = useCopy();
+  const [failure, setFailure] = useState<Copy>();
   const separateBoard = matchId.startsWith("b_");
   const [state, setState] = useState<ConnectionState>({ kind: "idle" });
   const [snapshot, setSnapshot] = useState<PublicSnapshot>();
@@ -32,7 +36,7 @@ export function LiveBoard({
   const claimTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
   const timeout = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [start, setStart] = useState<
-    { kind: "idle" | "pending" } | { kind: "failed"; message: string }
+    { kind: "idle" | "pending" } | { kind: "failed"; message: Copy }
   >({ kind: "idle" });
   useEffect(() => {
     let mounted = true;
@@ -72,6 +76,7 @@ export function LiveBoard({
           if (next.kind === "synchronizing") {
             claimSent = false;
           }
+          setFailure(undefined);
           setState(next);
         },
         onSnapshot: (frame) => {
@@ -102,6 +107,7 @@ export function LiveBoard({
               claimSent = true;
               claimTimeout.current = setTimeout(() => {
                 if (mounted) {
+                  setFailure(copy("lobby.claimTimeout"));
                   setState({
                     kind: "failed",
                     message: "Board ownership was not confirmed. Reconnect and retry.",
@@ -122,6 +128,7 @@ export function LiveBoard({
                 .catch(() => {
                   clearTimeout(claimTimeout.current);
                   if (mounted) {
+                    setFailure(copy("lobby.claimFailed"));
                     setState({
                       kind: "failed",
                       message: "Unable to confirm board ownership. Reconnect and retry.",
@@ -151,10 +158,12 @@ export function LiveBoard({
         })
         .catch(() => {
           if (mounted) {
+            setFailure(copy("board.connectFailed"));
             setState({ kind: "failed", message: "Unable to start the connection." });
           }
         });
     } catch {
+      setFailure(copy(separateBoard ? "board.recoverFailed" : "create.invalidConnection"));
       setState({
         kind: "failed",
         message: separateBoard
@@ -205,7 +214,7 @@ export function LiveBoard({
     }
     setStart({ kind: "pending" });
     timeout.current = setTimeout(() => {
-      setStart({ kind: "failed", message: "Start was not confirmed. You can retry." });
+      setStart({ kind: "failed", message: copy("lobby.startTimeout") });
     }, 5000);
     try {
       await current.sendCommand((sequence, playerId) =>
@@ -220,34 +229,34 @@ export function LiveBoard({
       );
     } catch {
       clearTimeout(timeout.current);
-      setStart({ kind: "failed", message: "Unable to send Start. Reconnect and retry." });
+      setStart({ kind: "failed", message: copy("lobby.startFailed") });
     }
   }
   return (
     <>
       <header className="board-toolbar">
-        <ConnectionStatus state={state} />
+        <ConnectionStatus state={state} {...(failure === undefined ? {} : { failure })} />
         {snapshot?.phase.kind === "lobby" && <PlayerInvite key={matchId} matchId={matchId} />}
         {(state.kind === "disconnected" ||
           state.kind === "failed" ||
           state.kind === "resume-failed") && (
-          <Button onClick={() => void reconnect()}>Reconnect</Button>
+          <Button onClick={() => void reconnect()}>{t("board.reconnect")}</Button>
         )}
         {snapshot?.phase.kind === "lobby" && (
-          <section aria-label="Lobby controls">
+          <section aria-label={t("lobby.title")}>
             <Button
               disabled={!canStart || start.kind === "pending"}
               onClick={() => void startGame()}
             >
-              {start.kind === "pending" ? "Starting…" : "Start game"}
+              {start.kind === "pending" ? t("lobby.starting") : t("lobby.start")}
             </Button>
             {snapshot.players.length < rules.minimum_players && (
-              <p>At least {rules.minimum_players} players are needed.</p>
+              <p>{t("lobby.minimum", { count: rules.minimum_players })}</p>
             )}
             {state.kind === "connected" && host !== state.admission.playerId && (
-              <p>Waiting for the host to start.</p>
+              <p>{t("phone.waitHost")}</p>
             )}
-            {start.kind === "failed" && <p role="alert">{start.message}</p>}
+            {start.kind === "failed" && <p role="alert">{t(start.message)}</p>}
           </section>
         )}
       </header>

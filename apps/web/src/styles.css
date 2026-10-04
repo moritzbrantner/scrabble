@@ -407,7 +407,7 @@ body {
   .phone-board {
     grid-column: 2;
     grid-row: 1 / 8;
-    height: min(310px, calc(100dvh - 5.5rem));
+    height: min(310px, calc(100dvh - 7rem));
   }
   .move-editor > :not(.phone-board) {
     grid-column: 1;
@@ -437,4 +437,42 @@ body {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+.app-preferences {
+  max-width: 70rem;
+  margin: 0.5rem auto;
+  padding: 0.5rem;
+  font-size: 0.875rem;
+}
+.app-preferences summary {
+  cursor: pointer;
+  width: fit-content;
+  padding: 0.5rem;
+}
+.preference-fields {
+  display: grid;
+  grid-template-columns: max-content minmax(8rem, 14rem);
+  align-items: center;
+  gap: 0.5rem;
+  padding-block: 0.5rem;
+}
+.preference-fields [role="alert"] {
+  grid-column: 1 / -1;
+}
+
+.keyboard-help dl > div {
+  display: flex;
+  gap: 0.5rem;
+}
+.keyboard-help dd {
+  margin: 0;
+}
+.keyboard-help.sr-only:focus-within {
+  position: static;
+  width: auto;
+  height: auto;
+  clip: auto;
+  overflow: visible;
+  white-space: normal;
 }

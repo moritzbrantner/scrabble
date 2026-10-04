@@ -1,10 +1,12 @@
+import { copy, type Copy } from "./copy";
+import { useCopy } from "./preferences";
 import { Button } from "@moritzbrantner/ui/client";
 import { useEffect, useState } from "react";
 import { JoinError, lookupGame } from "./create-game";
 import { PlayerPhone } from "./PlayerPhone";
 import { validInviteId } from "./player-invite";
 
-type State = { kind: "checking" | "ready" } | { kind: "failed"; message: string };
+type State = { kind: "checking" | "ready" } | { kind: "failed"; message: Copy };
 export function JoinRoute({
   matchId,
   endpoint,
@@ -16,6 +18,7 @@ export function JoinRoute({
   api?: string;
   certificateHash?: string;
 }) {
+  const { t } = useCopy();
   const [state, setState] = useState<State>({ kind: "checking" });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -23,12 +26,12 @@ export function JoinRoute({
     if (!validInviteId(matchId)) {
       setState({
         kind: "failed",
-        message: "This invitation has an invalid game identifier. Ask the host for a new link.",
+        message: copy("join.invalidInvite"),
       });
     } else if (endpoint === undefined || api === undefined) {
       setState({
         kind: "failed",
-        message: "The game service is not configured. Ask the host for a new invitation.",
+        message: copy("join.unconfigured"),
       });
     } else {
       setState({ kind: "checking" });
@@ -42,10 +45,7 @@ export function JoinRoute({
           if (!controller.signal.aborted) {
             setState({
               kind: "failed",
-              message:
-                error instanceof JoinError
-                  ? error.message
-                  : "Unable to check this game. Check your connection and retry.",
+              message: error instanceof JoinError ? error.copy : copy("join.checkFailed"),
             });
           }
         },
@@ -65,14 +65,14 @@ export function JoinRoute({
   }
   return (
     <main className="create-board">
-      <h1>Join game</h1>
+      <h1>{t("join.title")}</h1>
       {state.kind === "checking" ? (
-        <p role="status">Checking game…</p>
+        <p role="status">{t("join.checking")}</p>
       ) : (
         state.kind === "failed" && (
           <>
-            <p role="alert">{state.message}</p>
-            <Button onClick={() => setAttempt((value) => value + 1)}>Retry join</Button>
+            <p role="alert">{t(state.message)}</p>
+            <Button onClick={() => setAttempt((value) => value + 1)}>{t("join.retry")}</Button>
           </>
         )
       )}

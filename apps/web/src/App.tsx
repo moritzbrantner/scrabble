@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { useCopy } from "./preferences";
 import { JoinRoute } from "./JoinRoute";
 import { fixtures } from "./fixtures";
 import { CreateBoard } from "./CreateBoard";
@@ -5,8 +7,11 @@ import { LiveBoard } from "./LiveBoard";
 import { SharedBoard } from "./SharedBoard";
 
 export function App() {
-  const connection =
-    typeof window === "undefined" ? null : new URLSearchParams(window.location.search);
+  const { t } = useCopy();
+  // A preference change must not reinterpret the URL written after game creation and remount its owner.
+  const [connection] = useState(() =>
+    typeof window === "undefined" ? null : new URLSearchParams(window.location.search),
+  );
   const endpoint: string | undefined = import.meta.env.DEV
     ? (connection?.get("server") ?? undefined)
     : import.meta.env.VITE_SCRABBLE_ENDPOINT || undefined;
@@ -39,16 +44,13 @@ export function App() {
   if (endpoint && api) {
     return <CreateBoard endpoint={endpoint} api={api} {...localTrust} />;
   }
-  const selected =
-    typeof window === "undefined"
-      ? null
-      : new URLSearchParams(window.location.search).get("fixture");
+  const selected = connection?.get("fixture");
   const fixture = selected === "playing" || selected === "finished" ? selected : "lobby";
   return (
     <>
       <SharedBoard snapshot={fixtures.snapshots[fixture]} rules={fixtures.ruleset} />
       <footer>
-        <p className="fixture-note">Board preview · Multiplayer is not connected yet.</p>
+        <p className="fixture-note">{t("app.preview")}</p>
       </footer>
     </>
   );

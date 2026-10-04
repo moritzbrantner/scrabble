@@ -1,14 +1,35 @@
-import { expect, test, type Page } from "@playwright/test";
+import { fileURLToPath } from "node:url";
+import AxeBuilder from "@axe-core/playwright";
+import { expect, test, type Page, type Locator } from "@playwright/test";
 import { selectOpening } from "./game-fixture";
 import { observeSnapshots } from "./pages-observer";
 import fixtures from "../src/fixtures/public.json" with { type: "json" };
+
+async function phoneVisual(page: Page, name: string) {
+  const style = await page.addStyleTag({
+    path: fileURLToPath(new URL("./live-phone-visual.css", import.meta.url)),
+  });
+  try {
+    await expect(page).toHaveScreenshot(name, { animations: "disabled", maxDiffPixelRatio: 0.005 });
+  } finally {
+    await style.evaluate((element) => element.parentNode?.removeChild(element));
+  }
+}
 
 test("built Pages client plays consecutive turns through isolated phones", async ({
   page,
   browser,
 }) => {
-  const firstContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
-  const secondContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const firstContext = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+    reducedMotion: "reduce",
+  });
+  const secondContext = await browser.newContext({
+    viewport: { width: 844, height: 390 },
+    hasTouch: true,
+    reducedMotion: "reduce",
+  });
   const first = await firstContext.newPage();
   const second = await secondContext.newPage();
   const boardState = await observeSnapshots(page, "1", true);
@@ -41,6 +62,11 @@ test("built Pages client plays consecutive turns through isolated phones", async
     await page.getByRole("button", { name: "Start game", exact: true }).click();
     await expect.poll(() => firstState()?.own_rack.tiles.length).toBe(7);
     await expect.poll(() => secondState()?.own_rack.tiles.length).toBe(7);
+    await expect(first.getByRole("list", { name: "Your rack", exact: true })).toHaveAttribute(
+      "aria-disabled",
+      "false",
+    );
+    await phoneVisual(first, "phone-live-portrait.png");
     const rackIds = () => [
       firstState()?.own_rack.tiles.map((tile) => tile.id) ?? [],
       secondState()?.own_rack.tiles.map((tile) => tile.id) ?? [],
@@ -74,16 +100,40 @@ test("built Pages client plays consecutive turns through isolated phones", async
     };
     await expect(commit(second)).toBeDisabled();
     await waiting(second);
+    // Traverse the actual tab order; never programmatically focus or click gameplay controls.
+    const tabTo = async (phone: Page, target: Locator) => {
+      for (let index = 0; index < 30; index++) {
+        if (await target.evaluate((element) => element === document.activeElement)) {
+          return;
+        }
+        await phone.keyboard.press("Tab");
+      }
+      throw new Error("Keyboard could not reach gameplay control");
+    };
     const place = async (phone: Page, letter: string, column: number) => {
-      await phone
+      const rackTile = phone
         .getByRole("list", { name: "Your rack", exact: true })
         .getByRole("button", { name: new RegExp(`^${letter},`) })
-        .first()
-        .click();
-      await phone
-        .getByRole("region", { name: "Move editor", exact: true })
-        .getByRole("button", { name: new RegExp(`^Row 8, column ${column}:`) })
-        .click();
+        .first();
+      await tabTo(phone, rackTile);
+      await phone.keyboard.press("Enter");
+      const region = phone.getByRole("region", { name: "Move editor", exact: true });
+      const square = region.locator("[data-square-index][tabindex='0']");
+      await tabTo(phone, square);
+      const index = Number(await square.getAttribute("data-square-index"));
+      const row = Math.floor(index / 15);
+      const currentColumn = index % 15;
+      for (let step = 0; step < Math.abs(row - 7); step++) {
+        await phone.keyboard.press(row > 7 ? "ArrowUp" : "ArrowDown");
+      }
+      for (let step = 0; step < Math.abs(currentColumn - (column - 1)); step++) {
+        await phone.keyboard.press(currentColumn >= column ? "ArrowLeft" : "ArrowRight");
+      }
+      await phone.keyboard.press("Enter");
+    };
+    const commitWithKeyboard = async (phone: Page) => {
+      await tabTo(phone, commit(phone));
+      await phone.keyboard.press("Enter");
     };
     const converge = async (turn: string, word: string, scores: number[], remaining: number) => {
       await expect
@@ -126,7 +176,7 @@ test("built Pages client plays consecutive turns through isolated phones", async
     expect(boardState()?.public.ruleset.revision).toMatch(/^1\+dictionary-sha256:[0-9a-f]{64}$/);
     await place(first, "A", 8);
     await place(first, "T", 9);
-    await commit(first).click();
+    await commitWithKeyboard(first);
     const openingEditor = first.getByRole("region", { name: "Move editor", exact: true });
     await expect(openingEditor.getByRole("status")).toContainText("Not in the dictionary: AT.");
     await expect(page.getByRole("cell", { name: /: Committed / })).toHaveCount(0);
@@ -135,8 +185,28 @@ test("built Pages client plays consecutive turns through isolated phones", async
     await place(first, "T", 8);
     await place(first, "A", 9);
     await expect(page.locator(".tentative-tile")).toHaveCount(2);
-    await commit(first).click();
+    await commitWithKeyboard(first);
     await converge("1", "TA", [4, 0], 84);
+    await expect(second.getByRole("list", { name: "Your rack", exact: true })).toHaveAttribute(
+      "aria-disabled",
+      "false",
+    );
+    await expect(second.getByRole("region", { name: "Move editor", exact: true })).toHaveAttribute(
+      "data-input",
+      "touch",
+    );
+    await phoneVisual(second, "phone-live-landscape.png");
+    await expect(second.getByRole("region", { name: "Move editor", exact: true })).toHaveAttribute(
+      "data-input",
+      "touch",
+    );
+    expect((await new AxeBuilder({ page: first }).analyze()).violations).toEqual([]);
+    expect((await new AxeBuilder({ page: second }).analyze()).violations).toEqual([]);
+    for (const phone of [first, second]) {
+      expect(await phone.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+        phone.viewportSize()?.width ?? 0,
+      );
+    }
     const afterFirst = rackIds();
     expect(afterFirst[0]?.filter((id) => !initial[0]?.includes(id))).toHaveLength(2);
     expect(afterFirst[1]).toEqual(initial[1]);
@@ -147,7 +217,7 @@ test("built Pages client plays consecutive turns through isolated phones", async
     await place(second, "C", 7);
     await expect(page.locator(".tentative-tile")).toHaveCount(1);
     await expect(page.getByRole("cell", { name: /^Row 8, column 7: Tentative C/ })).toBeVisible();
-    await commit(second).click();
+    await commitWithKeyboard(second);
     await converge("2", "CTA", [4, 5], 83);
     const afterSecond = rackIds();
     expect(afterSecond[0]).toEqual(afterFirst[0]);

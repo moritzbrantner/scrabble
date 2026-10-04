@@ -35,3 +35,24 @@ test("Pages invites rebuild an unambiguous public route without private query st
     ),
   ).toThrow();
 });
+
+test("invites include only a supported unambiguous interface language", () => {
+  for (const locale of ["en", "de", "es"]) {
+    const invite = playerInviteUrl(
+      new URL(`https://example.test/scrabble/?lang=${locale}&token=private`),
+      matchId,
+      false,
+    );
+    expect(invite.searchParams.get("lang")).toBe(locale);
+    expect(invite.searchParams.has("token")).toBe(false);
+  }
+  for (const query of ["lang=fr", "lang=de&lang=es", "lang=private"]) {
+    expect(
+      playerInviteUrl(
+        new URL(`https://example.test/scrabble/?${query}`),
+        matchId,
+        false,
+      ).searchParams.has("lang"),
+    ).toBe(false);
+  }
+});

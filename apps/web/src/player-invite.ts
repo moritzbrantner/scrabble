@@ -18,6 +18,10 @@ export function playerInviteUrl(
   const invite = new URL(base, page.origin);
   invite.searchParams.set("view", "player");
   invite.searchParams.set("match", matchId);
+  const languages = page.searchParams.getAll("lang");
+  if (languages.length === 1 && ["en", "de", "es"].includes(languages[0] ?? "")) {
+    invite.searchParams.set("lang", languages[0] ?? "en");
+  }
   if (development) {
     for (const field of ["server", "api", "certificate"]) {
       const values = page.searchParams.getAll(field);

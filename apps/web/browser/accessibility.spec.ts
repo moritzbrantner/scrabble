@@ -150,3 +150,14 @@ test("keyboard enters the board once, navigates squares, and leaves to turn acti
   await expect(first).toHaveAttribute("aria-pressed", "false");
   await expect(first).toBeFocused();
 });
+
+test("board command help is keyboard discoverable", async ({ page }) => {
+  await editor(page);
+  const help = page.locator(".keyboard-help summary");
+  await help.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".keyboard-help dl")).toBeVisible();
+  for (const key of ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "Escape"]) {
+    await expect(page.getByText(key, { exact: true })).toBeVisible();
+  }
+});
