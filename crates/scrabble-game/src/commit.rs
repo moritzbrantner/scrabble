@@ -1,4 +1,4 @@
-//! One atomic transaction for a validated, scored turn. Draws follow in #20.
+//! One atomic transaction for a validated, scored turn and deterministic replacement draws.
 use crate::{
     dictionary::{self, DictionaryError},
     identity::PlayerId,
@@ -39,6 +39,7 @@ pub fn apply(
     let mut candidate = state.clone();
     let score = scoring::commit_placement(&mut candidate, player, placements)
         .map_err(CommitError::Score)?;
+    candidate.refill_rack(player).map_err(CommitError::State)?;
     candidate.advance_turn().map_err(CommitError::State)?;
     *state = candidate;
     Ok(score)

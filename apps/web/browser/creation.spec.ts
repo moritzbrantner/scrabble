@@ -690,11 +690,15 @@ test("an authoritative AT commit converges on the board and both private phones"
     await expect(first.getByText("It is your turn.", { exact: true })).toBeVisible();
     const editor = first.getByRole("region", { name: "Move editor", exact: true });
     const rack = first.getByRole("list", { name: "Your rack", exact: true });
+    await expect.poll(() => first.evaluate(() => window.scrabbleObserved?.rackCount)).toBe(7);
+    await expect.poll(() => second.evaluate(() => window.scrabbleObserved?.rackCount)).toBe(7);
+    const previousIds = await first.evaluate(() => window.scrabbleObserved?.tileIds ?? []);
+    const otherIds = await second.evaluate(() => window.scrabbleObserved?.tileIds ?? []);
+    const placedIds: string[] = [];
     for (const [index, letter] of ["A", "T"].entries()) {
-      await rack
-        .getByRole("button", { name: new RegExp(`^${letter},`) })
-        .first()
-        .click();
+      const tile = rack.getByRole("button", { name: new RegExp(`^${letter},`) }).first();
+      placedIds.push(z.string().parse(await tile.locator("..").getAttribute("data-tile-id")));
+      await tile.click();
       await editor
         .getByRole("button", { name: new RegExp(`^Row 8, column ${8 + index}:`) })
         .click();
@@ -711,14 +715,20 @@ test("an authoritative AT commit converges on the board and both private phones"
     await expect(page.locator(".tentative-tile")).toHaveCount(0);
     await expect(first.getByText("Waiting for Lin.", { exact: true })).toBeVisible();
     await expect(second.getByText("It is your turn.", { exact: true })).toBeVisible();
-    await expect(rack.getByRole("listitem")).toHaveCount(5);
+    await expect(rack.getByRole("listitem")).toHaveCount(7);
     await expect(editor.locator(".tentative-square")).toHaveCount(0);
     for (const client of [page, first, second]) {
       await expect.poll(() => client.evaluate(() => window.scrabbleObserved?.turn)).toBe("1");
     }
     const board = await page.evaluate(() => window.scrabbleObserved);
     expect(board?.scores[0]?.score).toBe(4);
-    expect(board?.remaining).toBe(86);
+    expect(board?.remaining).toBe(84);
+    expect(board?.tileIds).toEqual([]);
+    const replacedIds = await first.evaluate(() => window.scrabbleObserved?.tileIds ?? []);
+    expect(replacedIds).toHaveLength(7);
+    expect(replacedIds.filter((id) => !previousIds.includes(id))).toHaveLength(2);
+    expect(replacedIds.every((id) => !placedIds.includes(id) && !otherIds.includes(id))).toBe(true);
+    expect(await second.evaluate(() => window.scrabbleObserved?.tileIds)).toEqual(otherIds);
     for (const phone of [first, second]) {
       const projection = await phone.evaluate(() => window.scrabbleObserved);
       expect(projection?.board).toEqual(board?.board);
@@ -746,6 +756,18 @@ test("an authoritative AT commit converges on the board and both private phones"
     await expect(
       first.getByRole("button", { name: "Retry player connection", exact: true }),
     ).toHaveCount(0);
+    await first.reload();
+    await observeProjection(first);
+    await expect(first.getByText("Waiting for Lin.", { exact: true })).toBeVisible();
+    await expect
+      .poll(() => first.evaluate(() => window.scrabbleObserved?.tileIds))
+      .toEqual(replacedIds);
+    expect(
+      await rack
+        .getByRole("listitem")
+        .evaluateAll((tiles) => tiles.map((tile) => tile.getAttribute("data-tile-id"))),
+    ).toEqual(replacedIds);
+    await expect(second.getByText("It is your turn.", { exact: true })).toBeVisible();
   } finally {
     await first.close();
     await second.close();

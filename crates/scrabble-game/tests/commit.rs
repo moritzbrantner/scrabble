@@ -70,8 +70,9 @@ fn accepted_commit_scores_transfers_advances_and_clears_preview_once() {
     let snapshot = session.player_snapshot(PlayerId::new(1)).unwrap();
     assert_eq!(snapshot.public.board.len(), 2);
     assert_eq!(snapshot.public.players[0].score, 4);
-    assert_eq!(snapshot.public.remaining_tiles, 86);
-    assert_eq!(snapshot.own_rack.tiles.len(), 5);
+    assert_eq!(snapshot.public.remaining_tiles, 84);
+    assert_eq!(snapshot.own_rack.tiles.len(), 7);
+    session.state().verify_tile_conservation().unwrap();
     assert_eq!(
         snapshot.public.phase,
         Phase::Playing {
@@ -209,4 +210,103 @@ fn uninstalled_dictionary_revision_cannot_silently_use_the_fixture() {
         )))
     );
     assert_eq!(session.state().canonical_bytes().unwrap(), before);
+}
+
+#[test]
+fn replacement_draws_are_atomic_bounded_and_preserve_tile_conservation() {
+    use scrabble_game::ruleset::TileDefinition;
+    for (total, expected_draws) in [(4, 0), (5, 1), (6, 2)] {
+        let (mut session, placements) = (0..=255)
+            .find_map(|seed| {
+                let mut rules = english_fixture();
+                rules.identity.name = format!("replacement-bag-{total}");
+                rules.maximum_players = 2;
+                rules.rack_size = 2;
+                rules.tiles = vec![
+                    TileDefinition {
+                        face: TileFace::Letter { letter: 'A' },
+                        count: total - 2,
+                        value: 1,
+                    },
+                    TileDefinition {
+                        face: TileFace::Letter { letter: 'T' },
+                        count: 2,
+                        value: 1,
+                    },
+                ];
+                let mut session =
+                    GameSession::new(GameState::new(GameId::new(1), rules, [seed; 32]).unwrap());
+                session.add_player(PlayerId::new(1), "Ada".into()).unwrap();
+                session.add_player(PlayerId::new(2), "Lin".into()).unwrap();
+                session
+                    .apply(PlayerId::new(1), 1, &envelope(1, Command::Start {}))
+                    .unwrap();
+                let rack = session.state().rack(PlayerId::new(1)).unwrap();
+                let placements: Option<Vec<_>> = ['A', 'T']
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, letter)| {
+                        rack.iter()
+                            .find(|tile| tile.face() == (TileFace::Letter { letter }))
+                            .map(|tile| Placement {
+                                tile_id: tile.id(),
+                                coordinate: Coordinate::new(7, 7 + index as u8).unwrap(),
+                                blank_as: None,
+                            })
+                    })
+                    .collect();
+                placements.map(|placements| (session, placements))
+            })
+            .expect("deterministic small-bag opening");
+        session.state().verify_tile_conservation().unwrap();
+        let other_rack = session.player_snapshot(PlayerId::new(2)).unwrap().own_rack;
+        let before: serde_json::Value =
+            serde_json::from_slice(&session.state().canonical_bytes().unwrap()).unwrap();
+        let bag = before["bag"].as_array().unwrap();
+        let expected_ids: Vec<_> = bag
+            .iter()
+            .rev()
+            .take(expected_draws)
+            .map(|tile| tile["id"].as_str().unwrap().to_owned())
+            .collect();
+        let placed_ids: Vec<_> = placements.iter().map(|tile| tile.tile_id).collect();
+        session
+            .apply(
+                PlayerId::new(1),
+                2,
+                &envelope(2, Command::Commit { placements }),
+            )
+            .unwrap();
+        session.state().verify_tile_conservation().unwrap();
+        let own = session.player_snapshot(PlayerId::new(1)).unwrap();
+        let other = session.player_snapshot(PlayerId::new(2)).unwrap();
+        assert_eq!(own.own_rack.tiles.len(), expected_draws);
+        assert_eq!(
+            own.own_rack
+                .tiles
+                .iter()
+                .map(|tile| tile.id.get().to_string())
+                .collect::<Vec<_>>(),
+            expected_ids
+        );
+        assert!(
+            own.own_rack
+                .tiles
+                .iter()
+                .all(|tile| !placed_ids.contains(&tile.id))
+        );
+        assert_eq!(other.own_rack, other_rack);
+        assert_eq!(own.public, other.public);
+        assert_eq!(own.public.remaining_tiles, 0);
+        assert_eq!(own.public.players[0].rack_count, expected_draws as u8);
+        assert_eq!(own.public.board.len(), 2);
+        assert_eq!(own.public.players[0].score, 54);
+        assert_eq!(
+            own.public.phase,
+            Phase::Playing {
+                active_player: PlayerId::new(2),
+                turn: TurnId::new(1)
+            }
+        );
+    }
 }
