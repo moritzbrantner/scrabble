@@ -268,7 +268,7 @@ dependencies = [
 [[package]]
 name = "game-server"
 version = "0.1.0"
-source = "git+https://github.com/moritzbrantner/game-server.git?rev=9fc83c2429d7cd86e953f68d51a1f192e5bfb6a6#9fc83c2429d7cd86e953f68d51a1f192e5bfb6a6"
+source = "git+https://github.com/moritzbrantner/game-server.git?rev=9dbec8198ce8ad1da99aada8659dd7d946e28ef5#9dbec8198ce8ad1da99aada8659dd7d946e28ef5"
 dependencies = [
  "ring",
  "tokio",
@@ -862,6 +862,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
+ "url",
  "wtransport",
 ]
 

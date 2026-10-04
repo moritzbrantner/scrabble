@@ -26,6 +26,7 @@ struct Server {
     certificate_hash: Sha256Digest,
     child: Option<Child>,
     status_port: u16,
+    api_port: u16,
     port: u16,
     log: PathBuf,
 }
@@ -53,9 +54,13 @@ impl Server {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let status_port = listener.local_addr().unwrap().port();
         drop(listener);
+        let api = TcpListener::bind("127.0.0.1:0").unwrap();
+        let api_port = api.local_addr().unwrap().port();
+        drop(api);
         let values = BTreeMap::from([
             ("SCRABBLE_PORT".into(), port.to_string()),
             ("SCRABBLE_STATUS_PORT".into(), status_port.to_string()),
+            ("SCRABBLE_API_PORT".into(), api_port.to_string()),
             ("SCRABBLE_CERT_PEM".into(), cert.to_str().unwrap().into()),
             ("SCRABBLE_KEY_PEM".into(), key.to_str().unwrap().into()),
             (
@@ -78,6 +83,7 @@ impl Server {
             certificate_hash,
             child: None,
             status_port,
+            api_port,
             port,
             log,
         }
@@ -344,4 +350,166 @@ async fn two_matches_are_independent_and_shutdown_restart_preserves_reconnect_au
     alpha_second.close(0u32.into(), b"test complete");
     beta_second.close(0u32.into(), b"test complete");
     server.stop().await;
+}
+
+impl Server {
+    async fn api(
+        &self,
+        method: &str,
+        path: &str,
+        body: Option<&serde_json::Value>,
+        origin: &str,
+    ) -> (u16, serde_json::Value) {
+        timeout(Duration::from_secs(5), async {
+            let mut socket = tokio::net::TcpStream::connect(("127.0.0.1", self.api_port)).await.unwrap();
+            let body = body.map(serde_json::Value::to_string).unwrap_or_default();
+            let request = format!("{method} {path} HTTP/1.1\r\nHost: localhost\r\nOrigin: {origin}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+            socket.write_all(request.as_bytes()).await.unwrap();
+            let mut bytes = Vec::new();
+            socket.take(8192).read_to_end(&mut bytes).await.unwrap();
+            let text = String::from_utf8(bytes).unwrap();
+            let (headers, body) = text.split_once("\r\n\r\n").unwrap();
+            assert!(headers.contains("Access-Control-Allow-Origin: http://localhost:5173"));
+            let status = headers.split_whitespace().nth(1).unwrap().parse().unwrap();
+            (status, if body.is_empty() { serde_json::Value::Null } else { serde_json::from_str(body).unwrap() })
+        }).await.unwrap()
+    }
+}
+
+#[tokio::test]
+async fn creation_retries_capacity_origin_and_restart_keep_one_authoritative_game_per_request() {
+    let mut server = Server::new().await;
+    server.values.insert("SCRABBLE_MATCH_IDS".into(), "".into());
+    server
+        .values
+        .insert("SCRABBLE_MAX_MATCHES".into(), "2".into());
+    server
+        .values
+        .insert("SCRABBLE_DRAIN_GRACE_MS".into(), "1000".into());
+    server.start().await;
+    assert_eq!(
+        server.get("/status").await.unwrap().1["capacity"]["hostedMatches"],
+        0
+    );
+    let now = scrabble_server::games::unix_seconds().unwrap();
+    let request = serde_json::json!({"version":1, "requestId":"01".repeat(16), "requestedAt":now});
+    let origin = "http://localhost:5173";
+    assert_eq!(server.api("OPTIONS", "/games", None, origin).await.0, 204);
+    assert_eq!(
+        server
+            .api("POST", "/games", Some(&request), "http://untrusted.example")
+            .await
+            .0,
+        403
+    );
+    let (first, concurrent) = tokio::join!(
+        server.api("POST", "/games", Some(&request), origin),
+        server.api("POST", "/games", Some(&request), origin)
+    );
+    assert_eq!(first.0, 200);
+    assert_eq!(concurrent, first);
+    let join: scrabble_server::games::JoinInformation =
+        serde_json::from_value(first.1.clone()).unwrap();
+    assert_eq!(
+        first.1.as_object().unwrap().len(),
+        5,
+        "only public join information is returned"
+    );
+    assert_eq!(
+        server.get("/status").await.unwrap().1["capacity"]["hostedMatches"],
+        1
+    );
+    let client = server.client();
+    let (connection, welcome) = server.connect(&client, &join.match_path).await;
+    let initial = snapshot(&connection, |_| true).await;
+    assert_eq!(initial.public.game_id, join.game_id);
+    assert!(matches!(initial.public.phase, Phase::Lobby {}));
+    assert_eq!(
+        server
+            .api("DELETE", &format!("/games/{}", join.match_id), None, origin)
+            .await
+            .0,
+        409
+    );
+    let second = serde_json::json!({"version":1, "requestId":"02".repeat(16), "requestedAt":now});
+    let second_join = server.api("POST", "/games", Some(&second), origin).await;
+    assert_eq!(second_join.0, 200);
+    assert_ne!(second_join.1["matchId"], first.1["matchId"]);
+    let excess = serde_json::json!({"version":1, "requestId":"03".repeat(16), "requestedAt":now});
+    assert_eq!(
+        server.api("POST", "/games", Some(&excess), origin).await.0,
+        429
+    );
+    assert_eq!(
+        server.api("POST", "/games", Some(&request), origin).await,
+        first,
+        "retries succeed even at capacity"
+    );
+    let expired =
+        serde_json::json!({"version":1, "requestId":"04".repeat(16), "requestedAt":now-120});
+    assert_eq!(
+        server.api("POST", "/games", Some(&expired), origin).await.0,
+        410
+    );
+    let malformed =
+        serde_json::json!({"version":1, "requestId":"secret-invalid", "requestedAt":now});
+    assert_eq!(
+        server
+            .api("POST", "/games", Some(&malformed), origin)
+            .await
+            .0,
+        400
+    );
+    server.stop().await;
+    server.start().await;
+    assert_eq!(
+        server.get("/status").await.unwrap().1["capacity"]["hostedMatches"],
+        2
+    );
+    assert_eq!(
+        server.api("POST", "/games", Some(&request), origin).await,
+        first
+    );
+    let route = format!(
+        "{}/reconnect/{}",
+        join.match_path,
+        game_server::ReconnectToken(welcome.reconnect_token).encode_hex()
+    );
+    let (restored, recovered) = server.connect(&client, &route).await;
+    assert_eq!(recovered.player_id, welcome.player_id);
+    assert!(recovered.connection_epoch > welcome.connection_epoch);
+    assert_eq!(
+        snapshot(&restored, |_| true).await.public.game_id,
+        join.game_id
+    );
+    let mut child = server.child.take().unwrap();
+    let signal = ProcessCommand::new("kill")
+        .arg("-TERM")
+        .arg(child.id().unwrap().to_string())
+        .status()
+        .await
+        .unwrap();
+    assert!(signal.success());
+    timeout(Duration::from_millis(800), async {
+        while server.get("/readyz").await.unwrap().0 != 503 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        server.api("POST", "/games", Some(&excess), origin).await.0,
+        503
+    );
+    assert_eq!(
+        server.api("POST", "/games", Some(&request), origin).await.0,
+        503
+    );
+    assert!(
+        timeout(Duration::from_secs(10), child.wait())
+            .await
+            .unwrap()
+            .unwrap()
+            .success()
+    );
 }

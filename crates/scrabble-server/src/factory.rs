@@ -127,17 +127,46 @@ impl MatchFactory {
         })
     }
 
+    /// A domain-separated MAC allocates an opaque ID without retaining a retry-key table.
+    pub fn creation_id(&self, request_id: &str, requested_at: u64) -> ErrorResult<MatchId> {
+        let mut derivation = hmac::Context::with_key(&self.key);
+        derivation.update(b"scrabble/create/v1\0");
+        derivation.update(&requested_at.to_be_bytes());
+        derivation.update(request_id.as_bytes());
+        let tag = derivation.sign();
+        let suffix: String = tag.as_ref()[..16]
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        Ok(MatchId::new(format!("g_{requested_at:016x}_{suffix}"))?)
+    }
+
     pub fn create(&self, id: &MatchId) -> ErrorResult<ScrabbleSimulation> {
         let mut derivation = hmac::Context::with_key(&self.key);
         derivation.update(b"scrabble/deal/v1\0");
         derivation.update(id.as_str().as_bytes());
         let seed: [u8; 32] = derivation.sign().as_ref().try_into()?;
-        Ok(ScrabbleSimulation::new(
-            game_id(id),
-            english_fixture(),
-            seed,
-        )?)
+        let simulation = ScrabbleSimulation::new(game_id(id), english_fixture(), seed)?;
+        Ok(match creation_time(id) {
+            Some(created_at) => simulation.with_lifecycle(created_at),
+            None => simulation,
+        })
     }
+}
+
+pub fn creation_time(id: &MatchId) -> Option<u64> {
+    let value = id.as_str().strip_prefix("g_")?;
+    let (timestamp, tag) = value.split_once('_')?;
+    if timestamp.len() != 16
+        || tag.len() != 32
+        || !timestamp
+            .bytes()
+            .chain(tag.bytes())
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return None;
+    }
+    u64::from_str_radix(timestamp, 16).ok()
 }
 
 pub fn game_id(id: &MatchId) -> GameId {

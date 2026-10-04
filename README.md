@@ -1,6 +1,6 @@
 # Scrabble
 
-A shared-board and private-phone multiplayer Scrabble application, under construction. The browser currently presents a public board preview; the browser transport adapter is verified against a local game-server runtime, while the Scrabble simulation adapter now runs inside that runtime, and a Rust executable now hosts independent matches with runtime health, readiness and graceful recovery.
+A shared-board and private-phone multiplayer Scrabble application, under construction. The development board can create authoritative games, publish join links and display their live public state. The Rust executable hosts independent matches with runtime health, readiness and graceful recovery. Production endpoint configuration and the remaining gameplay/player workflows are still tracked in the ordered issues.
 
 ## Development
 
@@ -33,10 +33,12 @@ The versioned domain contracts and offline English fixture ruleset are defined i
 
 [Scoring](docs/specs/scoring.md) calculates all validated words with new-tile premiums and a single full-rack bonus. The scored storage commit applies cumulative points atomically; browser command integration remains in #19.
 
-The [shared board](docs/specs/shared-board.md) renders public snapshot fixtures for lobby, playing, and finished phases. Add `?fixture=playing` or `?fixture=finished` to the `/scrabble/` entry point to inspect those presentation cases; multiplayer is not connected yet. `bun run test:browser` runs focused layout checks and writes screenshots to ignored `test-results/`.
+The [shared board](docs/specs/shared-board.md) renders public snapshot fixtures for lobby, playing, and finished phases. Add `?fixture=playing` or `?fixture=finished` to the `/scrabble/` entry point to inspect those presentation cases. The production build remains the fixture preview until endpoint configuration in #31. `bun run test:browser` runs focused layout checks and writes screenshots to ignored `test-results/`.
 
 The [browser transport](docs/specs/browser-transport.md) supports versioned welcome, bounded commands, latest-state snapshot reassembly, reliable control and in-memory reconnect capabilities. Its real-network fixture exercises upstream `game-server` independently of Scrabble rules. Production endpoint configuration remains #31.
 
 The [simulation adapter](docs/specs/simulation-adapter.md) maps runtime admissions directly to domain identities, applies authenticated commands, keeps ticks independent of turns, and separates canonical replay evidence from private player projections. Browser-free tests verify runtime replay, recovery, reconnect fencing and grace expiry. Started-game forfeit resolution remains #27.
+
+The [creation API](docs/specs/game-creation.md) derives high-entropy public match IDs, bounds retries and match lifetime, rejects draining/full hosts, and retires through the upstream fencing boundary. Chromium acceptance drops a successful response, retries to recover the same game, and joins its canonical route.
 
 The [authoritative executable](docs/specs/server-executable.md) reuses game-server hosting/status/recovery for independent named matches. Private persistent initialization keeps tile order reproducible across restart. The real-process test proves scoped racks, match isolation, SIGTERM recovery and reconnect sequence fencing; a complete playable MVP still requires the remaining issues.
