@@ -3,9 +3,13 @@ import { createServer } from "node:net";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
+import { localAddress } from "./local-address";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const directory = join(root, ".local", "local-server");
+const address = localAddress(undefined, process.env.LOCAL_LAN_IP);
+const tls = join(directory, `tls-${address}`);
+const origin = `https://${address}:5173`;
 const content = await realpath(Bun.argv[2] ?? join(root, ".local", "deployment", "content"));
 const manifest = z
   .object({
@@ -39,9 +43,13 @@ const env: NodeJS.ProcessEnv = Object.fromEntries(
 );
 Object.assign(env, {
   SCRABBLE_MODE: "local",
-  SCRABBLE_CERT_PEM: join(directory, "tls", "cert.pem"),
-  SCRABBLE_KEY_PEM: join(directory, "tls", "key.pem"),
-  DEPLOY_TLS_DIRECTORY: join(directory, "tls"),
+  SCRABBLE_CERT_PEM: join(tls, "cert.pem"),
+  SCRABBLE_KEY_PEM: join(tls, "key.pem"),
+  LOCAL_TLS_CERT: join(tls, "cert.pem"),
+  LOCAL_TLS_KEY: join(tls, "key.pem"),
+  DEPLOY_TLS_DIRECTORY: tls,
+  DEPLOY_LOCAL_ADDRESS: address,
+  DEPLOY_BOARD_ORIGIN: origin,
   DEPLOY_STATE_DIRECTORY: join(directory, "state"),
   DEPLOY_CONTENT_DIRECTORY: content,
   DEPLOY_UID: String(uid),
@@ -106,7 +114,7 @@ try {
   const listener = createServer();
   await new Promise<void>((resolve, reject) => {
     listener.once("error", reject);
-    listener.listen(5173, "127.0.0.1", resolve);
+    listener.listen(5173, address, resolve);
   });
   await new Promise<void>((resolve, reject) =>
     listener.close((error) => (error ? reject(error) : resolve())),
@@ -117,13 +125,13 @@ try {
       endpoint: z.string().url(),
       certificateHash: z.array(z.int().min(0).max(255)).length(32),
     })
-    .parse(JSON.parse(await run(["bun", "--no-env-file", "run", "dev:tls"])));
+    .parse(JSON.parse(await run(["bun", "--no-env-file", "run", "dev:tls", address])));
   started = true;
   console.log("Starting the local game-server with the prepared dictionary…");
   await run([...compose, "up", "--build", "--wait", "--wait-timeout", "60", "server"]);
-  const url = new URL("http://localhost:5173/scrabble/");
+  const url = new URL(`${origin}/scrabble/`);
   url.searchParams.set("server", connection.endpoint);
-  url.searchParams.set("api", "http://127.0.0.1:8081");
+  url.searchParams.set("api", `${origin}/api`);
   url.searchParams.set(
     "certificate",
     connection.certificateHash.map((byte) => byte.toString(16).padStart(2, "0")).join(""),
@@ -137,7 +145,7 @@ try {
       "dev",
       "--",
       "--host",
-      "127.0.0.1",
+      address,
       "--port",
       "5173",
       "--strictPort",

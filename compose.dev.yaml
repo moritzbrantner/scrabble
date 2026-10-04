@@ -3,8 +3,8 @@ services:
     restart: "no"
     environment:
       SCRABBLE_MODE: local
-      SCRABBLE_BOARD_ORIGIN: http://localhost:5173
+      SCRABBLE_BOARD_ORIGIN: ${DEPLOY_BOARD_ORIGIN:-http://localhost:5173}
     ports: !override
-      - 127.0.0.1:4433:4433/udp
+      - ${DEPLOY_LOCAL_ADDRESS:-127.0.0.1}:4433:4433/udp
       - 127.0.0.1:8080:8080/tcp
       - 127.0.0.1:8081:8081/tcp

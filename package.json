@@ -11,7 +11,7 @@
     "format:check": "oxfmt --check . && cargo fmt --all --check",
     "lint": "oxlint --type-aware --tsconfig tsconfig.json apps/web scripts && cargo clippy --workspace --all-targets --locked -- -D warnings",
     "typecheck": "tsc --noEmit",
-    "test": "cargo test --workspace --all-targets --locked && bun test apps/web/src",
+    "test": "cargo test --workspace --all-targets --locked && bun test apps/web/src scripts",
     "build": "vite build --config apps/web/vite.config.ts",
     "check": "bun run format:check && bun run typecheck && bun run lint && bun run test && bun run build && bun run test:browser",
     "test:browser": "bun scripts/test-browser.ts && bun scripts/test-browser.ts --pages",
