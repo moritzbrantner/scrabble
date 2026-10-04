@@ -22,7 +22,17 @@ await new Promise<void>((resolve, reject) =>
   }),
 );
 const build = Bun.spawn(
-  ["cargo", "build", "-p", "scrabble-server", "--example", "browser_transport_fixture", "--locked"],
+  [
+    "cargo",
+    "build",
+    "-p",
+    "scrabble-server",
+    "--example",
+    "browser_transport_fixture",
+    "--example",
+    "browser_game_fixture",
+    "--locked",
+  ],
   { stdout: "inherit", stderr: "inherit" },
 );
 if ((await build.exited) !== 0) {
@@ -33,18 +43,25 @@ const fixture = Bun.spawn(["target/debug/examples/browser_transport_fixture", fi
   stdout: "inherit",
   stderr: "inherit",
 });
+const gameDirectory = join(fixtureDirectory, "games");
+const games = Bun.spawn(
+  ["target/debug/examples/browser_game_fixture", gameDirectory, `http://127.0.0.1:${port}`],
+  { stdout: "inherit", stderr: "inherit" },
+);
+const gameMetadataPath = join(gameDirectory, "connection.json");
 const metadataPath = join(fixtureDirectory, "connection.json");
 try {
   const deadline = Date.now() + 10_000;
-  while (!(await Bun.file(metadataPath).exists())) {
-    if (fixture.exitCode !== null || Date.now() > deadline) {
+  while (!(await Bun.file(metadataPath).exists()) || !(await Bun.file(gameMetadataPath).exists())) {
+    if (fixture.exitCode !== null || games.exitCode !== null || Date.now() > deadline) {
       throw new Error("Transport fixture did not start");
     }
     await Bun.sleep(25);
   }
 } catch (error) {
   fixture.kill("SIGINT");
-  await fixture.exited;
+  games.kill("SIGINT");
+  await Promise.all([fixture.exited, games.exited]);
   await rm(fixtureDirectory, { recursive: true });
   throw error;
 }
@@ -52,6 +69,7 @@ const taskEnv: NodeJS.ProcessEnv = {
   ...process.env,
   SCRABBLE_BROWSER_PORT: String(port),
   SCRABBLE_TRANSPORT_FIXTURE: metadataPath,
+  SCRABBLE_GAME_FIXTURE: gameMetadataPath,
 };
 delete taskEnv.NO_COLOR;
 const child = Bun.spawn(
@@ -61,6 +79,7 @@ const child = Bun.spawn(
 const stop = () => {
   child.kill("SIGTERM");
   fixture.kill("SIGINT");
+  games.kill("SIGINT");
 };
 process.once("SIGINT", stop);
 process.once("SIGTERM", stop);
@@ -68,7 +87,8 @@ try {
   process.exitCode = await child.exited;
 } finally {
   fixture.kill("SIGINT");
-  await fixture.exited;
+  games.kill("SIGINT");
+  await Promise.all([fixture.exited, games.exited]);
   await rm(fixtureDirectory, { recursive: true });
   process.removeListener("SIGINT", stop);
   process.removeListener("SIGTERM", stop);

@@ -33,18 +33,27 @@ fn local_defaults_and_invalid_configuration_are_explicit() {
         ("SCRABBLE_MAX_MATCHES", "1"),
         ("SCRABBLE_MATCH_IDS", "one,one"),
         ("SCRABBLE_MATCH_IDS", "one,../two"),
-        ("SCRABBLE_MATCH_IDS", ""),
         ("SCRABBLE_ROUTE_PREFIX", "/game/"),
         ("SCRABBLE_ROUTE_PREFIX", "/%2e/game"),
         ("SCRABBLE_TEST_SEED", "PRIVATE-BAD-VALUE"),
         ("SCRABBLE_RECOVERY_DIR", ""),
         ("SCRABBLE_POTR", "1234"),
+        ("SCRABBLE_API_PORT", "8080"),
+        ("SCRABBLE_BOARD_ORIGIN", "https://board.example/path"),
+        ("SCRABBLE_BOARD_ORIGIN", "https://user:secret@board.example"),
+        ("SCRABBLE_BOARD_ORIGIN", "*"),
     ] {
         let error = ServerConfig::from_values(&BTreeMap::from([(key.into(), value.into())]))
             .err()
             .unwrap();
         assert!(!error.to_string().contains("PRIVATE-BAD-VALUE"));
     }
+    assert!(
+        ServerConfig::from_values(&BTreeMap::from([("SCRABBLE_MATCH_IDS".into(), "".into())]))
+            .unwrap()
+            .match_ids
+            .is_empty()
+    );
     let mut config = values();
     config.insert(
         "SCRABBLE_SEED_FILE".into(),
@@ -63,6 +72,7 @@ fn production_requires_private_persistent_initialization_and_explicit_tls() {
         ("SCRABBLE_SEED_FILE", "/var/lib/scrabble/seed"),
         ("SCRABBLE_RECOVERY_DIR", "/var/lib/scrabble/recovery"),
         ("SCRABBLE_MATCH_IDS", "one,two"),
+        ("SCRABBLE_BOARD_ORIGIN", "https://board.example"),
     ] {
         config.insert(key.into(), value.into());
     }

@@ -6,7 +6,7 @@ use scrabble_game::{
     session::GameSession,
     state::{GameState, StateError},
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 use std::collections::BTreeSet;
 
@@ -18,6 +18,42 @@ pub struct ScrabbleSimulation {
     tick: u64,
     admitted: BTreeSet<u32>,
     last_admitted_player: Option<u32>,
+    lifecycle: Option<MatchLifecycle>,
+}
+
+pub const MATCH_LIFETIME_SECONDS: u64 = 6 * 60 * 60;
+pub const FINISHED_RETENTION_TICKS: u64 = 5 * 60 * SCRABBLE_TICK_HZ as u64;
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MatchLifecycle {
+    pub created_at: u64,
+    pub finished_at_tick: Option<u64>,
+}
+impl MatchLifecycle {
+    pub fn expires_at(&self) -> u64 {
+        self.created_at.saturating_add(MATCH_LIFETIME_SECONDS)
+    }
+    pub fn can_retire(&self, now: u64, tick: u64) -> bool {
+        let minimum_age = FINISHED_RETENTION_TICKS / u64::from(SCRABBLE_TICK_HZ);
+        now >= self.expires_at()
+            || (now.saturating_sub(self.created_at) >= minimum_age
+                && self.finished_at_tick.is_some_and(|finished| {
+                    tick.saturating_sub(finished) >= FINISHED_RETENTION_TICKS
+                }))
+    }
+}
+
+/// Only lifecycle fields are decoded; canonical data never reaches an HTTP response.
+pub fn retirement_due(payload: &[u8], now: u64, tick: u64) -> Result<bool, serde_json::Error> {
+    #[derive(Deserialize)]
+    struct Projection {
+        lifecycle: Option<MatchLifecycle>,
+    }
+    let projection: Projection = serde_json::from_slice(payload)?;
+    Ok(projection
+        .lifecycle
+        .is_some_and(|lifecycle| lifecycle.can_retire(now, tick)))
 }
 
 fn error(error: impl std::fmt::Display) -> SimulationError {
@@ -31,7 +67,16 @@ impl ScrabbleSimulation {
             tick: 0,
             admitted: BTreeSet::new(),
             last_admitted_player: None,
+            lifecycle: None,
         })
+    }
+
+    pub fn with_lifecycle(mut self, created_at: u64) -> Self {
+        self.lifecycle = Some(MatchLifecycle {
+            created_at,
+            finished_at_tick: None,
+        });
+        self
     }
 
     fn require_admitted(&self, player_id: u32) -> Result<PlayerId, SimulationError> {
@@ -112,7 +157,14 @@ impl GameSimulation for ScrabbleSimulation {
         let envelope = CommandEnvelope::decode(payload).map_err(error)?;
         self.session
             .apply(player, sequence, &envelope)
-            .map_err(error)
+            .map_err(error)?;
+        if matches!(self.session.state().phase(), Phase::Finished { .. })
+            && let Some(lifecycle) = &mut self.lifecycle
+            && lifecycle.finished_at_tick.is_none()
+        {
+            lifecycle.finished_at_tick = Some(self.tick);
+        }
+        Ok(())
     }
 
     fn advance_tick(&mut self) -> Result<(), SimulationError> {
@@ -134,6 +186,8 @@ impl GameSimulation for ScrabbleSimulation {
             admitted: &'a BTreeSet<u32>,
             last_admitted_player: Option<u32>,
             game: &'a RawValue,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            lifecycle: Option<&'a MatchLifecycle>,
         }
         let game = self.session.state().canonical_bytes().map_err(error)?;
         let game: Box<RawValue> = serde_json::from_slice(&game).map_err(error)?;
@@ -142,6 +196,7 @@ impl GameSimulation for ScrabbleSimulation {
             admitted: &self.admitted,
             last_admitted_player: self.last_admitted_player,
             game: &game,
+            lifecycle: self.lifecycle.as_ref(),
         })
         .map_err(error)?;
         Ok(SimulationSnapshot::new(self.tick, payload))
@@ -158,6 +213,58 @@ impl GameSimulation for ScrabbleSimulation {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn completed_and_abandoned_lifetimes_are_bounded_and_longer_than_creation_retries() {
+        let lifecycle = MatchLifecycle {
+            created_at: 1000,
+            finished_at_tick: Some(20),
+        };
+        assert!(!lifecycle.can_retire(1001, 20 + FINISHED_RETENTION_TICKS - 1));
+        assert!(!lifecycle.can_retire(1001, 20 + FINISHED_RETENTION_TICKS));
+        assert!(lifecycle.can_retire(1300, 20 + FINISHED_RETENTION_TICKS));
+        let abandoned = MatchLifecycle {
+            created_at: 1000,
+            finished_at_tick: None,
+        };
+        assert!(!abandoned.can_retire(1000 + MATCH_LIFETIME_SECONDS - 1, 0));
+        assert!(abandoned.can_retire(1000 + MATCH_LIFETIME_SECONDS, 0));
+    }
+
+    #[test]
+    fn lifecycle_is_canonical_replay_input_and_never_a_private_player_projection() {
+        use game_server::{MatchRuntime, ReconnectToken};
+        let make = || {
+            ScrabbleSimulation::new(
+                GameId::new(7),
+                scrabble_game::ruleset::english_fixture(),
+                [3; 32],
+            )
+            .unwrap()
+            .with_lifecycle(1000)
+        };
+        let mut runtime = MatchRuntime::new_with_replay_capture(make(), 100);
+        let lease = runtime.admit(ReconnectToken([5; 16])).unwrap();
+        runtime.advance_tick().unwrap();
+        let snapshot = runtime.snapshot().unwrap();
+        let canonical: serde_json::Value = serde_json::from_slice(&snapshot.payload).unwrap();
+        assert_eq!(canonical["lifecycle"]["created_at"], 1000);
+        let private = runtime.snapshot_for(lease.player_id).unwrap();
+        let private: serde_json::Value = serde_json::from_slice(&private.payload).unwrap();
+        assert!(private.get("lifecycle").is_none());
+        runtime.freeze_for_recovery();
+        let recovered =
+            MatchRuntime::restore_from_recovery(make(), runtime.recovery_image().unwrap()).unwrap();
+        assert_eq!(recovered.snapshot().unwrap(), snapshot);
+        assert!(
+            retirement_due(
+                &snapshot.payload,
+                1000 + MATCH_LIFETIME_SECONDS,
+                snapshot.tick
+            )
+            .unwrap()
+        );
+    }
+
     #[test]
     fn tick_exhaustion_is_atomic() {
         let mut simulation = ScrabbleSimulation::new(

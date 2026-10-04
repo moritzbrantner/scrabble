@@ -15,6 +15,8 @@ pub struct ServerConfig {
     pub mode: Mode,
     pub port: u16,
     pub status_port: u16,
+    pub api_port: u16,
+    pub board_origin: String,
     pub certificate: PathBuf,
     pub private_key: PathBuf,
     pub seed_file: PathBuf,
@@ -41,6 +43,8 @@ const KEYS: &[&str] = &[
     "SCRABBLE_MODE",
     "SCRABBLE_PORT",
     "SCRABBLE_STATUS_PORT",
+    "SCRABBLE_API_PORT",
+    "SCRABBLE_BOARD_ORIGIN",
     "SCRABBLE_CERT_PEM",
     "SCRABBLE_KEY_PEM",
     "SCRABBLE_SEED_FILE",
@@ -132,11 +136,32 @@ impl ServerConfig {
         }
         let port = number(values, "SCRABBLE_PORT", "4433", 1, 65535)? as u16;
         let status_port = number(values, "SCRABBLE_STATUS_PORT", "8080", 1, 65535)? as u16;
+        let api_port = number(values, "SCRABBLE_API_PORT", "8081", 1, 65535)? as u16;
+        if api_port == status_port {
+            return Err(fail("API and status listeners require different TCP ports"));
+        }
+        let board_origin = value(values, "SCRABBLE_BOARD_ORIGIN", "http://localhost:5173");
+        let origin = url::Url::parse(board_origin)
+            .map_err(|_| fail("SCRABBLE_BOARD_ORIGIN must be a canonical HTTP(S) origin"))?;
+        if !matches!(origin.scheme(), "http" | "https")
+            || origin.origin().ascii_serialization() != board_origin
+        {
+            return Err(fail(
+                "SCRABBLE_BOARD_ORIGIN must be a canonical HTTP(S) origin without a path",
+            ));
+        }
+        if matches!(mode, Mode::Production)
+            && (!values.contains_key("SCRABBLE_BOARD_ORIGIN") || origin.scheme() != "https")
+        {
+            return Err(fail(
+                "production requires an explicit HTTPS SCRABBLE_BOARD_ORIGIN",
+            ));
+        }
         let max_matches = number(values, "SCRABBLE_MAX_MATCHES", "16", 1, 64)? as usize;
         let ids = value(values, "SCRABBLE_MATCH_IDS", "table-1,table-2");
         let mut unique = BTreeSet::new();
         let mut match_ids = Vec::new();
-        for id in ids.split(',') {
+        for id in ids.split(',').filter(|_| !ids.is_empty()) {
             let id = MatchId::new(id).map_err(|_| {
                 fail("SCRABBLE_MATCH_IDS must contain canonical comma-separated match IDs")
             })?;
@@ -169,6 +194,8 @@ impl ServerConfig {
             mode,
             port,
             status_port,
+            api_port,
+            board_origin: board_origin.to_owned(),
             match_ids,
             max_matches,
             route_prefix,

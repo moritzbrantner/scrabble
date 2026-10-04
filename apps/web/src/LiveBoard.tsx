@@ -8,7 +8,15 @@ import { BrowserMatch, type ConnectionState } from "./transport/browser-match";
 import { ProtocolError } from "./transport/wire";
 
 /** Development connection surface; endpoint discovery and player shell are later slices. */
-export function LiveBoard({ endpoint, matchId }: { endpoint: string; matchId: string }) {
+export function LiveBoard({
+  endpoint,
+  matchId,
+  certificateHash,
+}: {
+  endpoint: string;
+  matchId: string;
+  certificateHash?: string;
+}) {
   const [state, setState] = useState<ConnectionState>({ kind: "idle" });
   const [snapshot, setSnapshot] = useState<PublicSnapshot>();
   useEffect(() => {
@@ -16,7 +24,18 @@ export function LiveBoard({ endpoint, matchId }: { endpoint: string; matchId: st
     let playerId: string | undefined;
     let match: BrowserMatch | undefined;
     try {
+      let localTrust: WebTransportHash[] | undefined;
+      if (certificateHash !== undefined) {
+        if (!/^[0-9a-f]{64}$/.test(certificateHash)) {
+          throw new Error("Invalid local certificate hash");
+        }
+        const bytes = Uint8Array.from({ length: 32 }, (_, index) =>
+          Number.parseInt(certificateHash.slice(index * 2, index * 2 + 2), 16),
+        );
+        localTrust = [{ algorithm: "sha-256", value: bytes.buffer }];
+      }
       match = new BrowserMatch({
+        ...(localTrust === undefined ? {} : { serverCertificateHashes: localTrust }),
         endpoint,
         matchId,
         onState: (next) => {
@@ -56,7 +75,7 @@ export function LiveBoard({ endpoint, matchId }: { endpoint: string; matchId: st
       mounted = false;
       match?.close();
     };
-  }, [endpoint, matchId]);
+  }, [endpoint, matchId, certificateHash]);
   return (
     <>
       <ConnectionStatus state={state} />
