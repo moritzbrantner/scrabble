@@ -126,7 +126,9 @@ fn dictionary_rejection_preserves_canonical_and_preview_and_allows_corrected_ret
             )
         ),
         Err(CommandError::Commit(CommitError::Dictionary(
-            DictionaryError::UnknownWord("TA".into())
+            DictionaryError::InvalidWords {
+                words: vec!["TA".into()]
+            }
         )))
     );
     assert_eq!(session.state().canonical_bytes().unwrap(), before);
@@ -187,11 +189,37 @@ fn valid_main_word_is_rejected_when_a_cross_word_is_absent() {
     let before = state.canonical_bytes().unwrap();
     assert_eq!(
         scrabble_game::commit::apply(&mut state, PlayerId::new(1), &proposed),
-        Err(CommitError::Dictionary(DictionaryError::UnknownWord(
-            "AA".into()
-        )))
+        Err(CommitError::Dictionary(DictionaryError::InvalidWords {
+            words: vec!["AA".into(), "TT".into()]
+        }))
     );
     assert_eq!(state.canonical_bytes().unwrap(), before);
+    let dictionary = scrabble_game::dictionary::WordList::from_text(
+        state.ruleset().dictionary.clone(),
+        "TT\nCAT\nAA\nAT\n",
+    )
+    .unwrap();
+    let mut reordered = state.clone();
+    scrabble_game::commit::apply_with_dictionary(
+        &mut state,
+        PlayerId::new(1),
+        &proposed,
+        &dictionary,
+    )
+    .unwrap();
+    let reversed: Vec<_> = proposed.into_iter().rev().collect();
+    scrabble_game::commit::apply_with_dictionary(
+        &mut reordered,
+        PlayerId::new(1),
+        &reversed,
+        &dictionary,
+    )
+    .unwrap();
+    assert_eq!(
+        state.canonical_bytes().unwrap(),
+        reordered.canonical_bytes().unwrap()
+    );
+    assert_eq!(state.public_snapshot().board.len(), 5);
     state.verify_tile_conservation().unwrap();
 }
 

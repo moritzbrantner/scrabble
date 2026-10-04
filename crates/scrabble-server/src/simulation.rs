@@ -1,14 +1,15 @@
 use game_server::{GameSimulation, SimulationError, SimulationSnapshot, SnapshotScope};
 use scrabble_game::{
+    dictionary::{Dictionary, DictionaryError, authored_fixture},
     identity::{GameId, PlayerId},
     protocol::{Command, CommandEnvelope, Phase, PlayerSnapshot, PrivateRack, PublicHost},
     ruleset::Ruleset,
-    session::GameSession,
+    session::{CommandError, GameSession},
     state::{GameState, StateError},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, sync::Arc};
 
 pub const SCRABBLE_TICK_HZ: u16 = 20;
 pub const PREVIEW_LIFETIME_TICKS: u64 = 2 * SCRABBLE_TICK_HZ as u64;
@@ -64,14 +65,52 @@ pub fn retirement_due(payload: &[u8], now: u64, tick: u64) -> Result<bool, serde
         .is_some_and(|lifecycle| lifecycle.can_retire(now, tick)))
 }
 
+fn command_error(error_value: CommandError, envelope: &CommandEnvelope) -> SimulationError {
+    if let CommandError::Commit(scrabble_game::commit::CommitError::Dictionary(
+        dictionary_error @ DictionaryError::InvalidWords { .. },
+    )) = &error_value
+    {
+        #[derive(Serialize)]
+        struct Feedback<'a> {
+            version: u8,
+            game_id: GameId,
+            expected_turn: scrabble_game::identity::TurnId,
+            error: &'a DictionaryError,
+        }
+        let payload = serde_json::to_vec(&Feedback {
+            version: 1,
+            game_id: envelope.game_id,
+            expected_turn: envelope.expected_turn,
+            error: dictionary_error,
+        });
+        return match payload {
+            Ok(payload) => SimulationError::command_rejected(payload).unwrap_or_else(error),
+            Err(failure) => error(failure),
+        };
+    }
+    error(error_value)
+}
+
 fn error(error: impl std::fmt::Display) -> SimulationError {
     SimulationError::new(error.to_string())
 }
 
 impl ScrabbleSimulation {
     pub fn new(game_id: GameId, ruleset: Ruleset, seed: [u8; 32]) -> Result<Self, StateError> {
+        Self::with_dictionary(game_id, ruleset, seed, authored_fixture())
+    }
+
+    pub fn with_dictionary(
+        game_id: GameId,
+        ruleset: Ruleset,
+        seed: [u8; 32],
+        dictionary: Arc<dyn Dictionary>,
+    ) -> Result<Self, StateError> {
         Ok(Self {
-            session: GameSession::new(GameState::new(game_id, ruleset, seed)?),
+            session: GameSession::with_dictionary(
+                GameState::new(game_id, ruleset, seed)?,
+                dictionary,
+            ),
             tick: 0,
             admitted: BTreeSet::new(),
             last_admitted_player: None,
@@ -259,12 +298,12 @@ impl GameSimulation for ScrabbleSimulation {
                 _ => self
                     .session
                     .apply(player, sequence, &envelope)
-                    .map_err(error)?,
+                    .map_err(|failure| command_error(failure, &envelope))?,
             }
         } else {
             self.session
                 .apply(player, sequence, &envelope)
-                .map_err(error)?;
+                .map_err(|failure| command_error(failure, &envelope))?;
         }
         self.preview_deadline = match &envelope.command {
             Command::Preview { placements } if !placements.is_empty() => {

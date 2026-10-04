@@ -2,6 +2,7 @@ import { resumeCapability, type ResumeCapability } from "./resume-capability";
 import {
   contract,
   decodeControl,
+  decodeCommandRejection,
   decodeWelcome,
   encodeCommand,
   encodeControl,
@@ -27,6 +28,7 @@ export type MatchOptions = {
   matchId: string;
   onState: (state: ConnectionState) => void;
   onSnapshot: (snapshot: Snapshot) => void;
+  onCommandRejected?: (rejection: { sequence: number; payload: Uint8Array }) => void;
   /** Private resume capability: pass only to the storage owner, never to a public view. */
   resume?: ResumeCapability;
   onResume?: (capability: ResumeCapability) => void;
@@ -193,6 +195,11 @@ export class BrowserMatch {
       this.#publishResume();
       this.#writer = transport.datagrams.writable.getWriter();
       this.#options.onState({ kind: "connected", admission });
+      const rejections = this.#readCommandRejections(transport, lifetime.signal).catch(
+        (error: unknown) => {
+          lifetime.abort(error);
+        },
+      );
       const reader = transport.datagrams.readable.getReader();
       const reassembler = new SnapshotReassembler();
       try {
@@ -211,6 +218,8 @@ export class BrowserMatch {
           /* Connection shutdown owns the read failure. */
         });
         reader.releaseLock();
+        lifetime.abort(new Error("Connection ended"));
+        await rejections;
       }
     } catch (error) {
       terminalReported = true;
@@ -243,6 +252,30 @@ export class BrowserMatch {
       } else if (!terminalReported) {
         this.#options.onState({ kind: "disconnected" });
       }
+    }
+  }
+
+  async #readCommandRejections(transport: WebTransport, signal: AbortSignal): Promise<void> {
+    const reader = transport.incomingUnidirectionalStreams.getReader();
+    try {
+      while (!signal.aborted) {
+        const next = await abortable(reader.read(), signal);
+        if (next.done) {
+          return;
+        }
+        const rejection = decodeCommandRejection(
+          await readAll(next.value, 8 + contract.maxCommandRejectionPayloadBytes, signal),
+        );
+        if (rejection.sequence > this.#sequence) {
+          throw new ProtocolError("Rejection belongs to an unsent command");
+        }
+        this.#options.onCommandRejected?.(rejection);
+      }
+    } finally {
+      await reader.cancel().catch(() => {
+        /* Connection shutdown owns rejection-reader cancellation. */
+      });
+      reader.releaseLock();
     }
   }
 

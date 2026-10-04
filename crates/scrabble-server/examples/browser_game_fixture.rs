@@ -116,7 +116,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let api = std::net::TcpListener::bind("127.0.0.1:0")?;
     let api_port = api.local_addr()?.port();
     drop((udp, status, api));
-    let config = ServerConfig::from_values(&BTreeMap::from([
+    let mut values = BTreeMap::from([
         ("SCRABBLE_PORT".into(), port.to_string()),
         ("SCRABBLE_STATUS_PORT".into(), status_port.to_string()),
         ("SCRABBLE_API_PORT".into(), api_port.to_string()),
@@ -146,11 +146,24 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 .ok_or("invalid recovery path")?
                 .into(),
         ),
-    ]))?;
-    let opening = opening(
-        &MatchFactory::new(&config)?,
-        std::env::args().nth(3).as_deref() == Some("playable"),
-    )?;
+    ]);
+    let configured = std::env::args().nth(3).as_deref() == Some("playable");
+    if configured {
+        let word_file = directory.join("words.txt");
+        let words = "TA\nCTA\n";
+        std::fs::write(&word_file, words)?;
+        values.insert(
+            "SCRABBLE_DICTIONARY_FILE".into(),
+            word_file.to_str().ok_or("invalid word-list path")?.into(),
+        );
+        values.insert(
+            "SCRABBLE_DICTIONARY_NAME".into(),
+            "scrabble-browser-custom".into(),
+        );
+        values.insert("SCRABBLE_DICTIONARY_REVISION".into(), "1".into());
+    }
+    let config = ServerConfig::from_values(&values)?;
+    let opening = opening(&MatchFactory::new(&config)?, configured)?;
     let metadata = serde_json::json!({ "endpoint": format!("https://127.0.0.1:{port}/game"),
         "api": format!("http://127.0.0.1:{api_port}"), "status": format!("http://127.0.0.1:{status_port}"),
         "certificateHash": identity.certificate_chain().as_slice()[0].hash().as_ref(), "opening": opening });

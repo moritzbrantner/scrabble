@@ -583,24 +583,40 @@ fn committed_turn_converges_privately_and_replays_with_exactly_once_scoring() {
     invalid[0].coordinate = placements[1].coordinate;
     invalid[1].coordinate = placements[0].coordinate;
     let before = runtime.snapshot().unwrap();
-    assert!(
-        runtime
-            .submit_command(
-                1,
+    let first_before = runtime.snapshot_for(1).unwrap();
+    let second_before = runtime.snapshot_for(2).unwrap();
+    let records_before = runtime.replay_log().unwrap().records().len();
+    let failure = runtime
+        .submit_command(
+            1,
+            1,
+            3,
+            &command(
                 1,
                 3,
-                &command(
-                    1,
-                    3,
-                    0,
-                    Command::Commit {
-                        placements: invalid
-                    }
-                )
-            )
-            .is_err()
+                0,
+                Command::Commit {
+                    placements: invalid,
+                },
+            ),
+        )
+        .unwrap_err();
+    let game_server::RuntimeError::Simulation(failure) = failure else {
+        panic!("expected a dictionary rejection");
+    };
+    let feedback: Value = serde_json::from_slice(failure.command_rejection().unwrap()).unwrap();
+    assert_eq!(
+        feedback,
+        serde_json::json!({ "version": 1, "game_id": "1", "expected_turn": "0", "error": { "kind": "invalid_words", "words": ["TA"] } })
     );
+    assert!(!format!("{failure:?} {failure}").contains("TA"));
     assert_eq!(runtime.snapshot().unwrap(), before);
+    assert_eq!(runtime.snapshot_for(1).unwrap(), first_before);
+    assert_eq!(runtime.snapshot_for(2).unwrap(), second_before);
+    assert_eq!(
+        runtime.replay_log().unwrap().records().len(),
+        records_before
+    );
     let payload = command(1, 3, 0, Command::Commit { placements });
     assert_eq!(
         runtime.submit_command(1, 1, 3, &payload).unwrap(),

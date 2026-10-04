@@ -23,11 +23,11 @@ The browser uses `/scrabble/` as its Vite base, including in development. GitHub
 
 `cargo` owns canonical game logic under `crates/scrabble-game`; `crates/scrabble-server` adapts it to `game-server` through `ScrabbleSimulation`. `apps/web` owns presentation only. See the ordered GitHub issues #1–#34 for the MVP acceptance requirements.
 
-The versioned domain contracts and offline English fixture ruleset are defined in `crates/scrabble-game`; see [protocol v1](docs/specs/protocol-v1.md) and the [domain glossary](CONTEXT.md). The fixture dictionary is test-only, not a full playable word list.
+The versioned domain contracts and offline English fixture ruleset are defined in `crates/scrabble-game`; see [protocol v1](docs/specs/protocol-v1.md) and the [domain glossary](CONTEXT.md). The default fixture dictionary is test-only; deployments can load a separate local list through the [dictionary boundary](docs/specs/dictionary-validation.md).
 
 `GameState` provides deterministic tile storage, initial dealing, replacement draws, and scoped projections. [State storage](docs/specs/domain-state.md) documents the seeded initialization contract and the validation still required before gameplay commits.
 
-`GameSession::apply` now provides the [authoritative turn boundary](docs/specs/turn-application.md) for start, preview/cancel, and pass, with identity, sequence and turn checks. Commit and exchange remain unavailable until their ordered rule/transaction slices.
+`GameSession::apply` now provides the [authoritative turn boundary](docs/specs/turn-application.md) for start, preview/cancel, commit, pass and exchange, with identity, sequence and turn checks.
 
 [Placement validation](docs/specs/placement-validation.md) derives the main and cross words through a pure borrowed-state seam, with structured structural errors. Dictionary acceptance and scoring remain separate checks.
 

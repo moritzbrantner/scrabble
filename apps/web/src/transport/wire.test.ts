@@ -3,6 +3,7 @@ import fixtures from "./fixtures/wire.json";
 import {
   contract,
   decodeControl,
+  decodeCommandRejection,
   decodeSnapshot,
   decodeWelcome,
   encodeCommand,
@@ -55,6 +56,24 @@ describe("published game-server wire contract", () => {
       reconnectToken: new Uint8Array(16).fill(0xab),
       reconnectGraceTicks: 600n,
     });
+  });
+  test("private rejection frames preserve sequence and reject malformed boundaries", () => {
+    const frame = bytes(fixtures.commandRejection);
+    expect(decodeCommandRejection(frame)).toEqual({
+      sequence: 4,
+      payload: text.encode('{"kind":"invalid_words","words":["TA"]}'),
+    });
+    for (let length = 0; length < frame.length; length += 1) {
+      expect(() => decodeCommandRejection(frame.slice(0, length))).toThrow(ProtocolError);
+    }
+    expect(() => decodeCommandRejection(bytes(fixtures.command))).toThrow(ProtocolError);
+    const zero = frame.slice();
+    new DataView(zero.buffer).setUint32(2, 0);
+    expect(() => decodeCommandRejection(zero)).toThrow("sequence");
+    const oversized = frame.slice();
+    new DataView(oversized.buffer).setUint16(6, contract.maxCommandRejectionPayloadBytes + 1);
+    expect(() => decodeCommandRejection(oversized)).toThrow("payload limit");
+    expect(() => decodeCommandRejection(new Uint8Array([...frame, 0]))).toThrow("length");
   });
   test("bounds, version mismatches, framing and integrity fail clearly", () => {
     for (const sequence of [0, -1, 1.5, 0x100000000]) {

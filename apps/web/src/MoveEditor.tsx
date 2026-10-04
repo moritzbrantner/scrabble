@@ -2,7 +2,7 @@ import { Button } from "@moritzbrantner/ui/client";
 import { useEffect, useRef, useState } from "react";
 import { type PlayerSnapshot, type Ruleset } from "./public-state";
 import { premiums } from "./board-premiums";
-import { type CommandEnvelope } from "./game-protocol";
+import { type CommandEnvelope, type WordRejection } from "./game-protocol";
 import { PlayerRack } from "./PlayerRack";
 import {
   draftMessages,
@@ -29,6 +29,7 @@ export function MoveEditor({
   canAct,
   onTurnAction,
   onPreview,
+  wordRejection,
 }: {
   snapshot: PlayerSnapshot;
   rules: Ruleset;
@@ -37,6 +38,7 @@ export function MoveEditor({
     command: Extract<CommandEnvelope["command"], { kind: "commit" | "pass" | "exchange" }>,
   ) => Promise<void>;
   onPreview?: (placements: MoveDraft["placements"]) => Promise<void>;
+  wordRejection?: WordRejection;
 }) {
   const [state, setState] = useState<EditorState>(() => ({ draft: emptyDraft(snapshot) }));
   const current = reconcileDraft(snapshot, state.draft);
@@ -49,6 +51,27 @@ export function MoveEditor({
   const exchanging = exchange !== undefined;
   const canExchange = snapshot.public.remaining_tiles >= rules.exchange_minimum_bag;
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const handledRejection = useRef<WordRejection>(undefined);
+  useEffect(() => {
+    if (wordRejection === handledRejection.current) {
+      return;
+    }
+    handledRejection.current = wordRejection;
+    if (
+      wordRejection !== undefined &&
+      !stale &&
+      state.pending === "move" &&
+      wordRejection.game_id === snapshot.public.game_id &&
+      snapshot.public.phase.kind === "playing" &&
+      wordRejection.expected_turn === snapshot.public.phase.turn
+    ) {
+      clearTimeout(timer.current);
+      setState({
+        draft: current,
+        message: `Not in the dictionary: ${wordRejection.error.words.join(", ")}. Your draft is kept.`,
+      });
+    }
+  }, [wordRejection, stale, state.pending, current, snapshot.public]);
   const board = useRef<HTMLDivElement>(null);
   const editor = useRef<HTMLElement>(null);
   useEffect(() => {

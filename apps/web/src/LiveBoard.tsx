@@ -2,8 +2,9 @@ import { Button } from "@moritzbrantner/ui/client";
 import { useEffect, useRef, useState } from "react";
 import { ConnectionStatus } from "./ConnectionStatus";
 import { fixtures } from "./fixtures";
+import { matchRules, requireMatchRules } from "./match-rules";
 import { decodePlayerSnapshot, encodeGameCommand } from "./game-protocol";
-import { type PublicSnapshot } from "./public-state";
+import { type PublicSnapshot, type Ruleset } from "./public-state";
 import { PlayerInvite } from "./PlayerInvite";
 import { SharedBoard } from "./SharedBoard";
 import { BrowserMatch, matchUrl, type ConnectionState } from "./transport/browser-match";
@@ -25,6 +26,7 @@ export function LiveBoard({
   const separateBoard = matchId.startsWith("b_");
   const [state, setState] = useState<ConnectionState>({ kind: "idle" });
   const [snapshot, setSnapshot] = useState<PublicSnapshot>();
+  const [rules, setRules] = useState<Ruleset>(fixtures.ruleset);
   const client = useRef<BrowserMatch>(undefined);
   const running = useRef<Promise<void>>(undefined);
   const claimTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -37,6 +39,7 @@ export function LiveBoard({
     let playerId: string | undefined;
     let match: BrowserMatch | undefined;
     let claimSent = false;
+    let selectedRules: Ruleset | undefined;
     try {
       let localTrust: WebTransportHash[] | undefined;
       if (certificateHash !== undefined) {
@@ -74,14 +77,11 @@ export function LiveBoard({
           }
           const projection = decodePlayerSnapshot(frame.payload, playerId);
           const current = projection.public;
-          if (
-            current.ruleset.name !== fixtures.ruleset.identity.name ||
-            current.ruleset.revision !== fixtures.ruleset.identity.revision ||
-            current.dictionary.name !== fixtures.ruleset.dictionary.name ||
-            current.dictionary.revision !== fixtures.ruleset.dictionary.revision
-          ) {
-            throw new ProtocolError("This client does not support the match ruleset");
+          if (selectedRules === undefined) {
+            selectedRules = matchRules(current);
+            setRules(selectedRules);
           }
+          requireMatchRules(current, selectedRules);
           if (separateBoard) {
             if (current.host === undefined || projection.own_rack.tiles.length !== 0) {
               throw new ProtocolError("Invalid shared board projection");
@@ -194,7 +194,7 @@ export function LiveBoard({
     state.kind === "connected" &&
     snapshot?.phase.kind === "lobby" &&
     host === state.admission.playerId &&
-    snapshot.players.length >= fixtures.ruleset.minimum_players;
+    snapshot.players.length >= rules.minimum_players;
   async function startGame() {
     const current = client.current;
     if (!canStart || snapshot === undefined || current === undefined || start.kind === "pending") {
@@ -232,8 +232,8 @@ export function LiveBoard({
           <Button disabled={!canStart || start.kind === "pending"} onClick={() => void startGame()}>
             {start.kind === "pending" ? "Starting…" : "Start game"}
           </Button>
-          {snapshot.players.length < fixtures.ruleset.minimum_players && (
-            <p>At least {fixtures.ruleset.minimum_players} players are needed.</p>
+          {snapshot.players.length < rules.minimum_players && (
+            <p>At least {rules.minimum_players} players are needed.</p>
           )}
           {state.kind === "connected" && host !== state.admission.playerId && (
             <p>Waiting for the host to start.</p>
@@ -241,7 +241,7 @@ export function LiveBoard({
           {start.kind === "failed" && <p role="alert">{start.message}</p>}
         </section>
       )}
-      {snapshot !== undefined && <SharedBoard snapshot={snapshot} rules={fixtures.ruleset} />}
+      {snapshot !== undefined && <SharedBoard snapshot={snapshot} rules={rules} />}
     </>
   );
 }

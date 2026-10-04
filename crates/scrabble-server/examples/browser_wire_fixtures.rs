@@ -54,6 +54,7 @@ fn fixtures() -> Value {
             "controlFormatVersion": contract.control_format_version,
             "reconnectTokenBytes": contract.reconnect_token_bytes,
             "maxCommandPayloadBytes": contract.max_command_payload_bytes,
+            "maxCommandRejectionPayloadBytes": contract.max_command_rejection_payload_bytes,
             "maxSnapshotPayloadBytes": contract.max_snapshot_payload_bytes,
             "maxSnapshotFragments": contract.max_snapshot_fragments,
             "maxControlPayloadBytes": contract.max_control_payload_bytes,
@@ -62,6 +63,7 @@ fn fixtures() -> Value {
             "maxIdleDatagrams": SNAPSHOT_REASSEMBLY_MAX_IDLE_DATAGRAMS,
         },
         "command": hex(&encode_command(4, b"{\"version\":1}").unwrap()),
+        "commandRejection": hex(&encode_command_rejection(4, b"{\"kind\":\"invalid_words\",\"words\":[\"TA\"]}").unwrap()),
         "snapshot": hex(&whole),
         "fragments": encode_snapshot_fragments(&whole, 27).unwrap().iter().map(|bytes| hex(bytes)).collect::<Vec<_>>(),
         "welcome": hex(&encode_welcome(Welcome {
