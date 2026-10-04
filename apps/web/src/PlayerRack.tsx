@@ -1,3 +1,4 @@
+import { Button } from "@moritzbrantner/ui/client";
 import { type PlayerSnapshot, type Ruleset } from "./public-state";
 
 /** Receives only the authenticated recipient's rack; public scores contain no private tiles. */
@@ -5,10 +6,16 @@ export function PlayerRack({
   rack,
   rules,
   canAct,
+  selection,
 }: {
   rack: PlayerSnapshot["own_rack"];
   rules: Ruleset;
   canAct: boolean;
+  selection?: {
+    selected: string | undefined;
+    placed: string[];
+    onSelect: (tileId: string) => void;
+  };
 }) {
   const values = new Map(
     rules.tiles.flatMap((tile) =>
@@ -25,10 +32,24 @@ export function PlayerRack({
           const description = `${blank ? "Blank tile" : letter}, ${value ?? "unknown"} points`;
           return (
             <li key={tile.id} data-tile-id={tile.id} aria-label={description}>
-              <span className={`rack-tile${blank ? " blank-tile" : ""}`} aria-hidden="true">
-                <span>{letter}</span>
-                <small>{value ?? "?"}</small>
-              </span>
+              {selection === undefined ? (
+                <span className={`rack-tile${blank ? " blank-tile" : ""}`} aria-hidden="true">
+                  <span>{letter}</span>
+                  <small>{value ?? "?"}</small>
+                </span>
+              ) : (
+                <Button
+                  className={`rack-tile${blank ? " blank-tile" : ""}`}
+                  data-placed={selection.placed.includes(tile.id)}
+                  disabled={!canAct}
+                  aria-label={`${description}${selection.placed.includes(tile.id) ? ", placed in draft" : ""}`}
+                  aria-pressed={selection.selected === tile.id}
+                  onClick={() => selection.onSelect(tile.id)}
+                >
+                  <span aria-hidden="true">{letter}</span>
+                  <small aria-hidden="true">{value ?? "?"}</small>
+                </Button>
+              )}
             </li>
           );
         })}

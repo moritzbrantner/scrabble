@@ -397,7 +397,15 @@ test("phone names preserve distinct identities across refresh and full-game fail
           .evaluateAll((tiles) => tiles.map((tile) => tile.getAttribute("data-tile-id"))),
       ).toEqual(projection?.tileIds);
       await expect(rack).toHaveAttribute("aria-disabled", phone === first ? "false" : "true");
-      await expect(rack.getByRole("button")).toHaveCount(0);
+      await expect(rack.getByRole("button")).toHaveCount(7);
+      if (phone !== first) {
+        for (const button of await rack.getByRole("button").all()) {
+          await expect(button).toBeDisabled();
+        }
+        await expect(
+          phone.getByRole("button", { name: "Commit move", exact: true }),
+        ).toBeDisabled();
+      }
       await expect(phone.getByRole("textbox")).toHaveCount(0);
       await expect(
         phone.getByRole("list", { name: "Players and scores", exact: true }).getByRole("listitem"),
@@ -408,6 +416,53 @@ test("phone names preserve distinct identities across refresh and full-game fail
       }
     }
     expect(tileIds.size).toBe(28);
+    const editor = first.getByRole("region", { name: "Move editor", exact: true });
+    const rackButtons = first
+      .getByRole("list", { name: "Your rack", exact: true })
+      .getByRole("button");
+    async function placeTile(index: number, row: number, column: number) {
+      const tile = rackButtons.nth(index);
+      const label = await tile.getAttribute("aria-label");
+      await tile.click();
+      await editor
+        .getByRole("button", { name: new RegExp(`^Row ${row}, column ${column}:`) })
+        .click();
+      if (label?.startsWith("Blank tile")) {
+        await editor
+          .getByRole("group", { name: "Choose blank letter", exact: true })
+          .getByRole("button", { name: "A", exact: true })
+          .click();
+      }
+    }
+    await placeTile(0, 8, 8);
+    await expect(editor.getByRole("status")).toContainText("at least two letters");
+    await placeTile(1, 8, 9);
+    await expect(editor.getByRole("status")).toContainText("Ready to commit");
+    await expect(editor.locator(".tentative-square")).toHaveCount(2);
+    await placeTile(1, 8, 10);
+    await expect(editor.getByRole("status")).toContainText("Fill the gaps");
+    await expect(editor.getByRole("button", { name: "Commit move", exact: true })).toBeDisabled();
+    await placeTile(1, 9, 9);
+    await expect(editor.getByRole("status")).toContainText("one row or column");
+    await rackButtons.nth(1).click();
+    await editor.getByRole("button", { name: "Return selected tile", exact: true }).click();
+    await expect(rackButtons.nth(1)).toHaveAttribute("data-placed", "false");
+    await editor.getByRole("button", { name: "Cancel move", exact: true }).click();
+    await expect(editor.locator(".tentative-square")).toHaveCount(0);
+    await placeTile(0, 8, 8);
+    await placeTile(1, 9, 8);
+    await expect(editor.getByRole("status")).toContainText("Ready to commit");
+    await editor.getByRole("button", { name: "Commit move", exact: true }).click();
+    await expect(editor.getByRole("status")).toContainText("Waiting for move confirmation");
+    await expect(editor.getByRole("status")).toContainText("Move was not confirmed", {
+      timeout: 7000,
+    });
+    await expect(editor.locator(".tentative-square")).toHaveCount(2);
+    await expect(page.locator(".letter-tile")).toHaveCount(0);
+    await first.getByRole("button", { name: "Retry player connection", exact: true }).click();
+    await expect(first.getByText("It is your turn.", { exact: true })).toBeVisible();
+    await expect(editor.getByRole("button", { name: "Commit move", exact: true })).toBeEnabled();
+    await editor.getByRole("button", { name: "Cancel move", exact: true }).click();
     const ownTiles = await first
       .getByRole("list", { name: "Your rack", exact: true })
       .getByRole("listitem")

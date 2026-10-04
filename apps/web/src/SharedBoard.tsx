@@ -1,12 +1,7 @@
-import { type Premium, type PublicSnapshot, type Ruleset } from "./public-state";
+import { type PublicSnapshot, type Ruleset } from "./public-state";
 
-const premiums: Record<Premium, { label: string; short: string }> = {
-  normal: { label: "Normal square", short: "" },
-  double_letter: { label: "Double letter", short: "DL" },
-  triple_letter: { label: "Triple letter", short: "TL" },
-  double_word: { label: "Double word", short: "DW" },
-  triple_word: { label: "Triple word", short: "TW" },
-};
+import { premiums } from "./board-premiums";
+
 export function SharedBoard({ snapshot, rules }: { snapshot: PublicSnapshot; rules: Ruleset }) {
   const cells = new Map(
     snapshot.board.map((tile) => [`${tile.coordinate.row},${tile.coordinate.column}`, tile]),
