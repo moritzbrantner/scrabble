@@ -4,6 +4,7 @@ import { placement } from "./game-protocol";
 import { playerSnapshot, ruleset } from "./public-state";
 import { draftMessages, draftProblem, emptyDraft } from "./move-draft";
 
+// Cargo may compile a different feature graph on a cold CI checkout; allow compilation time.
 test("browser structural guidance matches the Rust oracle across empty, committed and smaller boards", () => {
   const result = Bun.spawnSync([
     "cargo",
@@ -44,4 +45,4 @@ test("browser structural guidance matches the Rust oracle across empty, committe
     }
   }
   expect(checked).toBe(1970);
-});
+}, 60_000);
