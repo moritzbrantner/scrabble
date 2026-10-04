@@ -246,6 +246,164 @@ fn send(
 }
 
 #[tokio::test]
+async fn forged_wire_commands_close_only_the_attacker_and_do_not_disclose_private_state() {
+    let mut server = Server::new().await;
+    server.start().await;
+    let client = server.client();
+    let (mut attacker, mut lease) = server.connect(&client, "/game/matches/alpha").await;
+    let (peer, peer_lease) = server.connect(&client, "/game/matches/alpha").await;
+    let lobby = snapshot(&attacker, |view| view.public.players.len() == 2).await;
+    send(&attacker, &lobby, &lease, 1, 0, Command::Start {});
+    let initial = snapshot(&attacker, |view| {
+        matches!(view.public.phase, Phase::Playing { .. })
+    })
+    .await;
+    let other = snapshot(&peer, |view| {
+        matches!(view.public.phase, Phase::Playing { .. })
+    })
+    .await;
+    assert_eq!(initial.own_rack.player_id.get(), u64::from(lease.player_id));
+    assert!(
+        initial.own_rack.tiles.iter().all(|tile| !other
+            .own_rack
+            .tiles
+            .iter()
+            .any(|peer| peer.id == tile.id))
+    );
+    let marker = "private-command-marker-abcdef0123456789";
+    let mut tokens = Vec::new();
+    for attack in 0..6 {
+        let selector = game_server::encode_control_request(
+            format!(
+                "{{\"scope\":\"canonical\",\"player_id\":{},\"marker\":\"{marker}\"}}",
+                peer_lease.player_id
+            )
+            .as_bytes(),
+        )
+        .unwrap();
+        let (mut send_stream, mut receive) = timeout(Duration::from_secs(5), attacker.open_bi())
+            .await
+            .unwrap()
+            .unwrap()
+            .await
+            .unwrap();
+        send_stream.write_all(&selector).await.unwrap();
+        send_stream.finish().await.unwrap();
+        let mut response = [0; game_server::CONTROL_HEADER_BYTES];
+        timeout(Duration::from_secs(5), receive.read_exact(&mut response))
+            .await
+            .unwrap()
+            .unwrap();
+        let response = game_server::decode_control_response(&response).unwrap();
+        assert!(!response.accepted);
+        assert!(response.payload.is_empty());
+        let token = game_server::ReconnectToken(lease.reconnect_token).encode_hex();
+        tokens.push(token.clone());
+        let mut envelope = serde_json::to_value(CommandEnvelope {
+            version: ProtocolVersion,
+            game_id: initial.public.game_id,
+            player_id: PlayerId::new(u64::from(lease.player_id)),
+            sequence: 2,
+            expected_turn: TurnId::new(0),
+            command: Command::Pass {},
+        })
+        .unwrap();
+        match attack {
+            0 => {
+                envelope["player_id"] = serde_json::json!(peer_lease.player_id.to_string());
+            }
+            1 => {
+                envelope["command"] = serde_json::json!({"kind":"commit","placements":[{
+                    "tile_id":other.own_rack.tiles[0].id,"coordinate":{"row":7,"column":7},"blank_as":null
+                }]});
+            }
+            2 => {
+                envelope["command"] = serde_json::json!({"kind":"preview","placements":[{
+                    "tile_id":initial.own_rack.tiles[0].id,"coordinate":{"row":255,"column":7},"blank_as":null
+                }]});
+            }
+            3 => {
+                envelope["command"] =
+                    serde_json::json!({"kind":"pass", marker:true, token.clone():true});
+            }
+            4 => {
+                envelope["command"] = serde_json::json!({"kind":marker});
+            }
+            5 => {}
+            _ => unreachable!(),
+        }
+        let frame = if attack == 5 {
+            // Deliberately bypass the native encoder's bound, as a modified client can.
+            let mut frame = vec![game_server::PROTOCOL_VERSION, 1];
+            frame.extend_from_slice(&2_u32.to_be_bytes());
+            frame.extend_from_slice(&1025_u16.to_be_bytes());
+            frame.extend_from_slice(&vec![b'x'; 1025]);
+            frame
+        } else {
+            encode_command(2, &serde_json::to_vec(&envelope).unwrap()).unwrap()
+        };
+        attacker.send_datagram(frame).unwrap();
+        timeout(Duration::from_secs(5), attacker.closed())
+            .await
+            .unwrap();
+        let unchanged = snapshot(&peer, |view| {
+            view.public.players.iter().any(|player| {
+                player.id.get() == u64::from(lease.player_id) && player.connected == Some(false)
+            })
+        })
+        .await;
+        assert_eq!(unchanged.own_rack, other.own_rack);
+        assert_eq!(unchanged.public.phase, initial.public.phase);
+        assert_eq!(unchanged.public.board, initial.public.board);
+        assert_eq!(
+            unchanged.public.remaining_tiles,
+            initial.public.remaining_tiles
+        );
+        assert_eq!(unchanged.public.revision, initial.public.revision);
+        assert_eq!(
+            unchanged
+                .public
+                .players
+                .iter()
+                .map(|player| (player.id, player.score, player.rack_count))
+                .collect::<Vec<_>>(),
+            initial
+                .public
+                .players
+                .iter()
+                .map(|player| (player.id, player.score, player.rack_count))
+                .collect::<Vec<_>>()
+        );
+        let (resumed, next) = server
+            .connect(&client, &format!("/game/matches/alpha/reconnect/{token}"))
+            .await;
+        assert_eq!(next.player_id, lease.player_id);
+        assert_eq!(next.connection_epoch, lease.connection_epoch + 1);
+        let restored = snapshot(&resumed, |_| true).await;
+        assert_eq!(restored.own_rack, initial.own_rack);
+        assert_eq!(restored.public.phase, initial.public.phase);
+        attacker = resumed;
+        lease = next;
+        assert_eq!(server.get("/readyz").await.unwrap().0, 200);
+    }
+    // Every failed request left sequence 2 available; the same player can still pass legally.
+    send(&attacker, &initial, &lease, 2, 0, Command::Pass {});
+    snapshot(
+        &peer,
+        |view| matches!(view.public.phase, Phase::Playing { turn, .. } if turn == TurnId::new(1)),
+    )
+    .await;
+    server.stop().await;
+    let diagnostic = fs::read_to_string(&server.log).unwrap();
+    assert!(!diagnostic.contains(marker));
+    for token in tokens {
+        assert!(!diagnostic.contains(&token));
+    }
+    assert!(!diagnostic.contains("own_rack"));
+    assert!(!diagnostic.contains("RackTile"));
+}
+
+#[tokio::test]
 async fn two_matches_are_independent_and_shutdown_restart_preserves_reconnect_authority() {
     let mut server = Server::new().await;
     server.start().await;

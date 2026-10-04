@@ -13,11 +13,22 @@ pub trait Dictionary: Send + Sync {
     fn contains(&self, word: &str) -> bool;
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum DictionaryError {
     IdentityMismatch,
     InvalidWords { words: Vec<String> },
+}
+impl fmt::Debug for DictionaryError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::IdentityMismatch => f.write_str("IdentityMismatch"),
+            Self::InvalidWords { words } => f
+                .debug_struct("InvalidWords")
+                .field("word_count", &words.len())
+                .finish_non_exhaustive(),
+        }
+    }
 }
 impl fmt::Display for DictionaryError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {

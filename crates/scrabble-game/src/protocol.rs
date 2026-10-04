@@ -4,6 +4,7 @@ use crate::identity::{
 };
 use crate::ruleset::{ContentIdentity, TileFace};
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 pub const MAX_COMMAND_BYTES: usize = 16 * 1024;
 
@@ -15,7 +16,7 @@ pub struct Placement {
     pub blank_as: Option<char>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Command {
     Start {},
@@ -25,6 +26,24 @@ pub enum Command {
     Commit { placements: Vec<Placement> },
     Pass {},
     Exchange { tile_ids: Vec<TileId> },
+}
+impl fmt::Debug for Command {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (kind, tiles) = match self {
+            Self::Start {} => ("Start", None),
+            Self::Pass {} => ("Pass", None),
+            Self::ClaimBoard { .. } => ("ClaimBoard", None),
+            Self::SetName { .. } => ("SetName", None),
+            Self::Preview { placements } => ("Preview", Some(placements.len())),
+            Self::Commit { placements } => ("Commit", Some(placements.len())),
+            Self::Exchange { tile_ids } => ("Exchange", Some(tile_ids.len())),
+        };
+        let mut result = f.debug_struct(kind);
+        if let Some(count) = tiles {
+            result.field("tile_count", &count);
+        }
+        result.finish_non_exhaustive()
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -44,8 +63,8 @@ impl CommandEnvelope {
         if bytes.len() > MAX_COMMAND_BYTES {
             return Err(ContractError("command exceeds byte limit".into()));
         }
-        let envelope: Self =
-            serde_json::from_slice(bytes).map_err(|error| ContractError(error.to_string()))?;
+        let envelope: Self = serde_json::from_slice(bytes)
+            .map_err(|_| ContractError("invalid command encoding".into()))?;
         let count = match &envelope.command {
             Command::Preview { placements } | Command::Commit { placements } => placements.len(),
             Command::Exchange { tile_ids } => tile_ids.len(),
@@ -128,17 +147,30 @@ pub struct PublicSnapshot {
 pub struct PublicHost {
     pub id: Option<PlayerId>,
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RackTile {
     pub id: TileId,
     pub face: TileFace,
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+impl fmt::Debug for RackTile {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RackTile").finish_non_exhaustive()
+    }
+}
+#[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PrivateRack {
     pub player_id: PlayerId,
     pub tiles: Vec<RackTile>,
+}
+impl fmt::Debug for PrivateRack {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PrivateRack")
+            .field("player_id", &self.player_id)
+            .field("tile_count", &self.tiles.len())
+            .finish_non_exhaustive()
+    }
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
