@@ -527,11 +527,16 @@ test("active phones edit tentative moves and retain unconfirmed drafts through r
       }
     }
     await placeTile(0, 8, 8);
+    await expect(page.locator(".tentative-tile")).toHaveCount(1);
+    await expect(page.getByRole("cell", { name: /^Row 8, column 8: Tentative/ })).toBeVisible();
     await expect(editor.getByRole("status")).toContainText("at least two letters");
     await placeTile(1, 8, 9);
+    await expect(page.locator(".tentative-tile")).toHaveCount(2);
     await expect(editor.getByRole("status")).toContainText("Ready to commit");
     await expect(editor.locator(".tentative-square")).toHaveCount(2);
     await placeTile(1, 8, 10);
+    await expect(page.getByRole("cell", { name: /^Row 8, column 10: Tentative/ })).toBeVisible();
+    await expect(page.getByRole("cell", { name: /^Row 8, column 9: Normal square/ })).toBeVisible();
     await expect(editor.getByRole("status")).toContainText("Fill the gaps");
     await expect(editor.getByRole("button", { name: "Commit move", exact: true })).toBeDisabled();
     await placeTile(1, 9, 9);
@@ -541,6 +546,7 @@ test("active phones edit tentative moves and retain unconfirmed drafts through r
     await expect(rackButtons.nth(1)).toHaveAttribute("data-placed", "false");
     await editor.getByRole("button", { name: "Cancel move", exact: true }).click();
     await expect(editor.locator(".tentative-square")).toHaveCount(0);
+    await expect(page.locator(".tentative-tile")).toHaveCount(0);
     await placeTile(0, 8, 8);
     await placeTile(1, 9, 8);
     await expect(editor.getByRole("status")).toContainText("Ready to commit");
@@ -554,7 +560,67 @@ test("active phones edit tentative moves and retain unconfirmed drafts through r
     await first.getByRole("button", { name: "Retry player connection", exact: true }).click();
     await expect(first.getByText("It is your turn.", { exact: true })).toBeVisible();
     await expect(editor.getByRole("button", { name: "Commit move", exact: true })).toBeEnabled();
+    await expect(page.locator(".tentative-tile")).toHaveCount(2);
     await editor.getByRole("button", { name: "Cancel move", exact: true }).click();
+    await expect(page.locator(".tentative-tile")).toHaveCount(0);
+  } finally {
+    await first.close();
+    await second.close();
+  }
+});
+
+test("closing an active phone clears its tentative board without committing tiles", async ({
+  page,
+  context,
+}) => {
+  const certificate = fixture.certificateHash
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+  await page.goto(
+    `./?server=${encodeURIComponent(fixture.endpoint)}&api=${encodeURIComponent(fixture.api)}&certificate=${certificate}`,
+  );
+  await page.getByRole("button", { name: "Create game", exact: true }).click();
+  const href = await page
+    .getByRole("link", { name: "Join this game", exact: true })
+    .getAttribute("href");
+  const first = await context.newPage();
+  const second = await context.newPage();
+  try {
+    for (const [index, phone] of [first, second].entries()) {
+      await phone.goto(href ?? "");
+      await phone.getByLabel("Player name", { exact: true }).fill(index === 0 ? "Ada" : "Lin");
+      await phone.getByRole("button", { name: "Join game", exact: true }).click();
+      await expect(
+        phone.getByRole("heading", { name: index === 0 ? "Ada" : "Lin", exact: true }),
+      ).toBeVisible();
+    }
+    await page.getByRole("button", { name: "Start game", exact: true }).click();
+    await expect(first.getByText("It is your turn.", { exact: true })).toBeVisible();
+    const tile = first
+      .getByRole("list", { name: "Your rack", exact: true })
+      .getByRole("button")
+      .first();
+    const blank = (await tile.getAttribute("aria-label"))?.startsWith("Blank tile");
+    await tile.click();
+    const editor = first.getByRole("region", { name: "Move editor", exact: true });
+    await editor.getByRole("button", { name: /^Row 8, column 8:/ }).click();
+    if (blank) {
+      await editor
+        .getByRole("group", { name: "Choose blank letter", exact: true })
+        .getByRole("button", { name: "A", exact: true })
+        .click();
+    }
+    await expect(page.locator(".tentative-tile")).toHaveCount(1);
+    await first.close();
+    await expect(page.getByRole("listitem").filter({ hasText: "Ada" })).toContainText(
+      "Disconnected",
+    );
+    await expect(page.locator(".tentative-tile")).toHaveCount(0);
+    await expect(page.locator(".letter-tile")).toHaveCount(0);
+    await expect(page.getByText("Turn 1", { exact: true })).toBeVisible();
+    await expect(
+      second.getByRole("list", { name: "Your rack", exact: true }).getByRole("listitem"),
+    ).toHaveCount(7);
   } finally {
     await first.close();
     await second.close();

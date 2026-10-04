@@ -25,11 +25,13 @@ export function MoveEditor({
   rules,
   canAct,
   onCommit,
+  onPreview,
 }: {
   snapshot: PlayerSnapshot;
   rules: Ruleset;
   canAct: boolean;
   onCommit: (placements: MoveDraft["placements"]) => Promise<void>;
+  onPreview?: (placements: MoveDraft["placements"]) => Promise<void>;
 }) {
   const [state, setState] = useState<EditorState>(() => ({ draft: emptyDraft(snapshot) }));
   const current = reconcileDraft(snapshot, state.draft);
@@ -41,6 +43,29 @@ export function MoveEditor({
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const board = useRef<HTMLDivElement>(null);
   const problem = draftProblem(snapshot, rules, current);
+  const previewCallback = useRef(onPreview);
+  useEffect(() => {
+    previewCallback.current = onPreview;
+  }, [onPreview]);
+  const previewPlacements = JSON.stringify(current.placements);
+  useEffect(() => {
+    if (!canAct) {
+      return;
+    }
+    const placements = pending ? [] : current.placements;
+    const publish = () => {
+      void previewCallback.current?.(placements).catch(() => {
+        // Tentative delivery has no bearing on authoritative move acceptance.
+      });
+    };
+    // Coalesce rapid edits; refresh only the latest complete draft.
+    const initial = setTimeout(publish, 100);
+    const refresh = placements.length === 0 ? undefined : setInterval(publish, 500);
+    return () => {
+      clearTimeout(initial);
+      clearInterval(refresh);
+    };
+  }, [canAct, pending, current.context, previewPlacements]);
   useEffect(() => {
     if (stale) {
       setState({ draft: current, message: "The game changed. Your draft was cleared." });

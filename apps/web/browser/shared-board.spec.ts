@@ -24,7 +24,7 @@ test("every phase renders with stable board geometry and read-only semantics", a
     if (fixture === "playing") {
       await expect(page.getByRole("status")).toHaveText("Ada's turn");
       await expect(
-        page.getByRole("cell", { name: /Row 8, column 8: A, 0 points, blank/ }),
+        page.getByRole("cell", { name: /Row 8, column 8: Committed A, 0 points, blank/ }),
       ).toBeVisible();
     }
     const colors = new Set<string>();
