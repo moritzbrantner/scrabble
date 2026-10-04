@@ -377,7 +377,9 @@ export function PlayerPhone({
       )}
       {snapshot !== undefined && (
         <>
-          <p data-testid="player-identity">Player {snapshot.own_rack.player_id}</p>
+          <p className="sr-only" data-testid="player-identity">
+            Player {snapshot.own_rack.player_id}
+          </p>
           <ConnectionStatus state={connection} />
           {phase?.kind === "lobby" && <p>Waiting for the host to start.</p>}
           {phase?.kind === "playing" && (

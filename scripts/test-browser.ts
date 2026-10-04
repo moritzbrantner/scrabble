@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 const pages = Bun.argv.includes("--pages");
+const testArgs = Bun.argv.slice(2).filter((argument) => argument !== "--pages");
 const server = createServer();
 await new Promise<void>((resolve, reject) => {
   server.once("error", reject);
@@ -125,6 +126,7 @@ const run = async () => {
       "test",
       "--config",
       pages ? "apps/web/playwright.pages.config.ts" : "apps/web/playwright.config.ts",
+      ...testArgs,
     ],
     { env: taskEnv, stdout: "inherit", stderr: "inherit" },
   );

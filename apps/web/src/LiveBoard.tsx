@@ -225,27 +225,32 @@ export function LiveBoard({
   }
   return (
     <>
-      <ConnectionStatus state={state} />
-      {snapshot?.phase.kind === "lobby" && <PlayerInvite key={matchId} matchId={matchId} />}
-      {(state.kind === "disconnected" ||
-        state.kind === "failed" ||
-        state.kind === "resume-failed") && (
-        <Button onClick={() => void reconnect()}>Reconnect</Button>
-      )}
-      {snapshot?.phase.kind === "lobby" && (
-        <section aria-label="Lobby controls">
-          <Button disabled={!canStart || start.kind === "pending"} onClick={() => void startGame()}>
-            {start.kind === "pending" ? "Starting…" : "Start game"}
-          </Button>
-          {snapshot.players.length < rules.minimum_players && (
-            <p>At least {rules.minimum_players} players are needed.</p>
-          )}
-          {state.kind === "connected" && host !== state.admission.playerId && (
-            <p>Waiting for the host to start.</p>
-          )}
-          {start.kind === "failed" && <p role="alert">{start.message}</p>}
-        </section>
-      )}
+      <header className="board-toolbar">
+        <ConnectionStatus state={state} />
+        {snapshot?.phase.kind === "lobby" && <PlayerInvite key={matchId} matchId={matchId} />}
+        {(state.kind === "disconnected" ||
+          state.kind === "failed" ||
+          state.kind === "resume-failed") && (
+          <Button onClick={() => void reconnect()}>Reconnect</Button>
+        )}
+        {snapshot?.phase.kind === "lobby" && (
+          <section aria-label="Lobby controls">
+            <Button
+              disabled={!canStart || start.kind === "pending"}
+              onClick={() => void startGame()}
+            >
+              {start.kind === "pending" ? "Starting…" : "Start game"}
+            </Button>
+            {snapshot.players.length < rules.minimum_players && (
+              <p>At least {rules.minimum_players} players are needed.</p>
+            )}
+            {state.kind === "connected" && host !== state.admission.playerId && (
+              <p>Waiting for the host to start.</p>
+            )}
+            {start.kind === "failed" && <p role="alert">{start.message}</p>}
+          </section>
+        )}
+      </header>
       {snapshot !== undefined && <SharedBoard snapshot={snapshot} rules={rules} />}
     </>
   );

@@ -56,6 +56,7 @@ test("real board and phone resume interrupted connections without changing autho
     }
     await page.getByRole("button", { name: "Start game", exact: true }).click();
     await expect.poll(() => firstState()?.own_rack.tiles.length).toBe(7);
+    await expect.poll(() => secondState()?.own_rack.tiles.length).toBe(7);
     const before = firstState();
     const other = secondState()?.own_rack;
     const gameId = boardState()?.public.game_id;

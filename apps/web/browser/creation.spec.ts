@@ -77,6 +77,9 @@ test("board recovers a lost creation response with one game, then joins its real
   request,
 }) => {
   await expect.poll(async () => (await request.get(`${fixture.status}/readyz`)).status()).toBe(200);
+  const before = z
+    .object({ capacity: z.object({ hostedMatches: z.int() }) })
+    .parse(await (await request.get(`${fixture.status}/status`)).json()).capacity.hostedMatches;
   const bodies: string[] = [];
   let firstMatch = "";
   await page.route(`${fixture.api}/games`, async (route) => {
@@ -144,7 +147,7 @@ test("board recovers a lost creation response with one game, then joins its real
   expect(bodies).toHaveLength(2);
   expect(bodies[0]).toBe(bodies[1]);
   const status = await (await request.get(`${fixture.status}/status`)).json();
-  expect(status.capacity.hostedMatches).toBe(1);
+  expect(status.capacity.hostedMatches).toBe(before + 1);
   const result = await page.evaluate(
     async ({ fixture, matchId }) => {
       const modulePath = "/scrabble/src/transport/browser-match.ts";
@@ -196,7 +199,7 @@ test("board recovers a lost creation response with one game, then joins its real
   await expect(page.getByRole("button", { name: "Create game", exact: true })).toHaveCount(0);
   expect(new URL(page.url()).searchParams.get("match")).toBe(firstMatch);
   const restoredStatus = await (await request.get(`${fixture.status}/status`)).json();
-  expect(restoredStatus.capacity.hostedMatches).toBe(1);
+  expect(restoredStatus.capacity.hostedMatches).toBe(before + 1);
 });
 
 test("lobby tracks joined players and confirms Start from authoritative snapshots", async ({

@@ -47,7 +47,9 @@ export function App() {
   return (
     <>
       <SharedBoard snapshot={fixtures.snapshots[fixture]} rules={fixtures.ruleset} />
-      <p className="fixture-note">Board preview · Multiplayer is not connected yet.</p>
+      <footer>
+        <p className="fixture-note">Board preview · Multiplayer is not connected yet.</p>
+      </footer>
     </>
   );
 }

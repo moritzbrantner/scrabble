@@ -243,7 +243,7 @@ body {
 
 .phone-board {
   max-width: 100%;
-  height: 310px;
+  height: min(310px, max(180px, calc(100dvh - 24rem)));
   overflow: auto;
   position: relative;
   border: 1px solid var(--border);
@@ -338,4 +338,103 @@ body {
 .turn-scores {
   display: block;
   font-size: 0.875rem;
+}
+
+/* Layout follows the viewport; target sizing and help follow input capabilities. */
+.player-phone {
+  margin: 0.5rem auto;
+  padding: 0.5rem;
+}
+.player-phone h1 {
+  margin-bottom: 0.25rem;
+}
+.player-phone > p {
+  margin-block: 0.25rem;
+}
+.phone-rack {
+  margin-block: 0.5rem;
+  --tile-target: 44px;
+}
+.phone-rack ul {
+  grid-template-columns: repeat(auto-fit, minmax(var(--tile-target), 1fr));
+}
+.rack-tile {
+  min-width: var(--tile-target);
+  min-height: var(--tile-target);
+}
+.keyboard-help {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  margin-block: 0.25rem;
+}
+.player-phone button:focus-visible,
+.phone-board:focus-visible {
+  outline: 3px solid var(--foreground);
+  outline-offset: 2px;
+}
+.player-phone .phone-square[aria-disabled="true"] {
+  cursor: default;
+}
+.phone-scores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-block: 0.5rem;
+}
+.phone-scores li {
+  flex: 1;
+  gap: 0.5rem;
+  padding: 0.25rem;
+}
+@media (any-pointer: coarse) {
+  .phone-rack {
+    --tile-target: 48px;
+  }
+  .phone-board {
+    touch-action: pan-x pan-y;
+  }
+}
+@media (orientation: landscape) and (max-height: 600px) {
+  .player-phone {
+    max-width: 56rem;
+  }
+  .move-editor {
+    display: grid;
+    grid-template-columns: minmax(14rem, 1fr) minmax(0, 1.5fr);
+    column-gap: 0.75rem;
+    align-items: start;
+  }
+  .phone-board {
+    grid-column: 2;
+    grid-row: 1 / 8;
+    height: min(310px, calc(100dvh - 5.5rem));
+  }
+  .move-editor > :not(.phone-board) {
+    grid-column: 1;
+  }
+  .phone-rack ul {
+    grid-template-columns: repeat(4, minmax(var(--tile-target), 1fr));
+  }
+  .player-phone .rack-tile {
+    aspect-ratio: auto;
+    height: var(--tile-target);
+  }
+  .player-phone .draft-actions,
+  .player-phone .pass-confirmation {
+    margin-block: 0.25rem;
+    gap: 0.25rem;
+  }
+  .player-phone button {
+    margin-block: 0.25rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

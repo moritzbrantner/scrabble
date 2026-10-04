@@ -55,7 +55,9 @@ export function SharedBoard({ snapshot, rules }: { snapshot: PublicSnapshot; rul
         </caption>
         <thead>
           <tr>
-            <th aria-label="Coordinates" />
+            <th aria-label="Coordinates">
+              <span className="sr-only">Coordinates</span>
+            </th>
             {indices.map((column) => (
               <th scope="col" key={column}>
                 {String.fromCharCode(65 + column)}

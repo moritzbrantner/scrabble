@@ -1,8 +1,9 @@
 import { Button } from "@moritzbrantner/ui/client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { type PlayerSnapshot, type Ruleset } from "./public-state";
 import { premiums } from "./board-premiums";
 import { type CommandEnvelope, type WordRejection } from "./game-protocol";
+import { useTouchInput } from "./input-capability";
 import { PlayerRack } from "./PlayerRack";
 import {
   draftMessages,
@@ -40,6 +41,11 @@ export function MoveEditor({
   onPreview?: (placements: MoveDraft["placements"]) => Promise<void>;
   wordRejection?: WordRejection;
 }) {
+  const touch = useTouchInput();
+  const keyboardHelp = useId();
+  const [focusSquare, setFocusSquare] = useState(
+    () => Math.floor(rules.board_size / 2) * rules.board_size + Math.floor(rules.board_size / 2),
+  );
   const [state, setState] = useState<EditorState>(() => ({ draft: emptyDraft(snapshot) }));
   const current = reconcileDraft(snapshot, state.draft);
   const stale = current !== state.draft;
@@ -243,8 +249,56 @@ export function MoveEditor({
   if (pending) {
     feedback = `Waiting for ${state.pending} confirmation…`;
   }
+  function cancelSelection() {
+    if (!enabled) {
+      return;
+    }
+    setState((previous) => ({
+      draft: previous.draft,
+      ...(previous.exchange === undefined ? {} : { exchange: previous.exchange }),
+      message: "Selection cancelled. Select a tile again.",
+    }));
+  }
+  function moveFocus(key: string, index: number): boolean {
+    const size = rules.board_size;
+    const row = Math.floor(index / size);
+    const column = index % size;
+    const next = {
+      ArrowLeft: row * size + Math.max(0, column - 1),
+      ArrowRight: row * size + Math.min(size - 1, column + 1),
+      ArrowUp: Math.max(0, row - 1) * size + column,
+      ArrowDown: Math.min(size - 1, row + 1) * size + column,
+      Home: row * size,
+      End: row * size + size - 1,
+    }[key];
+    if (next === undefined) {
+      return false;
+    }
+    setFocusSquare(next);
+    board.current?.querySelector<HTMLButtonElement>(`[data-square-index="${next}"]`)?.focus();
+    return true;
+  }
   return (
-    <section ref={editor} className="move-editor" aria-label="Move editor">
+    <section
+      ref={editor}
+      className="move-editor"
+      aria-label="Move editor"
+      data-input={touch ? "touch" : "pointer"}
+      onPointerCancel={cancelSelection}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          if (pending) {
+            return;
+          }
+          restoreExchangeFocus.current = exchanging;
+          setState({ draft: current, message: "Selection cancelled. Select a tile again." });
+          editor.current
+            ?.querySelector<HTMLButtonElement>(".phone-rack button[aria-pressed=true]")
+            ?.focus();
+        }
+      }}
+    >
       <PlayerRack
         rack={snapshot.own_rack}
         rules={rules}
@@ -274,11 +328,15 @@ export function MoveEditor({
       <div
         className="phone-board"
         ref={board}
-        tabIndex={0}
-        aria-label="Scroll the board to choose a square"
+        role="region"
+        tabIndex={enabled && !exchanging ? -1 : 0}
+        aria-label="Placement board"
       >
         <div
           className="phone-board-grid"
+          role="group"
+          aria-label="Choose a square"
+          aria-describedby={keyboardHelp}
           style={{ gridTemplateColumns: `repeat(${rules.board_size}, 44px)` }}
         >
           {indices.flatMap((row) =>
@@ -308,11 +366,24 @@ export function MoveEditor({
                   key={key}
                   className={`phone-square premium-${premium.replaceAll("_", "-")}${draft ? " tentative-square" : ""}${fixed ? " committed-square" : ""}`}
                   data-center={center}
+                  data-square-index={row * rules.board_size + column}
+                  tabIndex={row * rules.board_size + column === focusSquare ? 0 : -1}
+                  onFocus={() => setFocusSquare(row * rules.board_size + column)}
+                  onKeyDown={(event: KeyboardEvent<HTMLButtonElement>) => {
+                    if (moveFocus(event.key, row * rules.board_size + column)) {
+                      event.preventDefault();
+                    }
+                  }}
                   aria-label={label}
                   aria-description={premiums[premium].label}
                   aria-pressed={draft !== undefined && selected === draft.tile_id}
-                  disabled={!enabled || exchanging || fixed !== undefined}
-                  onClick={() => square(row, column)}
+                  disabled={!enabled || exchanging}
+                  aria-disabled={fixed !== undefined}
+                  onClick={() => {
+                    if (fixed === undefined) {
+                      square(row, column);
+                    }
+                  }}
                 >
                   <small className="square-reference" aria-hidden="true">
                     {String.fromCharCode(65 + column)}
@@ -327,6 +398,10 @@ export function MoveEditor({
           )}
         </div>
       </div>
+      <p id={keyboardHelp} className={touch ? "sr-only" : "keyboard-help"}>
+        Arrow keys choose a square. Enter or Space places the selected tile. Escape cancels
+        selection.
+      </p>
       {blank !== undefined && enabled && (
         <div className="blank-choices" role="group" aria-label="Choose blank letter">
           {rules.tiles.flatMap((tile) =>

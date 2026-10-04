@@ -15,16 +15,19 @@ export function showEditor(snapshot: PlayerSnapshot, rules: Ruleset) {
     root = createRoot(container);
   }
   root.render(
-    <MoveEditor
-      snapshot={snapshot}
-      rules={rules}
-      canAct={
-        snapshot.public.phase.kind === "playing" &&
-        snapshot.public.phase.active_player === snapshot.own_rack.player_id
-      }
-      onTurnAction={async () => {
-        throw new Error("No transport in the isolated editor fixture");
-      }}
-    />,
+    <>
+      <h1 className="sr-only">Your move</h1>
+      <MoveEditor
+        snapshot={snapshot}
+        rules={rules}
+        canAct={
+          snapshot.public.phase.kind === "playing" &&
+          snapshot.public.phase.active_player === snapshot.own_rack.player_id
+        }
+        onTurnAction={async () => {
+          throw new Error("No transport in the isolated editor fixture");
+        }}
+      />
+    </>,
   );
 }
