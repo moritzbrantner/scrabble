@@ -102,6 +102,7 @@ fn public_snapshot_has_no_private_fields_and_rejects_injected_racks() {
             id: PlayerId::new(1),
             display_name: "Ada".into(),
             score: 0,
+            connected: None,
             rack_count: 0,
         }],
         remaining_tiles: 100,

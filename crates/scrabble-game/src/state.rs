@@ -476,6 +476,7 @@ impl GameState {
                     display_name: player.display_name.clone(),
                     score: player.score,
                     rack_count: player.rack.len() as u8,
+                    connected: None,
                 })
                 .collect(),
             remaining_tiles: self.bag.len() as u16,

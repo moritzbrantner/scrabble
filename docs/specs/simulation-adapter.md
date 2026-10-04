@@ -1,8 +1,10 @@
 # Scrabble game-server adapter
 
-`ScrabbleSimulation::new(game_id, ruleset, seed)` constructs a fresh deterministic lobby. The adapter fixes tick rate at 20 Hz, uses the ruleset's player capacity, and delegates storage, dealing, previews and passes to `GameSession`. Display names start as `Player <runtime ID>`; join/name selection belongs to #12.
+`ScrabbleSimulation::new(game_id, ruleset, seed)` constructs a fresh deterministic lobby. The adapter fixes tick rate at 20 Hz, uses the ruleset's player capacity, and delegates storage, dealing, previews and passes to `GameSession`. Display names start as `Player <runtime ID>`; join/name selection belongs to #14.
 
 Admission maps the authenticated runtime u32 player directly to the domain decimal-string u64 ID. Command payloads are limited by the upstream 1,024-byte boundary and strict Scrabble protocol v1. The adapter compares authenticated identity and transport sequence with payload claims through `GameSession::apply`; failures mutate neither canonical nor projected state. Commit and exchange retain the session's explicit unsupported result until their transaction issues.
+
+Runtime-mediated player projections add public per-player `connected` evidence through the upstream borrowed `PlayerSnapshotContext`. Grace-disconnected and restored seats are offline; reconnecting updates the projection from current session authority. Connection facts never enter canonical game state or replay. Direct game-only fixture projections omit this optional presentation field.
 
 Player-facing snapshots contain `public` plus the selected admitted player's `own_rack`. Unknown/retired recipients fail closed. No connection is sent the canonical snapshot, which contains full immutable ruleset, bag order, racks, scores, phase, board and bounded admission identity evidence. Preview is deliberately ephemeral and excluded from canonical evidence. Runtime tick is carried and hashed by `SimulationSnapshot`, independently of domain turn and public revision.
 

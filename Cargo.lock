@@ -268,7 +268,7 @@ dependencies = [
 [[package]]
 name = "game-server"
 version = "0.1.0"
-source = "git+https://github.com/moritzbrantner/game-server.git?rev=1dcfd7572940ff1f40e38df13acaa5bd178fd18f#1dcfd7572940ff1f40e38df13acaa5bd178fd18f"
+source = "git+https://github.com/moritzbrantner/game-server.git?rev=5cfd000d276ea488415f6a9c0d8e9021dc6d0f77#5cfd000d276ea488415f6a9c0d8e9021dc6d0f77"
 dependencies = [
  "ring",
  "tokio",

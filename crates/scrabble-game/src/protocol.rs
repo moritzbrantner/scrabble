@@ -75,6 +75,9 @@ pub struct PublicPlayer {
     pub display_name: String,
     pub score: i32,
     pub rack_count: u8,
+    /// Runtime presentation evidence, excluded from canonical game state.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connected: Option<bool>,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

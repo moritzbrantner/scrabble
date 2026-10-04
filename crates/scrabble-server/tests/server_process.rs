@@ -324,7 +324,11 @@ async fn two_matches_are_independent_and_shutdown_restart_preserves_reconnect_au
         alpha_player.connection_epoch + 1
     );
     let restored = snapshot(&reconnected, |_| true).await;
-    assert_eq!(restored, alpha_started);
+    let mut expected = alpha_started.clone();
+    for player in &mut expected.public.players {
+        player.connected = Some(player.id.get() == u64::from(admission.player_id));
+    }
+    assert_eq!(restored, expected);
     // Sequence 1 was applied before restart; it must not pass as a new command after reconnect.
     send(&reconnected, &restored, &admission, 1, 0, Command::Pass {});
     for _ in 0..3 {
@@ -342,7 +346,11 @@ async fn two_matches_are_independent_and_shutdown_restart_preserves_reconnect_au
             &format!("/game/matches/beta/reconnect/{beta_token}"),
         )
         .await;
-    assert_eq!(snapshot(&restored_beta, |_| true).await, beta_started);
+    let mut expected_beta = beta_started.clone();
+    for player in &mut expected_beta.public.players {
+        player.connected = Some(player.id.get() == u64::from(beta_player.player_id));
+    }
+    assert_eq!(snapshot(&restored_beta, |_| true).await, expected_beta);
     reconnected.close(0u32.into(), b"test complete");
     restored_beta.close(0u32.into(), b"test complete");
     alpha.close(0u32.into(), b"test complete");

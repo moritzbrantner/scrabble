@@ -106,6 +106,9 @@ export function SharedBoard({ snapshot, rules }: { snapshot: PublicSnapshot; rul
               <li key={player.id} className={player.id === active ? "active-player" : ""}>
                 <span>
                   {player.display_name}
+                  {player.connected !== undefined && (
+                    <small> · {player.connected ? "Connected" : "Disconnected"}</small>
+                  )}
                   {player.id === active && <span className="sr-only"> (active)</span>}
                 </span>
                 <strong aria-label={`${player.score} points`}>{player.score}</strong>
@@ -113,9 +116,7 @@ export function SharedBoard({ snapshot, rules }: { snapshot: PublicSnapshot; rul
             ))}
           </ul>
         )}
-        {snapshot.phase.kind === "lobby" && (
-          <p>No game has started. Game creation and joining are not available yet.</p>
-        )}
+        {snapshot.phase.kind === "lobby" && <p>Waiting for players to join.</p>}
         <p className="remaining-tiles">{snapshot.remaining_tiles} tiles remaining</p>
       </aside>
     </main>

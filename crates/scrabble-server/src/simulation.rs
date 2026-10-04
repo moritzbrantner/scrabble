@@ -208,6 +208,20 @@ impl GameSimulation for ScrabbleSimulation {
         let payload = serde_json::to_vec(&snapshot).map_err(error)?;
         Ok(SimulationSnapshot::new(self.tick, payload))
     }
+    fn snapshot_for_with_context(
+        &self,
+        player_id: u32,
+        context: game_server::PlayerSnapshotContext<'_>,
+    ) -> Result<SimulationSnapshot, SimulationError> {
+        let player = self.require_admitted(player_id)?;
+        let mut snapshot = self.session.player_snapshot(player).map_err(error)?;
+        for player in &mut snapshot.public.players {
+            let id = u32::try_from(player.id.get()).map_err(error)?;
+            player.connected = Some(context.is_connected(id));
+        }
+        let payload = serde_json::to_vec(&snapshot).map_err(error)?;
+        Ok(SimulationSnapshot::new(self.tick, payload))
+    }
 }
 
 #[cfg(test)]
