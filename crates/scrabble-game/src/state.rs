@@ -64,11 +64,16 @@ impl fmt::Display for StateError {
 }
 impl std::error::Error for StateError {}
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Eq, PartialEq, Serialize)]
 pub struct Tile {
     id: TileId,
     face: TileFace,
     value: u16,
+}
+impl fmt::Debug for Tile {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Tile").finish_non_exhaustive()
+    }
 }
 impl Tile {
     pub const fn id(&self) -> TileId {

@@ -37,7 +37,7 @@ The [shared board](docs/specs/shared-board.md) renders public snapshot fixtures 
 
 The [browser transport](docs/specs/browser-transport.md) supports versioned welcome, bounded commands, latest-state snapshot reassembly, reliable control and in-memory reconnect capabilities. Its real-network fixture exercises upstream `game-server` independently of Scrabble rules. Production endpoint configuration remains #31.
 
-The [simulation adapter](docs/specs/simulation-adapter.md) maps runtime admissions directly to domain identities, applies authenticated commands, keeps ticks independent of turns, and separates canonical replay evidence from private player projections. Browser-free tests verify runtime replay, recovery, reconnect fencing and grace expiry. Started-game forfeit resolution remains #27.
+The [simulation adapter](docs/specs/simulation-adapter.md) maps runtime admissions directly to domain identities, applies authenticated commands, keeps ticks independent of turns, and separates canonical replay evidence from private player projections. Browser-free tests verify runtime replay, recovery, reconnect fencing and grace expiry. [Private client boundaries](docs/specs/private-client-boundaries.md) document scoped projections, rejected malicious commands, capability fencing, and redacted diagnostics.
 
 The [creation API](docs/specs/game-creation.md) derives high-entropy public match IDs, bounds retries and match lifetime, rejects draining/full hosts, and retires through the upstream fencing boundary. Chromium acceptance drops a successful response, retries to recover the same game, and joins its canonical route.
 
