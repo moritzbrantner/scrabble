@@ -2,6 +2,7 @@ import { Button } from "@moritzbrantner/ui/client";
 import { useEffect, useRef, useState } from "react";
 import { type PlayerSnapshot, type Ruleset } from "./public-state";
 import { premiums } from "./board-premiums";
+import { type CommandEnvelope } from "./game-protocol";
 import { PlayerRack } from "./PlayerRack";
 import {
   draftMessages,
@@ -18,19 +19,22 @@ type EditorState = {
   selected?: string;
   blank?: { tileId: string; row: number; column: number };
   message?: string;
-  pending?: boolean;
+  pending?: "move" | "pass";
+  confirmPass?: true;
 };
 export function MoveEditor({
   snapshot,
   rules,
   canAct,
-  onCommit,
+  onTurnAction,
   onPreview,
 }: {
   snapshot: PlayerSnapshot;
   rules: Ruleset;
   canAct: boolean;
-  onCommit: (placements: MoveDraft["placements"]) => Promise<void>;
+  onTurnAction: (
+    command: Extract<CommandEnvelope["command"], { kind: "commit" | "pass" }>,
+  ) => Promise<void>;
   onPreview?: (placements: MoveDraft["placements"]) => Promise<void>;
 }) {
   const [state, setState] = useState<EditorState>(() => ({ draft: emptyDraft(snapshot) }));
@@ -38,10 +42,11 @@ export function MoveEditor({
   const stale = current !== state.draft;
   const selected = stale ? undefined : state.selected;
   const blank = stale ? undefined : state.blank;
-  const pending = !stale && state.pending === true;
+  const pending = !stale && state.pending !== undefined;
   const enabled = canAct && !pending;
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const board = useRef<HTMLDivElement>(null);
+  const passButton = useRef<HTMLButtonElement>(null);
   const problem = draftProblem(snapshot, rules, current);
   const previewCallback = useRef(onPreview);
   const previewPaused = useRef(false);
@@ -116,31 +121,36 @@ export function MoveEditor({
       edit({ kind: "place", tileId: selected, coordinate: { row, column }, blankAs: null });
     }
   }
-  async function commit() {
-    if (!enabled || problem !== undefined || current.placements.length === 0) {
+  async function submit(kind: "commit" | "pass") {
+    if (
+      !enabled ||
+      (kind === "commit" && (problem !== undefined || current.placements.length === 0)) ||
+      (kind === "pass" && state.confirmPass !== true)
+    ) {
       return;
     }
     const draft = current;
-    // Fence heartbeat writes before reserving the commit's transport sequence.
+    // Fence heartbeat writes before reserving the turn action's transport sequence.
     previewPaused.current = true;
-    setState({ draft, pending: true });
+    const action = kind === "commit" ? "move" : "pass";
+    setState({ draft, pending: action });
     timer.current = setTimeout(() => {
       setState((previous) =>
         previous.draft.context === draft.context
           ? {
               draft: previous.draft,
-              message: "Move was not confirmed. Your draft is kept; you can retry.",
+              message: `${kind === "commit" ? "Move" : "Pass"} was not confirmed. Your draft is kept; you can retry.`,
             }
           : previous,
       );
     }, 5000);
     try {
-      await onCommit(draft.placements);
+      await onTurnAction(kind === "commit" ? { kind, placements: draft.placements } : { kind });
     } catch {
       clearTimeout(timer.current);
       setState((previous) =>
         previous.draft.context === draft.context
-          ? { draft: previous.draft, message: "Unable to send the move. Your draft is kept." }
+          ? { draft: previous.draft, message: `Unable to send the ${action}. Your draft is kept.` }
           : previous,
       );
     }
@@ -166,7 +176,7 @@ export function MoveEditor({
     feedback = "Reconnect to edit. Your draft is kept.";
   }
   if (pending) {
-    feedback = "Waiting for move confirmation…";
+    feedback = `Waiting for ${state.pending} confirmation…`;
   }
   return (
     <section className="move-editor" aria-label="Move editor">
@@ -289,11 +299,34 @@ export function MoveEditor({
         </Button>
         <Button
           disabled={!enabled || problem !== undefined || blank !== undefined}
-          onClick={() => void commit()}
+          onClick={() => void submit("commit")}
         >
           Commit move
         </Button>
+        <Button
+          ref={passButton}
+          disabled={!enabled}
+          onClick={() => setState({ draft: current, confirmPass: true })}
+        >
+          Pass turn
+        </Button>
       </div>
+      {!stale && state.confirmPass === true && enabled && (
+        <div className="pass-confirmation" role="group" aria-label="Confirm pass">
+          <p>Pass this turn? Your draft will be cleared.</p>
+          <Button autoFocus onClick={() => void submit("pass")}>
+            Confirm pass
+          </Button>
+          <Button
+            onClick={() => {
+              setState({ draft: current });
+              passButton.current?.focus();
+            }}
+          >
+            Keep playing
+          </Button>
+        </div>
+      )}
     </section>
   );
 }
