@@ -269,6 +269,7 @@ fn board_and_phone_projections_have_exact_public_boundaries_and_rotated_epochs_s
             public.keys().map(String::as_str).collect::<Vec<_>>(),
             vec![
                 "board",
+                "configuration",
                 "dictionary",
                 "game_id",
                 "history",

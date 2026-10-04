@@ -54,9 +54,21 @@ pub struct Ruleset {
 impl Ruleset {
     pub fn validate(&self) -> Result<(), ContractError> {
         for identity in [&self.identity, &self.dictionary] {
-            if identity.name.is_empty() || identity.revision.is_empty() {
+            if identity.name.is_empty()
+                || identity.name.len() > 64
+                || !identity
+                    .name
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || b"-_.".contains(&byte))
+                || identity.revision.is_empty()
+                || identity.revision.len() > 192
+                || !identity
+                    .revision
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || b"-_.+:".contains(&byte))
+            {
                 return Err(ContractError(
-                    "content identity requires name and revision".into(),
+                    "content identity requires bounded identifiers and revisions".into(),
                 ));
             }
         }
@@ -73,6 +85,11 @@ impl Ruleset {
         {
             return Err(ContractError(
                 "invalid ruleset dimensions or turn limits".into(),
+            ));
+        }
+        if self.tiles.len() > 64 {
+            return Err(ContractError(
+                "tile alphabet exceeds supported bound".into(),
             ));
         }
         let mut letters = BTreeSet::new();
@@ -99,7 +116,7 @@ impl Ruleset {
         }
         if letters.is_empty()
             || total < u32::from(self.maximum_players) * u32::from(self.rack_size)
-            || total > u32::from(u16::MAX)
+            || total > 200
         {
             return Err(ContractError("invalid tile distribution".into()));
         }
@@ -237,4 +254,12 @@ pub fn english_fixture() -> Ruleset {
         minimum_players: 2,
         maximum_players: 4,
     }
+}
+
+/// Small authored German-language fixture, not an official distribution or tournament word list.
+pub fn german_fixture() -> Ruleset {
+    let rules: Ruleset = serde_json::from_str(include_str!("../fixtures/de-mini-ruleset.json"))
+        .expect("committed German ruleset parses");
+    rules.validate().expect("committed German ruleset is valid");
+    rules
 }

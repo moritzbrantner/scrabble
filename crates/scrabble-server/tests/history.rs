@@ -314,6 +314,26 @@ fn largest_supported_public_history_stays_inside_native_snapshot_byte_limit() {
             face: TileFace::Letter { letter },
         })
         .collect();
+    let configuration = &mut snapshot.public.configuration;
+    configuration.identity.name = "n".repeat(64);
+    configuration.identity.revision = "v".repeat(192);
+    configuration.dictionary = configuration.identity.clone();
+    configuration.tiles = (0x10400..=0x2ffff)
+        .filter_map(char::from_u32)
+        .filter(|letter| letter.is_alphabetic())
+        .take(64)
+        .map(|letter| scrabble_game::ruleset::TileDefinition {
+            face: TileFace::Letter { letter },
+            count: 3,
+            value: u16::MAX,
+        })
+        .collect();
+    configuration.tiles[0].count = 11;
+    configuration.premiums = vec![scrabble_game::ruleset::Premium::TripleLetter; 225];
+    configuration.rack_size = 15;
+    configuration.validate().unwrap();
+    snapshot.public.ruleset = configuration.identity.clone();
+    snapshot.public.dictionary = configuration.dictionary.clone();
     let bytes = serde_json::to_vec(&snapshot).unwrap();
     assert!(
         bytes.len() <= game_server::protocol::MAX_SNAPSHOT_PAYLOAD_BYTES,
@@ -426,4 +446,113 @@ fn offline_report_verifies_persisted_native_evidence_and_excludes_private_fields
     }
     let wrong = game_server::MatchId::new("beta").unwrap();
     assert!(inspect_replay(&factory, &wrong, &image).is_err());
+}
+
+#[test]
+fn largest_supported_private_checkpoint_stays_inside_native_byte_limit() {
+    use game_server::GameSimulation;
+    use scrabble_game::{
+        ruleset::{Premium, TileDefinition},
+        state::GameState,
+    };
+    let mut rules = english_fixture();
+    rules.identity.name = "n".repeat(64);
+    rules.identity.revision = "v".repeat(192);
+    rules.dictionary = rules.identity.clone();
+    rules.tiles = (0x10400..=0x2ffff)
+        .filter_map(char::from_u32)
+        .filter(|letter| letter.is_alphabetic())
+        .take(64)
+        .map(|letter| TileDefinition {
+            face: TileFace::Letter { letter },
+            count: 3,
+            value: u16::MAX,
+        })
+        .collect();
+    rules.tiles[0].count = 11;
+    rules.rack_size = 15;
+    rules.premiums = vec![Premium::TripleLetter; 225];
+    let mut state = GameState::new(GameId::new(u64::MAX), rules.clone(), [7; 32]).unwrap();
+    for actor in 1..=4 {
+        state
+            .add_player(PlayerId::new(actor), "\u{10400}".repeat(32))
+            .unwrap();
+    }
+    state.deal_initial_racks().unwrap();
+    let placements = state
+        .rack(PlayerId::new(1))
+        .unwrap()
+        .iter()
+        .take(2)
+        .enumerate()
+        .map(|(index, tile)| Placement {
+            tile_id: tile.id(),
+            coordinate: Coordinate::new(7, 7 + index as u8).unwrap(),
+            blank_as: None,
+        })
+        .collect::<Vec<_>>();
+    state.place_tiles(PlayerId::new(1), &placements).unwrap();
+    let mut game: serde_json::Value =
+        serde_json::from_slice(&state.canonical_bytes().unwrap()).unwrap();
+    let committed = game["board"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| !entry.is_null())
+        .unwrap()
+        .clone();
+    let mut board = vec![committed; 200];
+    board.extend(vec![serde_json::Value::Null; 25]);
+    game["board"] = serde_json::json!(board);
+    game["bag"] = serde_json::json!([]);
+    for player in game["players"].as_array_mut().unwrap() {
+        player["id"] = serde_json::json!(u32::MAX.to_string());
+        player["rack"] = serde_json::json!([]);
+        player["score"] = serde_json::json!(i32::MIN);
+    }
+    let mut public = read(&started([7; 32], 100), 1).public;
+    public.history = (0..MAX_HISTORY_TURNS)
+        .map(|index| scrabble_game::protocol::PublicTurn {
+            turn: TurnId::new(u64::MAX - index as u64),
+            player_id: PlayerId::new(u64::MAX),
+            action: TurnAction::Commit {
+                words: vec!["\u{10400}".repeat(15); 16],
+                move_score: u32::MAX,
+                blank_count: 15,
+            },
+            scores: (0..4)
+                .map(|index| scrabble_game::protocol::ScoreChange {
+                    player_id: PlayerId::new(u64::MAX - index),
+                    delta: -4294967295,
+                    score: i32::MIN,
+                })
+                .collect(),
+        })
+        .collect();
+    game["history"] = serde_json::to_value(&public.history).unwrap();
+    game["revision"] = serde_json::json!(u64::MAX.to_string());
+    game["phase"]["turn"] = serde_json::json!(u64::MAX.to_string());
+    game["phase"]["active_player"] = serde_json::json!(u32::MAX.to_string());
+    // Use the real adapter envelope. Synthetic full history/board sizes intentionally
+    // overestimate simultaneous legal play; this checks serialization capacity, not recovery validity.
+    let simulation = ScrabbleSimulation::new(GameId::new(u64::MAX), rules, [7; 32]).unwrap();
+    let mut envelope: serde_json::Value =
+        serde_json::from_slice(&simulation.snapshot().unwrap().payload).unwrap();
+    envelope["game"] = game;
+    envelope["admitted"] = serde_json::json!([u32::MAX - 3, u32::MAX - 2, u32::MAX - 1, u32::MAX]);
+    envelope["last_admitted_player"] = serde_json::json!(u32::MAX);
+    envelope["lifecycle"] = serde_json::json!({"created_at":u64::MAX,"finished_at_tick":u64::MAX});
+    envelope["board"] = serde_json::json!({"owner":u32::MAX});
+    let bytes = serde_json::to_vec(&envelope).unwrap();
+    assert!(
+        bytes.len() <= game_server::MAX_SNAPSHOT_PAYLOAD_BYTES,
+        "{}-byte checkpoint exceeds native limit",
+        bytes.len()
+    );
+    let frame = game_server::protocol::SnapshotFrame {
+        tick: 0,
+        state_hash: game_server::protocol::snapshot_hash(0, &bytes),
+        payload: bytes,
+    };
+    assert!(game_server::protocol::encode_snapshot(&frame).is_ok());
 }

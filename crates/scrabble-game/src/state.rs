@@ -663,6 +663,7 @@ impl GameState {
             game_id: self.game_id,
             revision: self.revision,
             ruleset: self.ruleset.identity.clone(),
+            configuration: self.ruleset.clone(),
             dictionary: self.ruleset.dictionary.clone(),
             phase: self.phase.clone(),
             board,

@@ -1,0 +1,640 @@
+{
+  "committed": {
+    "own_rack": {
+      "player_id": "1",
+      "tiles": [
+        {
+          "face": {
+            "kind": "letter",
+            "letter": "Ä"
+          },
+          "id": "19"
+        },
+        {
+          "face": {
+            "kind": "letter",
+            "letter": "Ö"
+          },
+          "id": "21"
+        },
+        {
+          "face": {
+            "kind": "letter",
+            "letter": "S"
+          },
+          "id": "16"
+        }
+      ]
+    },
+    "public": {
+      "board": [
+        {
+          "coordinate": {
+            "column": 3,
+            "row": 3
+          },
+          "is_blank": true,
+          "letter": "Ö"
+        },
+        {
+          "coordinate": {
+            "column": 4,
+            "row": 3
+          },
+          "is_blank": false,
+          "letter": "L"
+        }
+      ],
+      "configuration": {
+        "bingo_bonus": 20,
+        "board_size": 7,
+        "dictionary": {
+          "name": "scrabble-de-authored-fixture",
+          "revision": "1"
+        },
+        "exchange_minimum_bag": 3,
+        "identity": {
+          "name": "de-mini-fixture",
+          "revision": "1"
+        },
+        "maximum_players": 2,
+        "minimum_players": 2,
+        "premiums": [
+          "triple_word",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "triple_word",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "double_word",
+          "double_letter",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "triple_word",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "triple_word"
+        ],
+        "rack_size": 3,
+        "scoreless_turn_limit": 6,
+        "tiles": [
+          {
+            "count": 4,
+            "face": {
+              "kind": "letter",
+              "letter": "A"
+            },
+            "value": 1
+          },
+          {
+            "count": 2,
+            "face": {
+              "kind": "letter",
+              "letter": "B"
+            },
+            "value": 3
+          },
+          {
+            "count": 2,
+            "face": {
+              "kind": "letter",
+              "letter": "D"
+            },
+            "value": 2
+          },
+          {
+            "count": 2,
+            "face": {
+              "kind": "letter",
+              "letter": "L"
+            },
+            "value": 2
+          },
+          {
+            "count": 3,
+            "face": {
+              "kind": "letter",
+              "letter": "N"
+            },
+            "value": 1
+          },
+          {
+            "count": 3,
+            "face": {
+              "kind": "letter",
+              "letter": "R"
+            },
+            "value": 1
+          },
+          {
+            "count": 3,
+            "face": {
+              "kind": "letter",
+              "letter": "S"
+            },
+            "value": 1
+          },
+          {
+            "count": 2,
+            "face": {
+              "kind": "letter",
+              "letter": "Ä"
+            },
+            "value": 6
+          },
+          {
+            "count": 2,
+            "face": {
+              "kind": "letter",
+              "letter": "Ö"
+            },
+            "value": 8
+          },
+          {
+            "count": 2,
+            "face": {
+              "kind": "letter",
+              "letter": "Ü"
+            },
+            "value": 6
+          },
+          {
+            "count": 2,
+            "face": {
+              "kind": "blank"
+            },
+            "value": 0
+          }
+        ]
+      },
+      "dictionary": {
+        "name": "scrabble-de-authored-fixture",
+        "revision": "1"
+      },
+      "game_id": "2",
+      "history": [
+        {
+          "action": {
+            "blank_count": 1,
+            "kind": "commit",
+            "move_score": 8,
+            "words": ["ÖL"]
+          },
+          "player_id": "1",
+          "scores": [
+            {
+              "delta": 8,
+              "player_id": "1",
+              "score": 8
+            },
+            {
+              "delta": 0,
+              "player_id": "2",
+              "score": 0
+            }
+          ],
+          "turn": "0"
+        }
+      ],
+      "phase": {
+        "active_player": "2",
+        "kind": "playing",
+        "turn": "1"
+      },
+      "players": [
+        {
+          "display_name": "Ada",
+          "id": "1",
+          "rack_count": 3,
+          "score": 8
+        },
+        {
+          "display_name": "Lin",
+          "id": "2",
+          "rack_count": 3,
+          "score": 0
+        }
+      ],
+      "preview": null,
+      "remaining_tiles": 19,
+      "revision": "6",
+      "ruleset": {
+        "name": "de-mini-fixture",
+        "revision": "1"
+      },
+      "version": 1
+    }
+  },
+  "playing": {
+    "own_rack": {
+      "player_id": "1",
+      "tiles": [
+        {
+          "face": {
+            "kind": "letter",
+            "letter": "L"
+          },
+          "id": "9"
+        },
+        {
+          "face": {
+            "kind": "blank"
+          },
+          "id": "25"
+        },
+        {
+          "face": {
+            "kind": "letter",
+            "letter": "Ä"
+          },
+          "id": "19"
+        }
+      ]
+    },
+    "public": {
+      "board": [],
+      "configuration": {
+        "bingo_bonus": 20,
+        "board_size": 7,
+        "dictionary": {
+          "name": "scrabble-de-authored-fixture",
+          "revision": "1"
+        },
+        "exchange_minimum_bag": 3,
+        "identity": {
+          "name": "de-mini-fixture",
+          "revision": "1"
+        },
+        "maximum_players": 2,
+        "minimum_players": 2,
+        "premiums": [
+          "triple_word",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "triple_word",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "double_word",
+          "double_letter",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "triple_word",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "normal",
+          "triple_word"
+        ],
+        "rack_size": 3,
+        "scoreless_turn_limit": 6,
+        "tiles": [
+          {
+            "count": 4,
+            "face": {
+              "kind": "letter",
+              "letter": "A"
+            },
+            "value": 1
+          },
+          {
+            "count": 2,
+            "face": {
+              "kind": "letter",
+              "letter": "B"
+            },
+            "value": 3
+          },
+          {
+            "count": 2,
+            "face": {
+              "kind": "letter",
+              "letter": "D"
+            },
+            "value": 2
+          },
+          {
+            "count": 2,
+            "face": {
+              "kind": "letter",
+              "letter": "L"
+            },
+            "value": 2
+          },
+          {
+            "count": 3,
+            "face": {
+              "kind": "letter",
+              "letter": "N"
+            },
+            "value": 1
+          },
+          {
+            "count": 3,
+            "face": {
+              "kind": "letter",
+              "letter": "R"
+            },
+            "value": 1
+          },
+          {
+            "count": 3,
+            "face": {
+              "kind": "letter",
+              "letter": "S"
+            },
+            "value": 1
+          },
+          {
+            "count": 2,
+            "face": {
+              "kind": "letter",
+              "letter": "Ä"
+            },
+            "value": 6
+          },
+          {
+            "count": 2,
+            "face": {
+              "kind": "letter",
+              "letter": "Ö"
+            },
+            "value": 8
+          },
+          {
+            "count": 2,
+            "face": {
+              "kind": "letter",
+              "letter": "Ü"
+            },
+            "value": 6
+          },
+          {
+            "count": 2,
+            "face": {
+              "kind": "blank"
+            },
+            "value": 0
+          }
+        ]
+      },
+      "dictionary": {
+        "name": "scrabble-de-authored-fixture",
+        "revision": "1"
+      },
+      "game_id": "2",
+      "history": [],
+      "phase": {
+        "active_player": "1",
+        "kind": "playing",
+        "turn": "0"
+      },
+      "players": [
+        {
+          "display_name": "Ada",
+          "id": "1",
+          "rack_count": 3,
+          "score": 0
+        },
+        {
+          "display_name": "Lin",
+          "id": "2",
+          "rack_count": 3,
+          "score": 0
+        }
+      ],
+      "preview": null,
+      "remaining_tiles": 21,
+      "revision": "3",
+      "ruleset": {
+        "name": "de-mini-fixture",
+        "revision": "1"
+      },
+      "version": 1
+    }
+  },
+  "ruleset": {
+    "bingo_bonus": 20,
+    "board_size": 7,
+    "dictionary": {
+      "name": "scrabble-de-authored-fixture",
+      "revision": "1"
+    },
+    "exchange_minimum_bag": 3,
+    "identity": {
+      "name": "de-mini-fixture",
+      "revision": "1"
+    },
+    "maximum_players": 2,
+    "minimum_players": 2,
+    "premiums": [
+      "triple_word",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "triple_word",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "double_word",
+      "double_letter",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "triple_word",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "normal",
+      "triple_word"
+    ],
+    "rack_size": 3,
+    "scoreless_turn_limit": 6,
+    "tiles": [
+      {
+        "count": 4,
+        "face": {
+          "kind": "letter",
+          "letter": "A"
+        },
+        "value": 1
+      },
+      {
+        "count": 2,
+        "face": {
+          "kind": "letter",
+          "letter": "B"
+        },
+        "value": 3
+      },
+      {
+        "count": 2,
+        "face": {
+          "kind": "letter",
+          "letter": "D"
+        },
+        "value": 2
+      },
+      {
+        "count": 2,
+        "face": {
+          "kind": "letter",
+          "letter": "L"
+        },
+        "value": 2
+      },
+      {
+        "count": 3,
+        "face": {
+          "kind": "letter",
+          "letter": "N"
+        },
+        "value": 1
+      },
+      {
+        "count": 3,
+        "face": {
+          "kind": "letter",
+          "letter": "R"
+        },
+        "value": 1
+      },
+      {
+        "count": 3,
+        "face": {
+          "kind": "letter",
+          "letter": "S"
+        },
+        "value": 1
+      },
+      {
+        "count": 2,
+        "face": {
+          "kind": "letter",
+          "letter": "Ä"
+        },
+        "value": 6
+      },
+      {
+        "count": 2,
+        "face": {
+          "kind": "letter",
+          "letter": "Ö"
+        },
+        "value": 8
+      },
+      {
+        "count": 2,
+        "face": {
+          "kind": "letter",
+          "letter": "Ü"
+        },
+        "value": 6
+      },
+      {
+        "count": 2,
+        "face": {
+          "kind": "blank"
+        },
+        "value": 0
+      }
+    ]
+  }
+}

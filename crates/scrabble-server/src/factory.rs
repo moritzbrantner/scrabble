@@ -125,7 +125,8 @@ impl MatchFactory {
                 return Err("configured matches have colliding game identities".into());
             }
         }
-        let (rules, dictionary) = crate::dictionary::load(config.dictionary.as_ref())?;
+        let (rules, dictionary) =
+            crate::dictionary::load(config.ruleset_file.as_deref(), config.dictionary.as_ref())?;
         Ok(Self {
             key: hmac::Key::new(hmac::HMAC_SHA256, &seed(config)?),
             rules,

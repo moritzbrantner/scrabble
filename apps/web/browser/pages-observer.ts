@@ -5,7 +5,7 @@ import { SnapshotReassembler } from "../src/transport/wire";
 declare global {
   // oxlint-disable-next-line typescript/consistent-type-definitions -- Browser binding requires Window declaration merging.
   interface Window {
-    inspectScrabbleDatagram: (bytes: number[]) => Promise<void>;
+    inspectScrabbleDatagrams: (datagrams: string[]) => Promise<void>;
   }
 }
 
@@ -17,20 +17,30 @@ export async function observeSnapshots(
   holdRestoredSnapshot = false,
 ) {
   let latest: PlayerSnapshot | undefined;
+  let inspectedPayload: string | undefined;
   const fragments = new SnapshotReassembler();
-  await page.exposeBinding("inspectScrabbleDatagram", (_source, bytes: number[]) => {
-    const frame = fragments.accept(Uint8Array.from(bytes));
-    if (frame !== undefined) {
-      const parsed = playerSnapshot.safeParse(JSON.parse(new TextDecoder().decode(frame.payload)));
-      expect(parsed.success).toBe(true);
-      if (!parsed.success) {
-        return;
+  await page.exposeBinding("inspectScrabbleDatagrams", (_source, datagrams: string[]) => {
+    for (const encoded of datagrams) {
+      const frame = fragments.accept(Buffer.from(encoded, "base64"));
+      if (frame !== undefined) {
+        const payload = new TextDecoder().decode(frame.payload);
+        // Native ticks repeat unchanged projections. Validate each distinct projection
+        // once rather than flooding Playwright traces with duplicate assertions.
+        if (payload === inspectedPayload) {
+          continue;
+        }
+        const parsed = playerSnapshot.safeParse(JSON.parse(payload));
+        expect(parsed.success).toBe(true);
+        if (!parsed.success) {
+          return;
+        }
+        expect(parsed.data.own_rack.player_id).toBe(recipient);
+        if (board) {
+          expect(parsed.data.own_rack.tiles.length).toBe(0);
+        }
+        latest = parsed.data;
+        inspectedPayload = payload;
       }
-      expect(parsed.data.own_rack.player_id).toBe(recipient);
-      if (board) {
-        expect(parsed.data.own_rack.tiles.length).toBe(0);
-      }
-      latest = parsed.data;
     }
   });
   await page.addInitScript((hold) => {
@@ -50,6 +60,27 @@ export async function observeSnapshots(
           this.closed.then(release, release);
         });
         const reader = this.datagrams.readable.getReader();
+        const inspection: string[] = [];
+        let inspecting = false;
+        let cancelled = false;
+        const inspect = async () => {
+          if (inspecting || cancelled) {
+            return;
+          }
+          inspecting = true;
+          try {
+            while (inspection.length > 0 && !cancelled) {
+              // Batch at most ten inspections per second; gameplay still reads every datagram.
+              await new Promise<void>((resolve) => setTimeout(resolve, 100));
+              if (cancelled) {
+                return;
+              }
+              await window.inspectScrabbleDatagrams(inspection.splice(0));
+            }
+          } finally {
+            inspecting = false;
+          }
+        };
         const readable = new ReadableStream<Uint8Array>({
           async pull(controller) {
             const result = await reader.read();
@@ -58,10 +89,23 @@ export async function observeSnapshots(
               controller.close();
               return;
             }
-            await window.inspectScrabbleDatagram(Array.from(result.value));
+            // Drain QUIC independently of Node inspection, with one binding in flight.
+            // A bounded queue drops old observations under load, just like native datagrams.
+            // Base64 preserves the exact bytes without tracing thousands of numeric arguments.
+            inspection.push(btoa(String.fromCharCode(...result.value)));
+            if (inspection.length > 128) {
+              inspection.shift();
+            }
+            void inspect().catch(() => {
+              if (!cancelled) {
+                controller.error(new Error("Snapshot observation failed"));
+              }
+            });
             controller.enqueue(result.value);
           },
           cancel(reason) {
+            cancelled = true;
+            inspection.length = 0;
             return reader.cancel(reason);
           },
         });
