@@ -33,6 +33,8 @@ pub enum StateError {
     InvalidBlankAssignment,
     InvariantViolation,
     CounterExhausted,
+    EmptyExchange,
+    ExchangeUnavailable,
 }
 impl fmt::Display for StateError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -50,6 +52,8 @@ impl fmt::Display for StateError {
             Self::OccupiedSquare => "board square already occupied",
             Self::OutsideBoard => "coordinate outside configured board",
             Self::InvalidBlankAssignment => "invalid blank assignment",
+            Self::EmptyExchange => "select at least one tile to exchange",
+            Self::ExchangeUnavailable => "not enough bag tiles for exchange",
             Self::CounterExhausted => "authoritative counter exhausted",
             Self::InvariantViolation => "canonical tile conservation failed",
         };
@@ -110,6 +114,8 @@ pub struct GameState {
     players: Vec<Player>,
     bag: Vec<Tile>,
     board: Vec<Option<CommittedTile>>,
+    // Immutable replay input, held privately so exchange shuffles never depend on client input.
+    seed: [u8; 32],
 }
 
 fn make_tiles(rules: &Ruleset) -> Vec<Tile> {
@@ -140,6 +146,7 @@ impl GameState {
             players: vec![],
             bag,
             board,
+            seed,
         })
     }
     pub(crate) fn player_score(&self, player: PlayerId) -> Option<i32> {
@@ -317,6 +324,69 @@ impl GameState {
             .extend(self.bag.drain(split..).rev());
         self.revision = revision;
         Ok(count)
+    }
+    /// Storage transaction used only by the authenticated turn boundary.
+    pub(crate) fn exchange_tiles(
+        &mut self,
+        player: PlayerId,
+        tile_ids: &[TileId],
+    ) -> Result<(), StateError> {
+        let Phase::Playing { turn, .. } = self.phase else {
+            return Err(StateError::WrongPhase);
+        };
+        if tile_ids.is_empty() {
+            return Err(StateError::EmptyExchange);
+        }
+        let selected: BTreeSet<_> = tile_ids.iter().copied().collect();
+        if selected.len() != tile_ids.len() {
+            return Err(StateError::DuplicateTile);
+        }
+        let index = self
+            .players
+            .iter()
+            .position(|entry| entry.id == player)
+            .ok_or(StateError::UnknownPlayer)?;
+        if !selected
+            .iter()
+            .all(|id| self.players[index].rack.iter().any(|tile| tile.id == *id))
+        {
+            return Err(StateError::TileNotOwned);
+        }
+        if self.bag.len() < usize::from(self.ruleset.exchange_minimum_bag)
+            || self.bag.len() < selected.len()
+        {
+            return Err(StateError::ExchangeUnavailable);
+        }
+        let revision = self.next_revision()?;
+        let stream = turn
+            .get()
+            .checked_add(1)
+            .ok_or(StateError::CounterExhausted)?;
+        // Draw before returning tiles: an exchange replaces every selected identity.
+        let replacements: Vec<_> = self
+            .bag
+            .drain(self.bag.len() - selected.len()..)
+            .rev()
+            .collect();
+        let mut returned = Vec::with_capacity(selected.len());
+        let mut retained = Vec::with_capacity(self.players[index].rack.len());
+        for tile in self.players[index].rack.drain(..) {
+            if selected.contains(&tile.id) {
+                returned.push(tile);
+            } else {
+                retained.push(tile);
+            }
+        }
+        returned.sort_by_key(Tile::id);
+        retained.extend(replacements);
+        self.players[index].rack = retained;
+        self.bag.extend(returned);
+        // Stream zero belongs to the initial shuffle; each accepted turn has a unique stream.
+        let mut rng = ChaCha8Rng::from_seed(self.seed);
+        rng.set_stream(stream);
+        self.bag.shuffle(&mut rng);
+        self.revision = revision;
+        Ok(())
     }
     /// Storage-only atomic transfer. Does not establish turn authority, structural legality or score.
     pub fn place_tiles(
@@ -603,6 +673,45 @@ mod turn_counter_tests {
             );
             assert_eq!(state.canonical_bytes().unwrap(), before);
             state.verify_tile_conservation().unwrap();
+        }
+    }
+
+    #[test]
+    fn exchange_does_not_publish_draws_before_turn_or_revision_overflow() {
+        for (turn, revision, error) in [
+            (u64::MAX, 10, StateError::CounterExhausted),
+            (0, u64::MAX, StateError::InvariantViolation),
+            (0, u64::MAX - 1, StateError::InvariantViolation),
+        ] {
+            let mut state =
+                GameState::new(GameId::new(1), crate::ruleset::english_fixture(), [7; 32]).unwrap();
+            state.add_player(PlayerId::new(1), "Ada".into()).unwrap();
+            state.add_player(PlayerId::new(2), "Lin".into()).unwrap();
+            state.deal_initial_racks().unwrap();
+            state.phase = Phase::Playing {
+                active_player: PlayerId::new(1),
+                turn: TurnId::new(turn),
+            };
+            state.revision = TurnId::new(revision);
+            let tile_id = state.players[0].rack[0].id;
+            let before = state.canonical_bytes().unwrap();
+            let mut session = crate::session::GameSession::new(state);
+            let command = crate::protocol::CommandEnvelope {
+                version: ProtocolVersion,
+                game_id: GameId::new(1),
+                player_id: PlayerId::new(1),
+                sequence: 1,
+                expected_turn: TurnId::new(turn),
+                command: crate::protocol::Command::Exchange {
+                    tile_ids: vec![tile_id],
+                },
+            };
+            assert_eq!(
+                session.apply(PlayerId::new(1), 1, &command),
+                Err(crate::session::CommandError::State(error))
+            );
+            assert_eq!(session.state().canonical_bytes().unwrap(), before);
+            session.state().verify_tile_conservation().unwrap();
         }
     }
 

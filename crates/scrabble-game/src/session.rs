@@ -134,8 +134,12 @@ impl GameSession {
                             .map_err(CommandError::Commit)?;
                         self.preview = None;
                     }
-                    Command::Exchange { .. } => {
-                        return Err(CommandError::UnsupportedCommand);
+                    Command::Exchange { tile_ids } => {
+                        let mut candidate = self.state.clone();
+                        candidate.exchange_tiles(player, tile_ids)?;
+                        candidate.advance_turn()?;
+                        self.state = candidate;
+                        self.preview = None;
                     }
                 }
             }
