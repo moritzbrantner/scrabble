@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { z } from "zod";
 import jsQR from "jsqr";
+import { type PublicSnapshot } from "../src/public-state";
 const path = process.env.SCRABBLE_GAME_FIXTURE;
 if (path === undefined) {
   throw new Error("Use bun run test:browser to provision Scrabble");
@@ -12,10 +13,15 @@ const fixture = z
     api: z.string(),
     status: z.string(),
     certificateHash: z.array(z.int().min(0).max(255)).length(32),
+    opening: z.strictObject({
+      requestId: z.string().regex(/^[0-9a-f]{32}$/),
+      requestedAt: z.int().min(0),
+    }),
   })
   .parse(JSON.parse(readFileSync(path, "utf8")));
 
 type Observed = {
+  tick: string;
   gameId: string;
   order: string[];
   active: string | null;
@@ -24,6 +30,8 @@ type Observed = {
   rackCount: number;
   tileIds: string[];
   recipient: string;
+  board: PublicSnapshot["board"];
+  scores: PublicSnapshot["players"];
 };
 declare global {
   // oxlint-disable-next-line typescript/consistent-type-definitions -- DOM Window requires declaration merging.
@@ -60,6 +68,7 @@ async function observeProjection(page: Page) {
         ) {
           const snapshot = decodePlayerSnapshot(frame.payload, raw.own_rack.player_id);
           window.scrabbleObserved = {
+            tick: frame.tick.toString(),
             gameId: snapshot.public.game_id,
             order: snapshot.public.players.map((player) => player.id),
             active:
@@ -69,6 +78,8 @@ async function observeProjection(page: Page) {
             rackCount: snapshot.own_rack.tiles.length,
             tileIds: snapshot.own_rack.tiles.map((tile) => tile.id),
             recipient: snapshot.own_rack.player_id,
+            board: snapshot.public.board,
+            scores: snapshot.public.players,
           };
         }
       }
@@ -547,8 +558,13 @@ test("active phones edit tentative moves and retain unconfirmed drafts through r
     await editor.getByRole("button", { name: "Cancel move", exact: true }).click();
     await expect(editor.locator(".tentative-square")).toHaveCount(0);
     await expect(page.locator(".tentative-tile")).toHaveCount(0);
-    await placeTile(0, 8, 8);
-    await placeTile(1, 9, 8);
+    const firstFace = await rackButtons.nth(0).getAttribute("aria-label");
+    const secondFace = await rackButtons.nth(1).getAttribute("aria-label");
+    const firstLetter =
+      firstFace?.startsWith("Blank tile") === true ? "A" : firstFace?.split(",")[0];
+    const reverseAT = firstLetter === "A" && secondFace?.startsWith("T,") === true;
+    await placeTile(reverseAT ? 1 : 0, 8, 8);
+    await placeTile(reverseAT ? 0 : 1, 9, 8);
     await expect(editor.getByRole("status")).toContainText("Ready to commit");
     await editor.getByRole("button", { name: "Commit move", exact: true }).click();
     await expect(editor.getByRole("status")).toContainText("Waiting for move confirmation");
@@ -621,6 +637,115 @@ test("closing an active phone clears its tentative board without committing tile
     await expect(
       second.getByRole("list", { name: "Your rack", exact: true }).getByRole("listitem"),
     ).toHaveCount(7);
+  } finally {
+    await first.close();
+    await second.close();
+  }
+});
+
+test("an authoritative AT commit converges on the board and both private phones", async ({
+  page,
+  context,
+}) => {
+  const certificate = fixture.certificateHash
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+  await page.goto(
+    `./?server=${encodeURIComponent(fixture.endpoint)}&api=${encodeURIComponent(fixture.api)}&certificate=${certificate}`,
+  );
+  await observeProjection(page);
+  await page.evaluate(({ requestId, requestedAt }) => {
+    const original = crypto.getRandomValues.bind(crypto);
+    const originalNow = Date.now;
+    crypto.getRandomValues = <T extends ArrayBufferView | null>(array: T): T => {
+      if (array instanceof Uint8Array && array.length === 16) {
+        array.set(Uint8Array.from(requestId.match(/../g) ?? [], (hex) => Number.parseInt(hex, 16)));
+        crypto.getRandomValues = original;
+        Date.now = () => {
+          Date.now = originalNow;
+          return requestedAt * 1000;
+        };
+        return array;
+      }
+      return original(array);
+    };
+  }, fixture.opening);
+  await page.getByRole("button", { name: "Create game", exact: true }).click();
+  const href = await page
+    .getByRole("link", { name: "Join this game", exact: true })
+    .getAttribute("href");
+  const first = await context.newPage();
+  const second = await context.newPage();
+  try {
+    for (const [index, phone] of [first, second].entries()) {
+      await phone.goto(href ?? "");
+      await observeProjection(phone);
+      await phone.getByLabel("Player name", { exact: true }).fill(index === 0 ? "Ada" : "Lin");
+      await phone.getByRole("button", { name: "Join game", exact: true }).click();
+      await expect(
+        phone.getByRole("heading", { name: index === 0 ? "Ada" : "Lin", exact: true }),
+      ).toBeVisible();
+    }
+    await page.getByRole("button", { name: "Start game", exact: true }).click();
+    await expect(first.getByText("It is your turn.", { exact: true })).toBeVisible();
+    const editor = first.getByRole("region", { name: "Move editor", exact: true });
+    const rack = first.getByRole("list", { name: "Your rack", exact: true });
+    for (const [index, letter] of ["A", "T"].entries()) {
+      await rack
+        .getByRole("button", { name: new RegExp(`^${letter},`) })
+        .first()
+        .click();
+      await editor
+        .getByRole("button", { name: new RegExp(`^Row 8, column ${8 + index}:`) })
+        .click();
+    }
+    await expect(page.locator(".tentative-tile")).toHaveCount(2);
+    await editor.getByRole("button", { name: "Commit move", exact: true }).click();
+    await expect(page.getByText("Turn 2", { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("cell", { name: /^Row 8, column 8: Committed A, 1 points/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("cell", { name: /^Row 8, column 9: Committed T, 1 points/ }),
+    ).toBeVisible();
+    await expect(page.locator(".tentative-tile")).toHaveCount(0);
+    await expect(first.getByText("Waiting for Lin.", { exact: true })).toBeVisible();
+    await expect(second.getByText("It is your turn.", { exact: true })).toBeVisible();
+    await expect(rack.getByRole("listitem")).toHaveCount(5);
+    await expect(editor.locator(".tentative-square")).toHaveCount(0);
+    for (const client of [page, first, second]) {
+      await expect.poll(() => client.evaluate(() => window.scrabbleObserved?.turn)).toBe("1");
+    }
+    const board = await page.evaluate(() => window.scrabbleObserved);
+    expect(board?.scores[0]?.score).toBe(4);
+    expect(board?.remaining).toBe(86);
+    for (const phone of [first, second]) {
+      const projection = await phone.evaluate(() => window.scrabbleObserved);
+      expect(projection?.board).toEqual(board?.board);
+      expect(projection?.scores).toEqual(board?.scores);
+      expect(projection?.active).toEqual(board?.active);
+      await expect(
+        phone
+          .getByRole("region", { name: "Move editor", exact: true })
+          .locator(".committed-square"),
+      ).toHaveCount(2);
+      await expect(
+        phone.getByRole("button", { name: "Retry player connection", exact: true }),
+      ).toHaveCount(0);
+    }
+    // Observe beyond a heartbeat period: the old turn must not publish after commit.
+    const committedTick = await first.evaluate(() => window.scrabbleObserved?.tick ?? "0");
+    await expect
+      .poll(() =>
+        first.evaluate(
+          (tick) => BigInt(window.scrabbleObserved?.tick ?? "0") >= BigInt(tick) + 12n,
+          committedTick,
+        ),
+      )
+      .toBe(true);
+    await expect(
+      first.getByRole("button", { name: "Retry player connection", exact: true }),
+    ).toHaveCount(0);
   } finally {
     await first.close();
     await second.close();

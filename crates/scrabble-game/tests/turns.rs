@@ -94,7 +94,9 @@ fn identity_sequence_and_turn_rejections_are_atomic_and_do_not_consume_sequence(
         (command(1, 2, 99, Command::Pass {}), CommandError::StaleTurn),
         (
             command(1, 2, 0, Command::Commit { placements: vec![] }),
-            CommandError::UnsupportedCommand,
+            CommandError::Commit(scrabble_game::commit::CommitError::Placement(
+                scrabble_game::placement::PlacementError::Empty,
+            )),
         ),
     ] {
         assert_eq!(apply(&mut session, &envelope), Err(error));

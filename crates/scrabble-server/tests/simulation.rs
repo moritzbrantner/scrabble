@@ -531,3 +531,114 @@ fn replay_recovery_hides_offline_preview_and_resume_clears_it() {
     assert!(read(&restored).public.preview.is_none());
     assert_eq!(restored.snapshot().unwrap(), canonical);
 }
+
+#[test]
+fn committed_turn_converges_privately_and_replays_with_exactly_once_scoring() {
+    let (seed, mut runtime, placements) = (0..=255)
+        .find_map(|seed| {
+            let simulation =
+                ScrabbleSimulation::new(GameId::new(1), english_fixture(), [seed; 32]).unwrap();
+            let mut runtime = MatchRuntime::new_with_replay_capture(simulation, 100);
+            runtime.admit(ReconnectToken([1; 16])).unwrap();
+            runtime.admit(ReconnectToken([2; 16])).unwrap();
+            runtime
+                .submit_command(1, 1, 1, &command(1, 1, 0, Command::Start {}))
+                .unwrap();
+            let own: PlayerSnapshot =
+                serde_json::from_slice(&runtime.snapshot_for(1).unwrap().payload).unwrap();
+            let placements: Option<Vec<_>> = ['A', 'T']
+                .into_iter()
+                .enumerate()
+                .map(|(index, letter)| {
+                    own.own_rack
+                        .tiles
+                        .iter()
+                        .find(|tile| tile.face == (TileFace::Letter { letter }))
+                        .map(|tile| Placement {
+                            tile_id: tile.id,
+                            coordinate: Coordinate::new(7, 7 + index as u8).unwrap(),
+                            blank_as: None,
+                        })
+                })
+                .collect();
+            placements.map(|placements| (seed, runtime, placements))
+        })
+        .expect("deterministic AT fixture");
+    runtime
+        .submit_command(
+            1,
+            1,
+            2,
+            &command(
+                1,
+                2,
+                0,
+                Command::Preview {
+                    placements: placements.clone(),
+                },
+            ),
+        )
+        .unwrap();
+    let mut invalid = placements.clone();
+    invalid[0].coordinate = placements[1].coordinate;
+    invalid[1].coordinate = placements[0].coordinate;
+    let before = runtime.snapshot().unwrap();
+    assert!(
+        runtime
+            .submit_command(
+                1,
+                1,
+                3,
+                &command(
+                    1,
+                    3,
+                    0,
+                    Command::Commit {
+                        placements: invalid
+                    }
+                )
+            )
+            .is_err()
+    );
+    assert_eq!(runtime.snapshot().unwrap(), before);
+    let payload = command(1, 3, 0, Command::Commit { placements });
+    assert_eq!(
+        runtime.submit_command(1, 1, 3, &payload).unwrap(),
+        CommandOutcome::Applied
+    );
+    let committed = runtime.snapshot().unwrap();
+    assert_eq!(
+        runtime.submit_command(1, 1, 3, &payload).unwrap(),
+        CommandOutcome::IgnoredStale
+    );
+    assert_eq!(runtime.snapshot().unwrap(), committed);
+    let first: PlayerSnapshot =
+        serde_json::from_slice(&runtime.snapshot_for(1).unwrap().payload).unwrap();
+    let second: PlayerSnapshot =
+        serde_json::from_slice(&runtime.snapshot_for(2).unwrap().payload).unwrap();
+    assert_eq!(first.public, second.public);
+    assert_eq!(first.public.players[0].score, 4);
+    assert_eq!(first.public.board.len(), 2);
+    assert!(first.public.preview.is_none());
+    assert_eq!(
+        first.public.phase,
+        Phase::Playing {
+            active_player: PlayerId::new(2),
+            turn: TurnId::new(1)
+        }
+    );
+    assert_eq!(first.own_rack.tiles.len(), 5);
+    assert_eq!(second.own_rack.tiles.len(), 7);
+    runtime.advance_tick().unwrap();
+    let fresh = || ScrabbleSimulation::new(GameId::new(1), english_fixture(), [seed; 32]).unwrap();
+    let expected = runtime.snapshot().unwrap();
+    let log = ReplayLog::decode(&runtime.replay_log().unwrap().encode().unwrap()).unwrap();
+    assert_eq!(
+        verify_replay(fresh(), &log).unwrap().final_snapshot,
+        expected
+    );
+    runtime.freeze_for_recovery();
+    let restored =
+        MatchRuntime::restore_from_recovery(fresh(), runtime.recovery_image().unwrap()).unwrap();
+    assert_eq!(restored.snapshot().unwrap(), expected);
+}

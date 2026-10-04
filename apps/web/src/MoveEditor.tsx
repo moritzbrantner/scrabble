@@ -44,16 +44,21 @@ export function MoveEditor({
   const board = useRef<HTMLDivElement>(null);
   const problem = draftProblem(snapshot, rules, current);
   const previewCallback = useRef(onPreview);
+  const previewPaused = useRef(false);
   useEffect(() => {
     previewCallback.current = onPreview;
   }, [onPreview]);
   const previewPlacements = JSON.stringify(current.placements);
   useEffect(() => {
-    if (!canAct) {
+    previewPaused.current = pending;
+    if (!canAct || pending) {
       return;
     }
-    const placements = pending ? [] : current.placements;
+    const placements = current.placements;
     const publish = () => {
+      if (previewPaused.current) {
+        return;
+      }
       void previewCallback.current?.(placements).catch(() => {
         // Tentative delivery has no bearing on authoritative move acceptance.
       });
@@ -116,6 +121,8 @@ export function MoveEditor({
       return;
     }
     const draft = current;
+    // Fence heartbeat writes before reserving the commit's transport sequence.
+    previewPaused.current = true;
     setState({ draft, pending: true });
     timer.current = setTimeout(() => {
       setState((previous) =>
