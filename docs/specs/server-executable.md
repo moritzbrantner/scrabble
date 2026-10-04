@@ -46,7 +46,7 @@ The app uses upstream status contract version 1 directly:
 - `GET /healthz`, `/readyz`, `/status`
 - `GET /matches/<id>/healthz`, `/readyz`, `/status`
 
-Health/readiness and placement capacity are different facts. Unknown matches fail with 404; mutations are unsupported. Status contains process/match facts, never racks, seed material or reconnect tokens. The separate application API exposes [creation and bounded retirement](game-creation.md); reliable control remains rejected by default.
+Health/readiness and placement capacity are different facts. Unknown matches fail with 404; mutations are unsupported. Status contains process/match facts, never racks, seed material or reconnect tokens. The separate application API exposes [creation and bounded retirement](game-creation.md), plus [read-only public invite lookup](player-invites.md); reliable control remains rejected by default.
 
 Send SIGINT or SIGTERM for graceful shutdown. The runtime marks readiness unavailable, drains, freezes and writes one recovery bundle for the current hosted matches. The next successful startup reconstructs the same factory/ruleset inputs, verifies/replays saved authority, restores runtime reconnect capabilities and sequence cursors, and consumes the bundle after the TLS listener binds and before marking serving ready. The persistent initialization key remains. Recovery restores manifest-listed IDs through the factory, including dynamically created games; configured initial IDs are used only on a fresh start. Do not reuse an incompatible ruleset with an existing bundle. A hard kill does not produce a new graceful recovery bundle; continuous crash persistence is outside this runtime contract.
 

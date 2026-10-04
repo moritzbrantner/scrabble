@@ -1,6 +1,6 @@
 # Scrabble
 
-A shared-board and private-phone multiplayer Scrabble application, under construction. The development board can create authoritative games, publish join links and display their live public state. The Rust executable hosts independent matches with runtime health, readiness and graceful recovery. Production endpoint configuration and the remaining gameplay/player workflows are still tracked in the ordered issues.
+A shared-board and private-phone multiplayer Scrabble application, under construction. The development board can create authoritative games, publish copyable player links and locally rendered QR codes, and display their live public state. The Rust executable hosts independent matches with runtime health, readiness and graceful recovery. Production endpoint configuration and the remaining gameplay/player workflows are still tracked in the ordered issues.
 
 ## Development
 
@@ -42,3 +42,5 @@ The [simulation adapter](docs/specs/simulation-adapter.md) maps runtime admissio
 The [creation API](docs/specs/game-creation.md) derives high-entropy public match IDs, bounds retries and match lifetime, rejects draining/full hosts, and retires through the upstream fencing boundary. Chromium acceptance drops a successful response, retries to recover the same game, and joins its canonical route.
 
 The [authoritative executable](docs/specs/server-executable.md) reuses game-server hosting/status/recovery for independent named matches. Private persistent initialization keeps tile order reproducible across restart. The real-process test proves scoped racks, match isolation, SIGTERM recovery and reconnect sequence fencing; a complete playable MVP still requires the remaining issues.
+
+[Player invitations](docs/specs/player-invites.md) use the static Pages base path and a public query route. The player route checks current match availability and reports malformed, expired or unavailable games before joining. Production joins consume public `VITE_SCRABBLE_ENDPOINT` and `VITE_SCRABBLE_API` build settings; service deployment remains #31.

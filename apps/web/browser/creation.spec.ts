@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { z } from "zod";
+import jsQR from "jsqr";
 const path = process.env.SCRABBLE_GAME_FIXTURE;
 if (path === undefined) {
   throw new Error("Use bun run test:browser to provision Scrabble");
@@ -47,9 +48,38 @@ test("board recovers a lost creation response with one game, then joins its real
   await page.getByRole("button", { name: "Retry creation", exact: true }).click();
   const invite = page.getByRole("link", { name: "Join this game", exact: true });
   await expect(invite).toBeVisible();
-  await expect(page.getByRole("status")).toContainText("Connected");
+  await expect(page.getByRole("status").filter({ hasText: "Connected" })).toContainText(
+    "Connected",
+  );
   await expect(page.getByRole("table", { name: "Scrabble board" })).toBeVisible();
   const href = await invite.getAttribute("href");
+  const pixels = await page.evaluate(async () => {
+    const svg = document.querySelector('svg[aria-label="Scan to join this game"]');
+    if (!(svg instanceof SVGSVGElement)) {
+      throw new Error("Missing invite QR");
+    }
+    const image = new Image();
+    image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(svg))}`;
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const drawing = canvas.getContext("2d");
+    if (drawing === null) {
+      throw new Error("Missing canvas context");
+    }
+    drawing.drawImage(image, 0, 0);
+    return {
+      width: canvas.width,
+      height: canvas.height,
+      data: Array.from(drawing.getImageData(0, 0, canvas.width, canvas.height).data),
+    };
+  });
+  expect(jsQR(new Uint8ClampedArray(pixels.data), pixels.width, pixels.height)?.data).toBe(href);
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.getByRole("button", { name: "Copy player link", exact: true }).click();
+  await expect(page.getByText("Player link copied.", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(href);
   expect(href).not.toBeNull();
   const publicId = new URL(href ?? "").searchParams.get("match");
   expect(publicId).toBe(firstMatch);
@@ -164,4 +194,23 @@ test("lobby tracks joined players and confirms Start from authoritative snapshot
   await guest.close();
   await expect(roster.getByRole("listitem").filter({ hasText: "Disconnected" })).toHaveCount(1);
   await expect(roster.getByRole("listitem")).toHaveCount(2);
+});
+
+test("player invitations reject malformed and expired games before transport admission", async ({
+  page,
+}) => {
+  const route = new URL("http://example.test/scrabble/");
+  route.searchParams.set("view", "player");
+  route.searchParams.set("server", fixture.endpoint);
+  route.searchParams.set("api", fixture.api);
+  route.searchParams.set("match", "../bad");
+  await page.goto(`./${route.search}`);
+  await expect(page.getByRole("alert")).toContainText("invalid game identifier");
+  route.searchParams.set("match", `g_${"0".repeat(16)}_${"a".repeat(32)}`);
+  await page.goto(`./${route.search}`);
+  await expect(page.getByRole("alert")).toContainText("game has expired");
+  await page.reload();
+  await expect(page.getByRole("alert")).toContainText("game has expired");
+  await expect(page.getByRole("table", { name: "Scrabble board" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Create game", exact: true })).toHaveCount(0);
 });

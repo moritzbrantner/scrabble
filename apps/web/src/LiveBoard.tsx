@@ -4,6 +4,7 @@ import { ConnectionStatus } from "./ConnectionStatus";
 import { fixtures } from "./fixtures";
 import { decodePlayerSnapshot, encodeGameCommand } from "./game-protocol";
 import { type PublicSnapshot } from "./public-state";
+import { PlayerInvite } from "./PlayerInvite";
 import { SharedBoard } from "./SharedBoard";
 import { BrowserMatch, type ConnectionState } from "./transport/browser-match";
 import { ProtocolError } from "./transport/wire";
@@ -13,10 +14,12 @@ export function LiveBoard({
   endpoint,
   matchId,
   certificateHash,
+  playerView = false,
 }: {
   endpoint: string;
   matchId: string;
   certificateHash?: string;
+  playerView?: boolean;
 }) {
   const [state, setState] = useState<ConnectionState>({ kind: "idle" });
   const [snapshot, setSnapshot] = useState<PublicSnapshot>();
@@ -146,6 +149,9 @@ export function LiveBoard({
   return (
     <>
       <ConnectionStatus state={state} />
+      {!playerView && snapshot?.phase.kind === "lobby" && (
+        <PlayerInvite key={matchId} matchId={matchId} />
+      )}
       {(state.kind === "disconnected" || state.kind === "failed") && (
         <Button onClick={() => void reconnect()}>Reconnect</Button>
       )}

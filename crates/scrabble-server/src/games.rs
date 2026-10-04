@@ -1,6 +1,6 @@
 //! Public creation information and bounded lifecycle policy; gameplay authority stays in the runtime.
 use crate::{
-    factory::{MatchFactory, game_id},
+    factory::{MatchFactory, creation_time, game_id},
     simulation::{MATCH_LIFETIME_SECONDS, ScrabbleSimulation, retirement_due},
 };
 use game_server::{BrowserRoutePrefix, LiveHostError, LiveMatchHost, MatchId, MatchRuntime};
@@ -50,6 +50,7 @@ pub struct JoinInformation {
 pub enum GameOperationError {
     InvalidRequest,
     ExpiredRequest,
+    ExpiredMatch,
     NotServing,
     Draining,
     AtCapacity,
@@ -154,6 +155,45 @@ impl Games {
             expires_at: request.requested_at.saturating_add(MATCH_LIFETIME_SECONDS),
         })
     }
+    pub async fn lookup(
+        &self,
+        id: &MatchId,
+        now: u64,
+    ) -> Result<JoinInformation, GameOperationError> {
+        let created_at = creation_time(id).ok_or(GameOperationError::UnknownMatch)?;
+        if now >= created_at.saturating_add(MATCH_LIFETIME_SECONDS) {
+            return Err(GameOperationError::ExpiredMatch);
+        }
+        if !self.host.is_serving() {
+            return Err(GameOperationError::NotServing);
+        }
+        if self.host.is_draining().await {
+            return Err(GameOperationError::Draining);
+        }
+        self.host
+            .inspect(id, |runtime| {
+                if runtime.is_draining() || runtime.is_frozen() {
+                    return Err(GameOperationError::Draining);
+                }
+                let snapshot = runtime
+                    .snapshot()
+                    .map_err(|_| GameOperationError::Internal)?;
+                if retirement_due(&snapshot.payload, now, runtime.current_tick())
+                    .map_err(|_| GameOperationError::Internal)?
+                {
+                    return Err(GameOperationError::ExpiredMatch);
+                }
+                Ok(())
+            })
+            .await??;
+        Ok(JoinInformation {
+            version: 1,
+            match_id: id.as_str().to_owned(),
+            game_id: game_id(id),
+            match_path: self.prefix.match_path(id),
+            expires_at: created_at.saturating_add(MATCH_LIFETIME_SECONDS),
+        })
+    }
     pub async fn retire(&self, id: &MatchId, now: u64) -> Result<(), GameOperationError> {
         let due = self
             .host
@@ -236,6 +276,8 @@ mod tests {
             connection.accept_uni().await.unwrap().read_exact(&mut welcome).await.unwrap();
             let welcome = decode_welcome(&welcome).unwrap();
             let id = MatchId::new(&join.match_id).unwrap();
+            assert_eq!(games.lookup(&id, now).await.unwrap(), join);
+            assert_eq!(games.lookup(&id, join.expires_at).await, Err(GameOperationError::ExpiredMatch));
             assert_eq!(games.retire(&id, now).await, Err(GameOperationError::NotRetirable));
             games.retire(&id, join.expires_at).await.unwrap();
             connection.closed().await;

@@ -36,6 +36,7 @@ impl Response {
 fn operation_error(error: GameOperationError) -> Response {
     match error {
         GameOperationError::InvalidRequest => Response::error(400, "invalid-request"),
+        GameOperationError::ExpiredMatch => Response::error(410, "expired-match"),
         GameOperationError::ExpiredRequest => Response::error(410, "expired-request"),
         GameOperationError::NotServing => Response::error(503, "not-serving"),
         GameOperationError::Draining => Response::error(503, "draining"),
@@ -194,6 +195,16 @@ async fn route(request: Request, games: &Games, board_origin: &str) -> Response 
                 Err(error) => operation_error(error),
             }
         }
+        "GET" => match is_game {
+            Some(id) => match games.lookup(&id, now).await {
+                Ok(join) => match serde_json::to_string(&join) {
+                    Ok(body) => Response { status: 200, body },
+                    Err(_) => operation_error(GameOperationError::Internal),
+                },
+                Err(error) => operation_error(error),
+            },
+            None => Response::error(405, "method-not-allowed"),
+        },
         "DELETE" => match is_game {
             Some(id) => match games.retire(&id, now).await {
                 Ok(()) => Response {
@@ -231,7 +242,7 @@ async fn write_response(
         _ => "Internal Server Error",
     };
     let header = format!(
-        "HTTP/1.1 {} {reason}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\nAccess-Control-Allow-Origin: {origin}\r\nVary: Origin\r\nAccess-Control-Allow-Methods: POST, DELETE, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\n\r\n",
+        "HTTP/1.1 {} {reason}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\nAccess-Control-Allow-Origin: {origin}\r\nVary: Origin\r\nAccess-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\n\r\n",
         response.status,
         response.body.len()
     );

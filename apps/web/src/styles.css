@@ -140,3 +140,24 @@ body {
   margin: 1rem auto;
   padding-inline: 1rem;
 }
+
+.player-invite {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 1rem auto;
+  padding: 1rem;
+  max-width: 70rem;
+}
+.player-invite svg {
+  max-width: 100%;
+  height: auto;
+  flex-shrink: 0;
+}
+.player-invite a {
+  display: block;
+  margin-bottom: 1rem;
+  overflow-wrap: anywhere;
+}
