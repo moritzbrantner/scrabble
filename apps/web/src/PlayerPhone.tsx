@@ -360,6 +360,27 @@ export function PlayerPhone({
                   snapshot={snapshot}
                   rules={fixtures.ruleset}
                   canAct={canAct}
+                  onPreview={async (placements) => {
+                    const client = activeClient.current;
+                    if (
+                      !canAct ||
+                      client === undefined ||
+                      snapshot.public.phase.kind !== "playing"
+                    ) {
+                      return;
+                    }
+                    const turn = snapshot.public.phase.turn;
+                    await client.sendCommand((sequence, authenticated) =>
+                      encodeGameCommand({
+                        version: 1,
+                        game_id: snapshot.public.game_id,
+                        player_id: authenticated,
+                        sequence,
+                        expected_turn: turn,
+                        command: { kind: "preview", placements },
+                      }),
+                    );
+                  }}
                   onCommit={async (placements) => {
                     const client = activeClient.current;
                     if (

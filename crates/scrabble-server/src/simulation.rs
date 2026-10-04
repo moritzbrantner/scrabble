@@ -11,6 +11,7 @@ use serde_json::value::RawValue;
 use std::collections::BTreeSet;
 
 pub const SCRABBLE_TICK_HZ: u16 = 20;
+pub const PREVIEW_LIFETIME_TICKS: u64 = 2 * SCRABBLE_TICK_HZ as u64;
 
 /// No Debug/Serialize: canonical state is private and requires an explicit snapshot call.
 pub struct ScrabbleSimulation {
@@ -20,6 +21,7 @@ pub struct ScrabbleSimulation {
     last_admitted_player: Option<u32>,
     lifecycle: Option<MatchLifecycle>,
     board: Option<BoardLobby>,
+    preview_deadline: Option<(PlayerId, u64)>,
 }
 
 struct BoardLobby {
@@ -75,6 +77,7 @@ impl ScrabbleSimulation {
             last_admitted_player: None,
             lifecycle: None,
             board: None,
+            preview_deadline: None,
         })
     }
 
@@ -128,6 +131,16 @@ impl ScrabbleSimulation {
 }
 
 impl GameSimulation for ScrabbleSimulation {
+    fn connection_changed(&mut self, player_id: u32) {
+        let player = PlayerId::new(u64::from(player_id));
+        self.session.clear_preview_for(player);
+        if self
+            .preview_deadline
+            .is_some_and(|(owner, _)| owner == player)
+        {
+            self.preview_deadline = None;
+        }
+    }
     fn tick_hz(&self) -> u16 {
         SCRABBLE_TICK_HZ
     }
@@ -253,6 +266,12 @@ impl GameSimulation for ScrabbleSimulation {
                 .apply(player, sequence, &envelope)
                 .map_err(error)?;
         }
+        self.preview_deadline = match &envelope.command {
+            Command::Preview { placements } if !placements.is_empty() => {
+                Some((player, self.tick.saturating_add(PREVIEW_LIFETIME_TICKS)))
+            }
+            _ => None,
+        };
         if matches!(self.session.state().phase(), Phase::Finished { .. })
             && let Some(lifecycle) = &mut self.lifecycle
             && lifecycle.finished_at_tick.is_none()
@@ -267,6 +286,12 @@ impl GameSimulation for ScrabbleSimulation {
             .tick
             .checked_add(1)
             .ok_or_else(|| SimulationError::new("simulation tick exhausted"))?;
+        if let Some((player, deadline)) = self.preview_deadline
+            && self.tick >= deadline
+        {
+            self.session.clear_preview_for(player);
+            self.preview_deadline = None;
+        }
         Ok(())
     }
 
@@ -323,6 +348,13 @@ impl GameSimulation for ScrabbleSimulation {
         for player in &mut snapshot.public.players {
             let id = u32::try_from(player.id.get()).map_err(error)?;
             player.connected = Some(context.is_connected(id));
+        }
+        if snapshot.public.preview.as_ref().is_some_and(|preview| {
+            u32::try_from(preview.player_id.get())
+                .map(|id| !context.is_connected(id))
+                .unwrap_or(true)
+        }) {
+            snapshot.public.preview = None;
         }
         let payload = serde_json::to_vec(&snapshot).map_err(error)?;
         Ok(SimulationSnapshot::new(self.tick, payload))

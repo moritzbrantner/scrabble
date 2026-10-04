@@ -75,6 +75,10 @@ body {
   right: 2px;
   font-size: 0.6rem;
 }
+.tentative-tile {
+  border: 2px dashed var(--primary);
+  background: color-mix(in oklch, var(--primary) 15%, var(--background));
+}
 .blank-tile {
   font-style: italic;
 }

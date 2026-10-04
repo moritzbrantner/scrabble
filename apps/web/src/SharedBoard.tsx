@@ -6,6 +6,15 @@ export function SharedBoard({ snapshot, rules }: { snapshot: PublicSnapshot; rul
   const cells = new Map(
     snapshot.board.map((tile) => [`${tile.coordinate.row},${tile.coordinate.column}`, tile]),
   );
+  const preview =
+    snapshot.phase.kind === "playing" &&
+    snapshot.preview?.player_id === snapshot.phase.active_player &&
+    snapshot.preview.turn === snapshot.phase.turn
+      ? snapshot.preview
+      : null;
+  const tentative = new Map(
+    preview?.tiles.map((tile) => [`${tile.coordinate.row},${tile.coordinate.column}`, tile]) ?? [],
+  );
   const values = new Map(
     rules.tiles.flatMap((tile) =>
       tile.face.kind === "letter" ? [[tile.face.letter, tile.value] as const] : [],
@@ -58,10 +67,13 @@ export function SharedBoard({ snapshot, rules }: { snapshot: PublicSnapshot; rul
               <th scope="row">{row + 1}</th>
               {indices.map((column) => {
                 const kind = rules.premiums[row * rules.board_size + column] ?? "normal";
-                const tile = cells.get(`${row},${column}`);
+                const committed = cells.get(`${row},${column}`);
+                const pending =
+                  committed === undefined ? tentative.get(`${row},${column}`) : undefined;
+                const tile = committed ?? pending;
                 const value = tile?.is_blank ? 0 : values.get(tile?.letter ?? "");
                 const description = tile
-                  ? `${tile.letter}, ${value ?? "unknown"} points${tile.is_blank ? ", blank" : ""}`
+                  ? `${pending === undefined ? "Committed" : "Tentative"} ${tile.letter}, ${value ?? "unknown"} points${tile.is_blank ? ", blank" : ""}`
                   : premiums[kind].label;
                 return (
                   <td
@@ -74,7 +86,7 @@ export function SharedBoard({ snapshot, rules }: { snapshot: PublicSnapshot; rul
                       </span>
                       {tile && (
                         <span
-                          className={`letter-tile${tile.is_blank ? " blank-tile" : ""}`}
+                          className={`letter-tile${tile.is_blank ? " blank-tile" : ""}${pending === undefined ? "" : " tentative-tile"}`}
                           aria-hidden="true"
                         >
                           <span>{tile.letter}</span>
@@ -94,6 +106,7 @@ export function SharedBoard({ snapshot, rules }: { snapshot: PublicSnapshot; rul
           {status}
         </p>
         {snapshot.phase.kind === "playing" && <p>Turn {BigInt(snapshot.phase.turn) + 1n}</p>}
+        {preview !== null && preview.tiles.length > 0 && <p>Dashed tiles are tentative.</p>}
         {snapshot.phase.kind === "finished" && <p>Game finished</p>}
         {snapshot.players.length > 0 && (
           <ul aria-label="Players and scores">
