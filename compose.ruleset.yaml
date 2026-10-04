@@ -1,0 +1,4 @@
+services:
+  server:
+    environment:
+      SCRABBLE_RULESET_FILE: /content/ruleset.json

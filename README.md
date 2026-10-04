@@ -19,7 +19,7 @@ bun run check
 
 ## Hosting
 
-The browser uses `/scrabble/` as its Vite base, including in development. GitHub Actions validates and builds once, uploads `dist`, and deploys that artifact on main to GitHub Pages. Configure repository Pages to use GitHub Actions. No server credential belongs in this public static bundle. Production authoritative hosting is tracked in #31.
+The browser uses `/scrabble/` as its Vite base, including in development. GitHub Actions validates and builds once, uploads `dist`, and deploys that artifact on main to GitHub Pages. Configure repository Pages to use GitHub Actions. No server credential belongs in this public static bundle. See [production deployment](docs/specs/production-deployment.md) for the Compose topology, public endpoint configuration, and rollout procedure; an actual hosting target remains outstanding in #31.
 
 `cargo` owns canonical game logic under `crates/scrabble-game`; `crates/scrabble-server` adapts it to `game-server` through `ScrabbleSimulation`. `apps/web` owns presentation only. See the ordered GitHub issues #1–#34 for the MVP acceptance requirements.
 
@@ -33,7 +33,7 @@ The versioned domain contracts and offline English fixture ruleset are defined i
 
 [Scoring](docs/specs/scoring.md) calculates all validated words with new-tile premiums and a single full-rack bonus. The scored storage commit applies cumulative points atomically; browser command integration remains in #19.
 
-The [shared board](docs/specs/shared-board.md) renders public snapshot fixtures for lobby, playing, and finished phases. Add `?fixture=playing` or `?fixture=finished` to the `/scrabble/` entry point to inspect those presentation cases. The production build remains the fixture preview until endpoint configuration in #31. `bun run test:browser` runs focused layout checks and writes screenshots to ignored `test-results/`.
+The [shared board](docs/specs/shared-board.md) renders public snapshot fixtures for lobby, playing, and finished phases. Add `?fixture=playing` or `?fixture=finished` to the `/scrabble/` entry point to inspect those presentation cases. Fixture previews are development-only. A production build requires the public service configuration or displays an explicit service-unavailable message. `bun run test:browser` runs focused layout checks and writes screenshots to ignored `test-results/`.
 
 The [browser transport](docs/specs/browser-transport.md) supports versioned welcome, bounded commands, latest-state snapshot reassembly, reliable control and in-memory reconnect capabilities. Its real-network fixture exercises upstream `game-server` independently of Scrabble rules. Production endpoint configuration remains #31.
 
