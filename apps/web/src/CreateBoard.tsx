@@ -57,14 +57,8 @@ export function CreateBoard({
     }
   }
   if (state.kind === "created") {
-    const invite = new URL(window.location.href);
-    invite.searchParams.set("match", state.join.matchId);
-    // The URL contains public routing only, never the retry nonce or a reconnect token.
     return (
       <>
-        <p className="creation-note">
-          <a href={invite.href}>Join this game</a>
-        </p>
         <LiveBoard
           endpoint={endpoint}
           matchId={state.join.matchId}

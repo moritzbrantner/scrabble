@@ -149,3 +149,39 @@ export async function createGame(
     throw new CreationError("The response was interrupted. Retry to recover the same game.", true);
   }
 }
+
+export class JoinError extends Error {}
+
+/** Public existence/lifetime check; never allocates a match or returns credentials. */
+export async function lookupGame(
+  api: string,
+  endpoint: string,
+  matchId: string,
+  signal: AbortSignal,
+): Promise<JoinInformation> {
+  if (!joinInformation.shape.matchId.safeParse(matchId).success) {
+    throw new JoinError("This game identifier is invalid. Ask the host for a new invitation.");
+  }
+  matchUrl(endpoint, matchId);
+  const url = creationUrl(api);
+  url.pathname += `/${matchId}`;
+  const response = await fetch(url, {
+    credentials: "omit",
+    signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
+  });
+  if (!response.ok) {
+    await response.body?.cancel();
+    if (response.status === 410) {
+      throw new JoinError("This game has expired. Ask the host for a new invitation.");
+    }
+    if (response.status === 404) {
+      throw new JoinError("This game is no longer available. Ask the host for a new invitation.");
+    }
+    throw new JoinError("Unable to check this game. Check your connection and retry.");
+  }
+  const join = decodeJoinInformation(await readResponse(response), endpoint);
+  if (join.matchId !== matchId) {
+    throw new JoinError("The server returned a different game.");
+  }
+  return join;
+}
