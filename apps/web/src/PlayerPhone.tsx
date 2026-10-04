@@ -12,6 +12,7 @@ import {
   savePlayerSession,
   type ResumeCapability,
 } from "./transport/resume-capability";
+import { MoveEditor } from "./MoveEditor";
 import { PlayerRack } from "./PlayerRack";
 import { ProtocolError } from "./transport/wire";
 
@@ -354,7 +355,36 @@ export function PlayerPhone({
           {phase?.kind === "finished" && <p>Game finished.</p>}
           {own !== undefined && phase?.kind !== "lobby" && (
             <>
-              <PlayerRack rack={snapshot.own_rack} rules={fixtures.ruleset} canAct={canAct} />
+              {phase?.kind === "playing" ? (
+                <MoveEditor
+                  snapshot={snapshot}
+                  rules={fixtures.ruleset}
+                  canAct={canAct}
+                  onCommit={async (placements) => {
+                    const client = activeClient.current;
+                    if (
+                      !canAct ||
+                      client === undefined ||
+                      snapshot.public.phase.kind !== "playing"
+                    ) {
+                      throw new Error("Move cannot be sent");
+                    }
+                    const turn = snapshot.public.phase.turn;
+                    await client.sendCommand((sequence, authenticated) =>
+                      encodeGameCommand({
+                        version: 1,
+                        game_id: snapshot.public.game_id,
+                        player_id: authenticated,
+                        sequence,
+                        expected_turn: turn,
+                        command: { kind: "commit", placements },
+                      }),
+                    );
+                  }}
+                />
+              ) : (
+                <PlayerRack rack={snapshot.own_rack} rules={fixtures.ruleset} canAct={false} />
+              )}
               <ol className="phone-scores" aria-label="Players and scores">
                 {snapshot.public.players.map((player) => (
                   <li
