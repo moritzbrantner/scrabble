@@ -16,15 +16,25 @@ use wtransport::Identity;
 
 /// Select real creation inputs whose native deal supports the authored AT opening.
 /// No rack, seed key, or alternate gameplay implementation enters browser metadata.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Opening {
+    request_id: String,
+    requested_at: u64,
+}
 fn opening(
     factory: &MatchFactory,
     consecutive: bool,
-) -> Result<serde_json::Value, Box<dyn Error + Send + Sync>> {
+    excluded_request: Option<&str>,
+) -> Result<Opening, Box<dyn Error + Send + Sync>> {
     let requested_at = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)?
         .as_secs();
     for nonce in 0..10_000_u32 {
         let request_id = format!("{nonce:032x}");
+        if excluded_request == Some(request_id.as_str()) {
+            continue;
+        }
         let id = factory.board_creation_id(&request_id, requested_at)?;
         let mut simulation = factory.create(&id)?;
         for player in 1..=3 {
@@ -79,7 +89,10 @@ fn opening(
                 .any(|tile| tile.face == (TileFace::Letter { letter }))
         }) && next_can_extend
         {
-            return Ok(serde_json::json!({ "requestId": request_id, "requestedAt": requested_at }));
+            return Ok(Opening {
+                request_id,
+                requested_at,
+            });
         }
     }
     Err("could not select a native authored-dictionary opening".into())
@@ -163,10 +176,13 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         values.insert("SCRABBLE_DICTIONARY_REVISION".into(), "1".into());
     }
     let config = ServerConfig::from_values(&values)?;
-    let opening = opening(&MatchFactory::new(&config)?, configured)?;
+    let factory = MatchFactory::new(&config)?;
+    let opening = opening(&factory, configured, None)?;
+    let reconnect_opening = self::opening(&factory, configured, Some(&opening.request_id))?;
     let metadata = serde_json::json!({ "endpoint": format!("https://127.0.0.1:{port}/game"),
         "api": format!("http://127.0.0.1:{api_port}"), "status": format!("http://127.0.0.1:{status_port}"),
-        "certificateHash": identity.certificate_chain().as_slice()[0].hash().as_ref(), "opening": opening });
+        "certificateHash": identity.certificate_chain().as_slice()[0].hash().as_ref(),
+        "opening": opening, "reconnectOpening": reconnect_opening });
     std::fs::write(
         directory.join("connection.json"),
         serde_json::to_vec(&metadata)?,

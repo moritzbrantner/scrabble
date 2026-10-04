@@ -6,6 +6,10 @@ export function ConnectionStatus({ state }: { state: ConnectionState }) {
       return <p role="status">Not connected.</p>;
     case "connecting":
       return <p role="status">Connecting…</p>;
+    case "reconnecting":
+      return <p role="status">Reconnecting… Attempt {state.attempt} of 3.</p>;
+    case "synchronizing":
+      return <p role="status">Restoring game…</p>;
     case "connected":
       return <p role="status">Connected · Player {state.admission.playerId}</p>;
     case "disconnected":
@@ -13,6 +17,7 @@ export function ConnectionStatus({ state }: { state: ConnectionState }) {
     case "closed":
       return <p role="status">Connection closed.</p>;
     case "failed":
+    case "resume-failed":
       return <p role="alert">{state.message}</p>;
     case "incompatible":
       return <p role="alert">Cannot join: {state.message}</p>;

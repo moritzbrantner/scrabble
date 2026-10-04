@@ -5,16 +5,18 @@ const path = process.env.SCRABBLE_GAME_FIXTURE;
 if (path === undefined) {
   throw new Error("Use bun run test:browser to provision Scrabble");
 }
+const opening = z.strictObject({
+  requestId: z.string().regex(/^[0-9a-f]{32}$/),
+  requestedAt: z.int().min(0),
+});
 export const gameFixture = z
   .strictObject({
     endpoint: z.string(),
     api: z.string(),
     status: z.string(),
     certificateHash: z.array(z.int().min(0).max(255)).length(32),
-    opening: z.strictObject({
-      requestId: z.string().regex(/^[0-9a-f]{32}$/),
-      requestedAt: z.int().min(0),
-    }),
+    opening,
+    reconnectOpening: opening,
   })
   .parse(JSON.parse(readFileSync(path, "utf8")));
 
