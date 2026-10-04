@@ -17,6 +17,7 @@ pub enum CommandError {
     NotHost,
     UnsupportedCommand,
     TooManyTiles,
+    Commit(crate::commit::CommitError),
     State(StateError),
 }
 impl From<StateError> for CommandError {
@@ -128,8 +129,12 @@ impl GameSession {
                     Command::Start {} | Command::SetName { .. } | Command::ClaimBoard { .. } => {
                         return Err(StateError::WrongPhase.into());
                     }
-                    // Commit requires structural/dictionary/scoring integration (#5, #6, #19, #24).
-                    Command::Commit { .. } | Command::Exchange { .. } => {
+                    Command::Commit { placements } => {
+                        crate::commit::apply(&mut self.state, player, placements)
+                            .map_err(CommandError::Commit)?;
+                        self.preview = None;
+                    }
+                    Command::Exchange { .. } => {
                         return Err(CommandError::UnsupportedCommand);
                     }
                 }

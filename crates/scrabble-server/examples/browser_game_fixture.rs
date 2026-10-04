@@ -1,8 +1,78 @@
 //! Real Scrabble application for browser creation acceptance; no replacement game/session rules.
-use scrabble_server::{config::ServerConfig, hosting};
+use game_server::GameSimulation;
+use scrabble_game::{
+    identity::{PlayerId, ProtocolVersion, TurnId},
+    protocol::{Command, CommandEnvelope, PlayerSnapshot},
+    ruleset::TileFace,
+};
+use scrabble_server::{
+    config::ServerConfig,
+    factory::{self, MatchFactory},
+    hosting,
+};
 use std::{collections::BTreeMap, error::Error, path::PathBuf};
 use tokio::sync::mpsc;
 use wtransport::Identity;
+
+/// Select real creation inputs whose native deal supports the authored AT opening.
+/// No rack, seed key, or alternate gameplay implementation enters browser metadata.
+fn opening(factory: &MatchFactory) -> Result<serde_json::Value, Box<dyn Error + Send + Sync>> {
+    let requested_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_secs();
+    for nonce in 0..10_000_u32 {
+        let request_id = format!("{nonce:032x}");
+        let id = factory.board_creation_id(&request_id, requested_at)?;
+        let mut simulation = factory.create(&id)?;
+        for player in 1..=3 {
+            simulation.add_player(player)?;
+        }
+        for (player, sequence, command) in [
+            (
+                1,
+                1,
+                Command::ClaimBoard {
+                    request_id: request_id.clone(),
+                },
+            ),
+            (
+                2,
+                1,
+                Command::SetName {
+                    display_name: "Ada".into(),
+                },
+            ),
+            (
+                3,
+                1,
+                Command::SetName {
+                    display_name: "Lin".into(),
+                },
+            ),
+            (1, 2, Command::Start {}),
+        ] {
+            let payload = serde_json::to_vec(&CommandEnvelope {
+                version: ProtocolVersion,
+                game_id: factory::game_id(&id),
+                player_id: PlayerId::new(u64::from(player)),
+                sequence,
+                expected_turn: TurnId::new(0),
+                command,
+            })?;
+            simulation.apply_command(player, sequence, &payload)?;
+        }
+        let own: PlayerSnapshot = serde_json::from_slice(&simulation.snapshot_for(2)?.payload)?;
+        if ['A', 'T'].into_iter().all(|letter| {
+            own.own_rack
+                .tiles
+                .iter()
+                .any(|tile| tile.face == (TileFace::Letter { letter }))
+        }) {
+            return Ok(serde_json::json!({ "requestId": request_id, "requestedAt": requested_at }));
+        }
+    }
+    Err("could not select a native authored-dictionary opening".into())
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -66,9 +136,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 .into(),
         ),
     ]))?;
+    let opening = opening(&MatchFactory::new(&config)?)?;
     let metadata = serde_json::json!({ "endpoint": format!("https://127.0.0.1:{port}/game"),
         "api": format!("http://127.0.0.1:{api_port}"), "status": format!("http://127.0.0.1:{status_port}"),
-        "certificateHash": identity.certificate_chain().as_slice()[0].hash().as_ref() });
+        "certificateHash": identity.certificate_chain().as_slice()[0].hash().as_ref(), "opening": opening });
     std::fs::write(
         directory.join("connection.json"),
         serde_json::to_vec(&metadata)?,

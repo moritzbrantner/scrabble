@@ -555,6 +555,57 @@ impl GameState {
 mod turn_counter_tests {
     use super::*;
     #[test]
+    fn scored_commit_does_not_publish_transfers_before_turn_or_revision_overflow() {
+        let (base, placements) = (0..=255)
+            .find_map(|seed| {
+                let mut state = GameState::new(
+                    GameId::new(1),
+                    crate::ruleset::english_fixture(),
+                    [seed; 32],
+                )
+                .unwrap();
+                state.add_player(PlayerId::new(1), "Ada".into()).unwrap();
+                state.add_player(PlayerId::new(2), "Lin".into()).unwrap();
+                state.deal_initial_racks().unwrap();
+                let placements: Option<Vec<_>> = ['A', 'T']
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, letter)| {
+                        state.players[0]
+                            .rack
+                            .iter()
+                            .find(|tile| tile.face == (TileFace::Letter { letter }))
+                            .map(|tile| Placement {
+                                tile_id: tile.id,
+                                coordinate: Coordinate::new(7, 7 + index as u8).unwrap(),
+                                blank_as: None,
+                            })
+                    })
+                    .collect();
+                placements.map(|placements| (state, placements))
+            })
+            .expect("deterministic AT fixture");
+        for (turn, revision, error) in [
+            (u64::MAX, 10, StateError::CounterExhausted),
+            (0, u64::MAX - 1, StateError::InvariantViolation),
+        ] {
+            let mut state = base.clone();
+            state.phase = Phase::Playing {
+                active_player: PlayerId::new(1),
+                turn: TurnId::new(turn),
+            };
+            state.revision = TurnId::new(revision);
+            let before = state.canonical_bytes().unwrap();
+            assert_eq!(
+                crate::commit::apply(&mut state, PlayerId::new(1), &placements),
+                Err(crate::commit::CommitError::State(error))
+            );
+            assert_eq!(state.canonical_bytes().unwrap(), before);
+            state.verify_tile_conservation().unwrap();
+        }
+    }
+
+    #[test]
     fn exhausted_turn_counter_does_not_mutate_state() {
         let mut state =
             GameState::new(GameId::new(1), crate::ruleset::english_fixture(), [0; 32]).unwrap();
