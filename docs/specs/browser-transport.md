@@ -12,7 +12,7 @@ Snapshot frames carry big-endian tick/hash u64s and a bounded payload. Hash veri
 
 `control(payload)` uses a separate bidirectional stream with `GSCT` version-1 framing, a 4,096-byte payload ceiling, stream FIN, exact response length, a five-second deadline and at most four exchanges in flight. Rejections are explicit results. Cancellation aborts the stream; raw browser exceptions are not exposed.
 
-`decodePlayerSnapshot` validates strict Scrabble protocol-v1 snapshots and the private rack's recipient. `ConnectionStatus` renders connecting, connected, disconnected, failed and incompatible states. Development builds accept `?server=<encoded-HTTPS-base>&match=<id>` to show a live public board for the installed English fixture ruleset. This is an explicitly supplied development connection; production endpoint discovery/configuration is #31, phone joining uses the player query route and its dedicated controller; broader reconnect policy remains #26. The public Pages build still opens its board preview.
+`decodePlayerSnapshot` validates strict Scrabble protocol-v1 snapshots and the private rack's recipient. `ConnectionStatus` renders connecting, connected, disconnected, failed and incompatible states. Development builds accept `?server=<encoded-HTTPS-base>&match=<id>` to show a live public board for the installed English fixture ruleset. This is an explicitly supplied development connection; the local launcher in #31 configures the connection, and phone joining uses the player query route and its dedicated controller. Public hosting is deferred to #67; an unconfigured production Pages build displays the service-unavailable state.
 
 ## Verification
 

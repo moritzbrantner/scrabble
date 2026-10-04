@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --config apps/web/vite.config.ts",
+    "dev:local": "bun scripts/dev-local.ts",
     "dev:server": "cargo run -p scrabble-server --locked",
     "dev:tls": "cargo run -p scrabble-server --example local_tls --locked",
     "format": "oxfmt . && cargo fmt --all",

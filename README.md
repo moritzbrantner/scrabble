@@ -13,13 +13,17 @@ bunx playwright install --with-deps chromium
 bun run check
 ```
 
-`bun run dev` opens the browser development server; visit its printed URL under `/scrabble/`. `bun run dev:tls` provisions a local TLS identity, and `bun run dev:server` starts the authoritative hosted server. See [server setup and configuration](docs/specs/server-executable.md) for local ports, production requirements, and graceful restart.
+For a playable local game, prepare the English dictionary once, then run `bun run dev:local` and open the complete game URL it prints. This starts the canonical local Compose server and the browser client together. See [local game setup](docs/specs/server-executable.md#local-game-setup) for prerequisites and persistent storage.
+
+`bun run dev` opens the browser development server alone. `bun run dev:tls` and `bun run dev:server` remain available for native development. See [server setup and configuration](docs/specs/server-executable.md) for local ports, production requirements, and graceful restart.
 
 `bun run check` checks formatting, TypeScript, lint, Rust tests, browser rendering, the static production build, and Chromium layout and real loopback WebTransport checks. `bun run format` applies formatting. Dependency changes use `bun install` and commit `bun.lock`; Rust dependency changes include `Cargo.lock`.
 
 ## Hosting
 
-The browser uses `/scrabble/` as its Vite base, including in development. GitHub Actions validates and builds once, uploads `dist`, and deploys that artifact on main to GitHub Pages. Configure repository Pages to use GitHub Actions. No server credential belongs in this public static bundle. See [production deployment](docs/specs/production-deployment.md) for the Compose topology, public endpoint configuration, and rollout procedure; an actual hosting target remains outstanding in #31.
+The current hosting target is a local server using the authoritative `game-server` runtime. `multiplayer-setup-service` is a signaling service and is not required by this transport. Public hosting is deferred.
+
+The browser uses `/scrabble/` as its Vite base, including in development. GitHub Actions validates and builds once, uploads `dist`, and deploys that artifact on main to GitHub Pages. Configure repository Pages to use GitHub Actions. No server credential belongs in this public static bundle. See [production deployment](docs/specs/production-deployment.md) for the prepared future public topology and rollout procedure. Pages remains visibly unavailable while its public endpoints are unset; use the local game URL for now.
 
 `cargo` owns canonical game logic under `crates/scrabble-game`; `crates/scrabble-server` adapts it to `game-server` through `ScrabbleSimulation`. `apps/web` owns presentation only. See the ordered GitHub issues #1–#34 for the MVP acceptance requirements.
 
@@ -35,7 +39,7 @@ The versioned domain contracts and offline English fixture ruleset are defined i
 
 The [shared board](docs/specs/shared-board.md) renders public snapshot fixtures for lobby, playing, and finished phases. Add `?fixture=playing` or `?fixture=finished` to the `/scrabble/` entry point to inspect those presentation cases. Fixture previews are development-only. A production build requires the public service configuration or displays an explicit service-unavailable message. `bun run test:browser` runs focused layout checks and writes screenshots to ignored `test-results/`.
 
-The [browser transport](docs/specs/browser-transport.md) supports versioned welcome, bounded commands, latest-state snapshot reassembly, reliable control and in-memory reconnect capabilities. Its real-network fixture exercises upstream `game-server` independently of Scrabble rules. Production endpoint configuration remains #31.
+The [browser transport](docs/specs/browser-transport.md) supports versioned welcome, bounded commands, latest-state snapshot reassembly, reliable control and in-memory reconnect capabilities. Its real-network fixture exercises upstream `game-server` independently of Scrabble rules. Future public deployment is tracked in #67.
 
 The [simulation adapter](docs/specs/simulation-adapter.md) maps runtime admissions directly to domain identities, applies authenticated commands, keeps ticks independent of turns, and separates canonical replay evidence from private player projections. Browser-free tests verify runtime replay, recovery, reconnect fencing and grace expiry. [Private client boundaries](docs/specs/private-client-boundaries.md) document scoped projections, rejected malicious commands, capability fencing, and redacted diagnostics.
 
@@ -43,4 +47,4 @@ The [creation API](docs/specs/game-creation.md) derives high-entropy public matc
 
 The [authoritative executable](docs/specs/server-executable.md) reuses game-server hosting/status/recovery for independent named matches. Private persistent initialization keeps tile order reproducible across restart. The real-process test proves scoped racks, match isolation, SIGTERM recovery and reconnect sequence fencing; a complete playable MVP still requires the remaining issues.
 
-[Player invitations](docs/specs/player-invites.md) use the static Pages base path and a public query route. The player route checks current match availability and reports malformed, expired or unavailable games before joining. Production joins consume public `VITE_SCRABBLE_ENDPOINT` and `VITE_SCRABBLE_API` build settings; service deployment remains #31.
+[Player invitations](docs/specs/player-invites.md) use the static Pages base path and a public query route. The player route checks current match availability and reports malformed, expired or unavailable games before joining. Production joins consume public `VITE_SCRABBLE_ENDPOINT` and `VITE_SCRABBLE_API` build settings; future public deployment remains #67.

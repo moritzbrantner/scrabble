@@ -2,7 +2,7 @@
 
 The authoritative service runs separately from GitHub Pages. The committed Compose topology exposes UDP 443 for native WebTransport and TCP 443 for HTTPS creation/invite lookup. Its gateway exposes only `/api/`, `/healthz`, and `/readyz`; detailed runtime status and management endpoints stay inside the Compose network. Both services run without root privileges or writable image filesystems.
 
-The hosting provider and public service domain have not been supplied. This document describes the prepared topology, not evidence of a deployed service. Physical phone acceptance is also outstanding.
+The owner has selected local hosting for now; see [local game setup](server-executable.md#local-game-setup). Public hosting is deferred. This document preserves the prepared future public topology, not evidence of a deployed service. Physical phone acceptance is also outstanding.
 
 ## Host prerequisites
 
@@ -76,6 +76,6 @@ For a failed upgrade that has accepted no new gameplay, stop both services and r
 
 `bun run test:deployment` builds and starts the canonical production topology on loopback ports using an owned temporary project, test certificate, fixture dictionary, and private state. It verifies HTTPS health, API origin rejection, hidden management routes, actual UDP WebTransport admission and snapshot identity, rejection of missing/wrong transport origins before seat allocation, and graceful restart preserving match and seed identity, then removes its containers and temporary files. It requires a local Unix Docker daemon and uses curl certificate verification against the generated test certificate.
 
-The repository's native process tests prove graceful recovery, private projections, and reconnect fencing. Browser checks prove real loopback WebTransport gameplay and production configuration failure behavior. The container smoke test does not prove public certificate trust or gameplay through the public deployed host. Publicly trusted transport from the deployed Pages URL, real public health probes, and physical phone gameplay must still be recorded against the actual deployment before #31 and #32 can be closed.
+The repository's native process tests prove graceful recovery, private projections, and reconnect fencing. Browser checks prove real loopback WebTransport gameplay and production configuration failure behavior. The container smoke test does not prove public certificate trust or gameplay through a public deployed host. Publicly trusted Pages transport, deployed health probes, and rollout compatibility remain future public-hosting acceptance; physical phone gameplay remains separate from same-computer browser evidence.
 
 Shared convention sourceRevision: `46d8793bb3034326561f876dcc67dbaa5aa1e432`.

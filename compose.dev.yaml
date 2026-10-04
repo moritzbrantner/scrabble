@@ -1,5 +1,6 @@
 services:
   server:
+    restart: "no"
     environment:
       SCRABBLE_MODE: local
       SCRABBLE_BOARD_ORIGIN: http://localhost:5173
