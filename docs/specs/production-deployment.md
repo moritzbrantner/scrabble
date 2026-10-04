@@ -16,6 +16,23 @@ The browser origin is `https://moritzbrantner.github.io`, without `/scrabble/`. 
 
 ## Startup and public configuration
 
+### Reproducible initial English dictionary
+
+The optional initial corpus uses SCOWL's general American English spelling vocabulary, size 60 and variant level 1. This is not an official tournament Scrabble dictionary. The preparation excludes abbreviations and special categories, then keeps only lowercase ASCII words of length 2–15, uppercases them, and sorts unique entries. This excludes capitalized names, punctuation, accents, and longer words. It produces 78,026 words with SHA-256 `3e8c1a3f17f6d1a2fbad509b4454908d5edb9bf86e8ab8595a029e14418c0ad6`.
+
+Install Git, Make, Python 3, and SQLite according to the [upstream prerequisites](https://github.com/en-wl/wordlist/blob/7e99edab8e32f9f9ea2b15f249ca8d4d67237410/README.md). In an operator-owned preparation directory:
+
+```sh
+git clone --depth 1 --branch rel-2026.02.25 https://github.com/en-wl/wordlist.git scowl-source
+bun scripts/prepare-dictionary.ts scowl-source /ABSOLUTE/NEW/CONTENT_DIRECTORY
+```
+
+The script verifies the exact release commit and unmodified tracked source, rebuilds the source database, and checks the output count and hash before creating the new content directory. It refuses an existing destination. It retains the complete upstream copyright notice, source README, and a provenance manifest alongside `words.txt`. The [upstream notice](https://github.com/en-wl/wordlist/blob/7e99edab8e32f9f9ea2b15f249ca8d4d67237410/Copyright) specifies redistribution conditions; preserve these artifacts when copying the deployment content. No dictionary download or preparation runs in the serving process or Pages build.
+
+For this corpus set `DEPLOY_DICTIONARY_NAME=scowl-en-us-60`, `DEPLOY_DICTIONARY_REVISION=2026.02.25-recipe1`, and `DEPLOY_CONTENT_DIRECTORY` to the prepared directory. Keep the original content immutable for recovery and rollback. The runtime additionally fingerprints the semantic word set and ruleset; the provenance hash records the prepared file bytes.
+
+### Deploying the service
+
 From the reviewed checkout, using the deployment environment file:
 
 ```sh
