@@ -100,6 +100,18 @@ fn opening(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
+    if std::env::args().nth(1).as_deref() == Some("--fresh-opening") {
+        let directory = PathBuf::from(std::env::args().nth(2).ok_or("missing fixture directory")?);
+        let values = serde_json::from_slice::<BTreeMap<String, String>>(&std::fs::read(
+            directory.join("fixture-config.json"),
+        )?)?;
+        let config = ServerConfig::from_values(&values)?;
+        let factory = MatchFactory::new(&config)?;
+        let excluded = std::env::args().nth(3);
+        let opening = opening(&factory, config.dictionary.is_some(), excluded.as_deref())?;
+        println!("{}", serde_json::to_string(&opening)?);
+        return Ok(());
+    }
     let directory = PathBuf::from(std::env::args().nth(1).ok_or("missing fixture directory")?);
     let origin = std::env::args().nth(2).ok_or("missing board origin")?;
     std::fs::create_dir(&directory)?;
@@ -175,6 +187,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         );
         values.insert("SCRABBLE_DICTIONARY_REVISION".into(), "1".into());
     }
+    // Test-only paths and configuration let later tests select fresh real creation inputs.
+    // The persisted derivation key remains in its private seed file and never reaches metadata.
+    std::fs::write(
+        directory.join("fixture-config.json"),
+        serde_json::to_vec(&values)?,
+    )?;
     let config = ServerConfig::from_values(&values)?;
     let factory = MatchFactory::new(&config)?;
     let opening = opening(&factory, configured, None)?;
