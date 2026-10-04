@@ -31,6 +31,8 @@ The script verifies the exact release commit and unmodified tracked source, rebu
 
 For this corpus set `DEPLOY_DICTIONARY_NAME=scowl-en-us-60`, `DEPLOY_DICTIONARY_REVISION=2026.02.25-recipe1`, and `DEPLOY_CONTENT_DIRECTORY` to the prepared directory. Keep the original content immutable for recovery and rollback. The runtime additionally fingerprints the semantic word set and ruleset; the provenance hash records the prepared file bytes.
 
+Run `bun run test:deployment /ABSOLUTE/NEW/CONTENT_DIRECTORY` to check the prepared corpus in the real container topology. This checks the provenance file hash before loading the corpus, then exercises HTTPS creation, UDP snapshots, and graceful recovery with that dictionary identity. Without this argument the smoke test uses the authored fixture.
+
 ### Deploying the service
 
 From the reviewed checkout, using the deployment environment file:

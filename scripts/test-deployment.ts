@@ -3,6 +3,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decodeJoinInformation, newCreateRequest } from "../apps/web/src/create-game";
+import { z } from "zod";
 
 async function run(command: string[], env: NodeJS.ProcessEnv = process.env): Promise<string> {
   const child = Bun.spawn(command, { env, stdout: "pipe", stderr: "pipe" });
@@ -93,7 +94,29 @@ try {
   for (const path of [tls, state, content]) {
     await mkdir(path, { mode: 0o700 });
   }
-  await copyFile("crates/scrabble-game/fixtures/words.txt", join(content, "words.txt"));
+  const dictionaryDirectory = Bun.argv[2];
+  if (dictionaryDirectory) {
+    const manifest = z
+      .object({
+        dictionaryName: z.string().regex(/^[A-Za-z0-9_.-]{1,64}$/),
+        dictionaryRevision: z.string().regex(/^[A-Za-z0-9_.-]{1,64}$/),
+        sha256: z.string().regex(/^[0-9a-f]{64}$/),
+      })
+      .parse(await Bun.file(join(dictionaryDirectory, "provenance.json")).json());
+    const wordsFile = Bun.file(join(dictionaryDirectory, "words.txt"));
+    if (wordsFile.size > 64 * 1024 * 1024) {
+      throw new Error("Deployment check dictionary exceeds the runtime bound");
+    }
+    const words = await wordsFile.arrayBuffer();
+    if (new Bun.CryptoHasher("sha256").update(words).digest("hex") !== manifest.sha256) {
+      throw new Error("Deployment check dictionary differs from its provenance hash");
+    }
+    await Bun.write(join(content, "words.txt"), words);
+    env.DEPLOY_DICTIONARY_NAME = manifest.dictionaryName;
+    env.DEPLOY_DICTIONARY_REVISION = manifest.dictionaryRevision;
+  } else {
+    await copyFile("crates/scrabble-game/fixtures/words.txt", join(content, "words.txt"));
+  }
   await run(["cargo", "run", "-q", "-p", "scrabble-server", "--example", "local_tls", "--locked"], {
     ...env,
     SCRABBLE_MODE: "local",
