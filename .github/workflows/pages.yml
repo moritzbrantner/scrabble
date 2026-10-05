@@ -13,7 +13,7 @@ jobs:
       pages: write
       id-token: write
       packages: read
-    uses: moritzbrantner/reusable-workflows/.github/workflows/deploy-pages.yml@main
+    uses: moritzbrantner/reusable-workflows/.github/workflows/deploy-pages.yml@8537c5248901410d179785f0c836739250bb5723 # main
     with:
       bun_version: 1.4.2
       pre_command: rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy && cargo fetch --locked && bunx playwright install --with-deps chromium
