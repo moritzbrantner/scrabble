@@ -5,7 +5,7 @@ import { createRoot } from "react-dom/client";
 import { SharedBoard } from "../src/SharedBoard";
 import { fixtures } from "../src/fixtures";
 import { PreferencesProvider } from "../src/preferences";
-import { measureWordDraftInteractions } from "./performance-fixture";
+import { measureBoardRefreshes, measureWordDraftInteractions } from "./performance-fixture";
 import "../src/styles.css";
 
 type Phase = "playing" | "finished";
@@ -14,6 +14,7 @@ declare global {
   interface Window {
     scrabblePerformance?: {
       setBoard: (phase: Phase) => void;
+      measureBoardRefreshes: typeof measureBoardRefreshes;
       measureWordDraftInteractions: typeof measureWordDraftInteractions;
     };
   }
@@ -25,6 +26,7 @@ function BoardHarness() {
     // Preserve actual SharedBoard rendering and the React commit, rather
     // than timing an inert DOM query over already rendered cells.
     setBoard: (next) => flushSync(() => setPhase(next)),
+    measureBoardRefreshes,
     measureWordDraftInteractions,
   };
   return <SharedBoard snapshot={fixtures.snapshots[phase]} rules={fixtures.ruleset} />;
