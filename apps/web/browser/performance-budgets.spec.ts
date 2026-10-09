@@ -24,9 +24,7 @@ test("50 ms p95: reading the rendered public board", async ({ page }) => {
 
   const samples = await page.evaluate(async () => {
     const path = "/scrabble/browser/performance-fixture.tsx";
-    const { measureBoardReads } = (await import(
-      path
-    )) as typeof import("./performance-fixture");
+    const { measureBoardReads } = (await import(path)) as typeof import("./performance-fixture");
     return measureBoardReads();
   });
   const observed = p95(samples);
