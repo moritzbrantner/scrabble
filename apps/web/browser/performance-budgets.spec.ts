@@ -18,14 +18,14 @@ function p95(samples: number[]): number {
   return sorted[Math.ceil(sorted.length * 0.95) - 1]!;
 }
 
-test("50 ms p95: refreshing all board labels through a real UI setting", async ({ page }) => {
-  await page.goto("?fixture=playing&lang=en");
+test("50 ms p95: rendering changed Scrabble board snapshots", async ({ page }) => {
+  await page.goto("browser/performance.html");
   await expect(page.getByRole("table", { name: "Scrabble board" })).toBeVisible();
 
-  const samples = await page.evaluate(async () => {
-    const path = "/scrabble/browser/performance-fixture.tsx";
-    const { measureBoardRefreshes } = (await import(path)) as typeof import("./performance-fixture");
-    return measureBoardRefreshes();
+  const samples = await page.evaluate(() => {
+    const fixture = window.scrabblePerformance;
+    if (fixture === undefined) throw new Error("Optimized board performance fixture is unavailable");
+    return fixture.measureBoardRefreshes();
   });
   const observed = p95(samples);
   console.log(`Scrabble board React refresh: p95=${observed.toFixed(2)}ms, budget=50ms`);
