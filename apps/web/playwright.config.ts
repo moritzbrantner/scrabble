@@ -5,7 +5,11 @@ if (port === undefined || !/^[0-9]+$/.test(port)) {
 }
 export default defineConfig({
   testDir: "./browser",
-  testIgnore: ["**/playable-loop.spec.ts", "**/production-configuration.spec.ts", "**/performance-budgets.spec.ts"],
+  testIgnore: [
+    "**/playable-loop.spec.ts",
+    "**/production-configuration.spec.ts",
+    "**/performance-budgets.spec.ts",
+  ],
   timeout: 30_000,
   retries: 0,
   workers: 1,
