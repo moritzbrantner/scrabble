@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import tailwindcss from "@tailwindcss/vite";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 const certificate = process.env.LOCAL_TLS_CERT;
 const privateKey = process.env.LOCAL_TLS_KEY;
@@ -8,7 +9,7 @@ if (Boolean(certificate) !== Boolean(privateKey)) {
   throw new Error("Local HTTPS needs both LOCAL_TLS_CERT and LOCAL_TLS_KEY");
 }
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   root: "apps/web",
   base: "/scrabble/",
   plugins: [tailwindcss()],
@@ -32,6 +33,16 @@ export default defineConfig({
     outDir: "../../dist",
     emptyOutDir: true,
     rolldownOptions: {
+      // Browser budget fixtures run against optimized Vite output, never the
+      // development server. Only test builds include the extra HTML entry.
+      ...(mode === "test"
+        ? {
+            input: {
+              app: fileURLToPath(new URL("./index.html", import.meta.url)),
+              performance: fileURLToPath(new URL("./browser/performance.html", import.meta.url)),
+            },
+          }
+        : {}),
       onwarn(warning, defaultHandler) {
         // This is a client-only application, so React server directives have no role.
         if (warning.code === "MODULE_LEVEL_DIRECTIVE" && warning.message.includes("use client")) {
@@ -41,4 +52,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));
