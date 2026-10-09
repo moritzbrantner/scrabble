@@ -17,7 +17,8 @@ jobs:
       - run: cargo fetch --locked
       - run: bunx playwright install --with-deps chromium
       - run: |
-          bun run format
+          bunx oxfmt apps/web/browser/performance-budgets.spec.ts apps/web/browser/performance-fixture.tsx docs/specs/performance-budgets.md
+          rustfmt --edition 2024 crates/scrabble-game/tests/performance_budget.rs
           git diff -- apps/web/browser/performance-budgets.spec.ts apps/web/browser/performance-fixture.tsx docs/specs/performance-budgets.md crates/scrabble-game/tests/performance_budget.rs
           bun run check
   deployment:
