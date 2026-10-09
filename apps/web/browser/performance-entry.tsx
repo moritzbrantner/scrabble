@@ -10,19 +10,15 @@ import "../src/styles.css";
 
 type Phase = "playing" | "finished";
 
-declare global {
-  interface Window {
-    scrabblePerformance?: {
-      setBoard: (phase: Phase) => void;
-      measureBoardRefreshes: typeof measureBoardRefreshes;
-      measureWordDraftInteractions: typeof measureWordDraftInteractions;
-    };
-  }
-}
+type BenchmarkApi = {
+  setBoard: (phase: Phase) => void;
+  measureBoardRefreshes: typeof measureBoardRefreshes;
+  measureWordDraftInteractions: typeof measureWordDraftInteractions;
+};
 
 function BoardHarness() {
   const [phase, setPhase] = useState<Phase>("playing");
-  window.scrabblePerformance = {
+  (window as Window & { scrabblePerformance?: BenchmarkApi }).scrabblePerformance = {
     // Preserve actual SharedBoard rendering and the React commit, rather
     // than timing an inert DOM query over already rendered cells.
     setBoard: (next) => flushSync(() => setPhase(next)),
