@@ -24,7 +24,9 @@ test("50 ms p95: rendering changed Scrabble board snapshots", async ({ page }) =
 
   const samples = await page.evaluate(() => {
     const fixture = window.scrabblePerformance;
-    if (fixture === undefined) throw new Error("Optimized board performance fixture is unavailable");
+    if (fixture === undefined) {
+      throw new Error("Optimized board performance fixture is unavailable");
+    }
     return fixture.measureBoardRefreshes();
   });
   const observed = p95(samples);
