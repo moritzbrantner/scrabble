@@ -33,15 +33,15 @@ test("50 ms p95: rendering changed Scrabble board snapshots", async ({ page }) =
 });
 
 test("50 ms p95: placing word tiles and clearing a move draft", async ({ page }) => {
-  await page.goto("?fixture=playing");
+  await page.goto("browser/performance.html");
   await expect(page.getByRole("table", { name: "Scrabble board" })).toBeVisible();
 
-  const { placeMs, resetMs } = await page.evaluate(async () => {
-    const path = "/scrabble/browser/performance-fixture.tsx";
-    const { measureWordDraftInteractions } = (await import(
-      path
-    )) as typeof import("./performance-fixture");
-    return measureWordDraftInteractions();
+  const { placeMs, resetMs } = await page.evaluate(() => {
+    const fixture = window.scrabblePerformance;
+    if (fixture === undefined) {
+      throw new Error("Optimized move-editor performance fixture is unavailable");
+    }
+    return fixture.measureWordDraftInteractions();
   });
   const placement = p95(placeMs);
   const reset = p95(resetMs);
