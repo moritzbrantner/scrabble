@@ -70,7 +70,9 @@ fn prepared_word() -> (GameSession, CommandEnvelope) {
             dictionary.clone(),
         );
         for (player, name) in [(1, "Ada"), (2, "Lin"), (3, "Mia"), (4, "Noa")] {
-            session.add_player(PlayerId::new(player), name.into()).unwrap();
+            session
+                .add_player(PlayerId::new(player), name.into())
+                .unwrap();
         }
         session
             .apply(PlayerId::new(1), 1, &command(1, 1, 0, Command::Start {}))
