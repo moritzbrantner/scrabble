@@ -34,7 +34,6 @@ function requiredButton(container: Element, selector: string): HTMLButtonElement
 }
 
 /**
- * Measures synchronous React refresh, DOM com/**
  * Reads the already mounted production SharedBoard. The browser's real 225-cell
  * DOM is the test subject; fixture setup, navigation and network are excluded.
  * This is a board-read budget, NOT an assertion about React re-render speed.
