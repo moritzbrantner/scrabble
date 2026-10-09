@@ -34,36 +34,30 @@ function requiredButton(container: Element, selector: string): HTMLButtonElement
 }
 
 /**
- * Measure an actual mounted SharedBoard React refresh, using the live language
- * control to change every square's accessible description. Unlike DOM inspection
- * of a settled tree, this includes state reconciliation, the commit and layout.
- * Navigation, network, initial mount and final screen paint are excluded.
+ * Measure actual React SharedBoard updates in an optimized test build.
+ * The same production component reconciles a different authoritative
+ * snapshot; fixture setup, navigation and network are outside the timer.
  */
-export async function measureBoardRefreshes(): Promise<number[]> {
-  const board = document.querySelector<HTMLTableElement>("table.board");
-  const language = document.querySelector<HTMLSelectElement>(".app-preferences select");
-  const setValue = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
-  if (board === null || language === null || setValue === undefined) {
-    throw new Error("The real board and its language control must already be mounted");
-  }
-  if (board.querySelectorAll("tbody td").length !== 225) {
-    throw new Error("The 225-square Scrabble board was not mounted");
+export function measureBoardRefreshes(): number[] {
+  const table = document.querySelector<HTMLTableElement>("table.board");
+  const setBoard = window.scrabblePerformance?.setBoard;
+  if (table === null || setBoard === undefined || table.querySelectorAll("tbody td").length !== 225) {
+    throw new Error("The mounted production SharedBoard is unavailable");
   }
   const measurements: number[] = [];
   for (let index = 0; index < 20; index++) {
-    const nextLocale = index % 2 === 0 ? "de" : "en";
+    const phase = index % 2 === 0 ? "finished" : "playing";
     const started = performance.now();
-    // The native setter is needed for React's tracked onChange to observe the event.
-    setValue.call(language, nextLocale);
-    language.dispatchEvent(new Event("change", { bubbles: true }));
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    board.getBoundingClientRect();
+    setBoard(phase);
+    // Read layout inside the interval after React reconciles all 225 cells.
+    table.getBoundingClientRect();
     const elapsed = performance.now() - started;
-    if (document.documentElement.lang !== nextLocale) {
-      throw new Error("The real board did not commit the requested language update");
+    const expected = fixtures.snapshots[phase];
+    if (table.querySelectorAll("tbody td").length !== 225) {
+      throw new Error("A rendered board refresh lost squares");
     }
-    if (board.querySelectorAll("tbody td").length !== 225) {
-      throw new Error("Refreshing the board lost squares");
+    if (table.querySelectorAll(".letter-tile").length !== expected.board.length) {
+      throw new Error("The refreshed board does not match the authoritative snapshot");
     }
     measurements.push(elapsed);
   }
