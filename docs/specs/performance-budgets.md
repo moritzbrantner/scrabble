@@ -4,13 +4,13 @@ These are executable **playability smoke contracts**, alongside (never replacing
 existing semantic, accessibility and multiplayer correctness tests. They measure
 real Scrabble code rather than setting a 50 ms Playwright timeout.
 
-| Operation | Measured boundary | p95 ceiling | Test |
-| --- | --- | --- | --- |
-| Read an updated shared board | Warm React `SharedBoard` refresh, DOM commit and forced layout of 225 squares | 50 ms | `performance-budgets.spec.ts` |
-| Compose a word | Select one rack letter and place it on the 225-square `MoveEditor` board, including DOM update and layout | 50 ms per placement | `performance-budgets.spec.ts` |
-| Cancel a draft | Cancel a two-letter tentative word and restore the board | 50 ms | `performance-budgets.spec.ts` |
-| Accept a valid word | In-process `GameSession::apply` for a real dictionary-accepted `AT` opening, including score, draw, and state commit | 50 ms | `performance_budget.rs` |
-| Read canonical public board state | In-process `GameSession::public_snapshot` after that commit | 50 ms | `performance_budget.rs` |
+| Operation                         | Measured boundary                                                                                                    | p95 ceiling         | Test                          |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ------------------- | ----------------------------- |
+| Read an updated shared board      | Warm React `SharedBoard` refresh, DOM commit and forced layout of 225 squares                                        | 50 ms               | `performance-budgets.spec.ts` |
+| Compose a word                    | Select one rack letter and place it on the 225-square `MoveEditor` board, including DOM update and layout            | 50 ms per placement | `performance-budgets.spec.ts` |
+| Cancel a draft                    | Cancel a two-letter tentative word and restore the board                                                             | 50 ms               | `performance-budgets.spec.ts` |
+| Accept a valid word               | In-process `GameSession::apply` for a real dictionary-accepted `AT` opening, including score, draw, and state commit | 50 ms               | `performance_budget.rs`       |
+| Read canonical public board state | In-process `GameSession::public_snapshot` after that commit                                                          | 50 ms               | `performance_budget.rs`       |
 
 The browser tests exercise production `SharedBoard` and `MoveEditor` components
 through a test-only fixture using `flushSync` to establish the **synchronous
