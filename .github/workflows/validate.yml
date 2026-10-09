@@ -14,9 +14,6 @@ jobs:
           bun-version: 1.4.2
       - run: rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy
       - run: bun install --frozen-lockfile
-      - run: |
-          bunx oxfmt apps/web/browser/performance-budgets.spec.ts apps/web/browser/performance-fixture.tsx docs/specs/performance-budgets.md
-          git diff -- apps/web/browser/performance-budgets.spec.ts docs/specs/performance-budgets.md
       - run: cargo fetch --locked
       - run: bunx playwright install --with-deps chromium
       - run: bun run check
