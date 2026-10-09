@@ -41,7 +41,11 @@ function requiredButton(container: Element, selector: string): HTMLButtonElement
 export function measureBoardRefreshes(): number[] {
   const table = document.querySelector<HTMLTableElement>("table.board");
   const setBoard = window.scrabblePerformance?.setBoard;
-  if (table === null || setBoard === undefined || table.querySelectorAll("tbody td").length !== 225) {
+  if (
+    table === null ||
+    setBoard === undefined ||
+    table.querySelectorAll("tbody td").length !== 225
+  ) {
     throw new Error("The mounted production SharedBoard is unavailable");
   }
   const measurements: number[] = [];
@@ -101,7 +105,10 @@ export function measureWordDraftInteractions(): { placeMs: number[]; resetMs: nu
         [a.id, 112],
         [h.id, 113],
       ] as const) {
-        const rackButton = requiredButton(container, `.phone-rack [data-tile-id="${tileId}"] button`);
+        const rackButton = requiredButton(
+          container,
+          `.phone-rack [data-tile-id="${tileId}"] button`,
+        );
         const squareButton = requiredButton(container, `[data-square-index="${squareIndex}"]`);
         const started = performance.now();
         flushSync(() => rackButton.click());
