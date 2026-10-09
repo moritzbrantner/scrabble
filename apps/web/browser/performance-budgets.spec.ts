@@ -18,18 +18,18 @@ function p95(samples: number[]): number {
   return sorted[Math.ceil(sorted.length * 0.95) - 1]!;
 }
 
-test("50 ms p95: reading the rendered public board", async ({ page }) => {
-  await page.goto("?fixture=playing");
+test("50 ms p95: refreshing all board labels through a real UI setting", async ({ page }) => {
+  await page.goto("?fixture=playing&lang=en");
   await expect(page.getByRole("table", { name: "Scrabble board" })).toBeVisible();
 
   const samples = await page.evaluate(async () => {
     const path = "/scrabble/browser/performance-fixture.tsx";
-    const { measureBoardReads } = (await import(path)) as typeof import("./performance-fixture");
-    return measureBoardReads();
+    const { measureBoardRefreshes } = (await import(path)) as typeof import("./performance-fixture");
+    return measureBoardRefreshes();
   });
   const observed = p95(samples);
-  console.log(`Scrabble public board read: p95=${observed.toFixed(2)}ms, budget=50ms`);
-  enforceBudget(observed, "Read the 225-square public board DOM and layout");
+  console.log(`Scrabble board React refresh: p95=${observed.toFixed(2)}ms, budget=50ms`);
+  enforceBudget(observed, "React state update, reconcile and layout of the 225-square public board");
 });
 
 test("50 ms p95: placing word tiles and clearing a move draft", async ({ page }) => {
