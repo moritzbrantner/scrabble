@@ -31,7 +31,10 @@ test("50 ms p95: rendering changed Scrabble board snapshots", async ({ page }) =
   });
   const observed = p95(samples);
   console.log(`Scrabble board React refresh: p95=${observed.toFixed(2)}ms, budget=50ms`);
-  enforceBudget(observed, "React state update, reconcile and layout of the 225-square public board");
+  enforceBudget(
+    observed,
+    "React state update, reconcile and layout of the 225-square public board",
+  );
 });
 
 test("50 ms p95: placing word tiles and clearing a move draft", async ({ page }) => {
