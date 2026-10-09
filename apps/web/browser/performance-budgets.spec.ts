@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
 
+type PerformanceApi = {
+  measureBoardRefreshes: () => number[];
+  measureWordDraftInteractions: () => { placeMs: number[]; resetMs: number[] };
+};
+
 // Browser-local responsive interaction budgets. These are not Playwright's test timeout.
 const INTERACTION_BUDGET_MS = 50;
 // Shared CI is not a stable reference device. Explicitly enable the hard gate
@@ -23,7 +28,7 @@ test("50 ms p95: rendering changed Scrabble board snapshots", async ({ page }) =
   await expect(page.getByRole("table", { name: "Scrabble board" })).toBeVisible();
 
   const samples = await page.evaluate(() => {
-    const fixture = window.scrabblePerformance;
+    const fixture = (window as Window & { scrabblePerformance?: PerformanceApi }).scrabblePerformance;
     if (fixture === undefined) {
       throw new Error("Optimized board performance fixture is unavailable");
     }
@@ -42,7 +47,7 @@ test("50 ms p95: placing word tiles and clearing a move draft", async ({ page })
   await expect(page.getByRole("table", { name: "Scrabble board" })).toBeVisible();
 
   const { placeMs, resetMs } = await page.evaluate(() => {
-    const fixture = window.scrabblePerformance;
+    const fixture = (window as Window & { scrabblePerformance?: PerformanceApi }).scrabblePerformance;
     if (fixture === undefined) {
       throw new Error("Optimized move-editor performance fixture is unavailable");
     }
