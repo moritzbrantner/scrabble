@@ -15,7 +15,9 @@ test("50 ms p95: reading a refreshed public board", async ({ page }) => {
 
   const samples = await page.evaluate(async () => {
     const path = "/scrabble/browser/performance-fixture.tsx";
-    const { measureBoardRefreshes } = (await import(path)) as typeof import("./performance-fixture");
+    const { measureBoardRefreshes } = (await import(
+      path
+    )) as typeof import("./performance-fixture");
     return measureBoardRefreshes();
   });
   const observed = p95(samples);
@@ -31,7 +33,9 @@ test("50 ms p95: placing word tiles and clearing a move draft", async ({ page })
 
   const { placeMs, resetMs } = await page.evaluate(async () => {
     const path = "/scrabble/browser/performance-fixture.tsx";
-    const { measureWordDraftInteractions } = (await import(path)) as typeof import("./performance-fixture");
+    const { measureWordDraftInteractions } = (await import(
+      path
+    )) as typeof import("./performance-fixture");
     return measureWordDraftInteractions();
   });
   const placement = p95(placeMs);
@@ -39,8 +43,9 @@ test("50 ms p95: placing word tiles and clearing a move draft", async ({ page })
   console.log(
     `Scrabble word-draft placement: p95=${placement.toFixed(2)}ms; reset: p95=${reset.toFixed(2)}ms; budget=50ms`,
   );
-  expect(placement, "Select rack tile → place square → updated 225-square editor").toBeLessThanOrEqual(
-    INTERACTION_BUDGET_MS,
-  );
+  expect(
+    placement,
+    "Select rack tile → place square → updated 225-square editor",
+  ).toBeLessThanOrEqual(INTERACTION_BUDGET_MS);
   expect(reset, "Cancel draft → board restored").toBeLessThanOrEqual(INTERACTION_BUDGET_MS);
 });
