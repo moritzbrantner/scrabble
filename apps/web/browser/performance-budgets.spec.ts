@@ -28,7 +28,8 @@ test("50 ms p95: rendering changed Scrabble board snapshots", async ({ page }) =
   await expect(page.getByRole("table", { name: "Scrabble board" })).toBeVisible();
 
   const samples = await page.evaluate(() => {
-    const fixture = (window as Window & { scrabblePerformance?: PerformanceApi }).scrabblePerformance;
+    const fixture = (window as Window & { scrabblePerformance?: PerformanceApi })
+      .scrabblePerformance;
     if (fixture === undefined) {
       throw new Error("Optimized board performance fixture is unavailable");
     }
@@ -47,7 +48,8 @@ test("50 ms p95: placing word tiles and clearing a move draft", async ({ page })
   await expect(page.getByRole("table", { name: "Scrabble board" })).toBeVisible();
 
   const { placeMs, resetMs } = await page.evaluate(() => {
-    const fixture = (window as Window & { scrabblePerformance?: PerformanceApi }).scrabblePerformance;
+    const fixture = (window as Window & { scrabblePerformance?: PerformanceApi })
+      .scrabblePerformance;
     if (fixture === undefined) {
       throw new Error("Optimized move-editor performance fixture is unavailable");
     }
