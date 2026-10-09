@@ -40,9 +40,11 @@ function requiredButton(container: Element, selector: string): HTMLButtonElement
  */
 export function measureBoardRefreshes(): number[] {
   const table = document.querySelector<HTMLTableElement>("table.board");
-  const setBoard = (window as Window & {
-    scrabblePerformance?: { setBoard: (phase: "playing" | "finished") => void };
-  }).scrabblePerformance?.setBoard;
+  const setBoard = (
+    window as Window & {
+      scrabblePerformance?: { setBoard: (phase: "playing" | "finished") => void };
+    }
+  ).scrabblePerformance?.setBoard;
   if (
     table === null ||
     setBoard === undefined ||
