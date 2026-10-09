@@ -5,7 +5,11 @@ const port = process.env.SCRABBLE_BROWSER_PORT;
 export default defineConfig({
   ...development,
   testIgnore: [],
-  testMatch: ["**/playable-loop.spec.ts", "**/production-configuration.spec.ts", "**/performance-budgets.spec.ts"],
+  testMatch: [
+    "**/playable-loop.spec.ts",
+    "**/production-configuration.spec.ts",
+    "**/performance-budgets.spec.ts",
+  ],
   outputDir: "../../test-results/pages-browser",
   webServer: {
     cwd: fileURLToPath(new URL("../..", import.meta.url)),
