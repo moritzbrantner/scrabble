@@ -54,7 +54,9 @@ export function measureBoardRefreshes(): number[] {
       });
       const table = container.querySelector<HTMLTableElement>("table.board");
       if (table === null || table.querySelectorAll("td").length !== 225) {
-        throw new Error("Shared board update did not render every square");
+        throw new Error(
+          `Shared board update rendered ${table?.querySelectorAll("td").length ?? "no table"} of 225 squares; markup: ${container.innerHTML.slice(0, 180)}`,
+        );
       }
       // Force style/layout inside the measured interval, not just React's render phase.
       table.getBoundingClientRect();
@@ -111,9 +113,7 @@ export function measureWordDraftInteractions(): { placeMs: number[]; resetMs: nu
         flushSync(() =>
           requiredButton(container, `.phone-rack [data-tile-id="${tileId}"] button`).click(),
         );
-        flushSync(() =>
-          requiredButton(container, `[data-square-index="${squareIndex}"]`).click(),
-        );
+        flushSync(() => requiredButton(container, `[data-square-index="${squareIndex}"]`).click());
         grid.getBoundingClientRect();
         const square = grid.querySelector(`[data-square-index="${squareIndex}"]`);
         if (square === null || !square.classList.contains("tentative-square")) {
