@@ -3,6 +3,9 @@ import { arch, cpus, platform, release, totalmem } from "node:os";
 import { expect, test, type Browser, type Page, type TestInfo } from "@playwright/test";
 import { type BoardMeasurements, type DraftMeasurements } from "./performance-fixture";
 import { type BrowserWorkload } from "./populated-performance-state";
+import { measureTrustedGesture } from "./measure-trusted-gesture";
+import authoredRack from "../src/fixtures/private-rack.json" with { type: "json" };
+import { playerSnapshot } from "../src/public-state";
 
 type PerformanceApi = {
   measureBoardRefreshes: (
@@ -48,6 +51,8 @@ async function recordEvidence(
   testInfo: TestInfo,
   workload: string,
   measurements: Record<string, number[]>,
+  boundary =
+    "synthetic HTMLElement.click -> React commit/layout; optional second rAF after >=1 frame opportunity; no verified physical paint",
 ) {
   const browserEnvironment = await page.evaluate(() => ({
     userAgent: navigator.userAgent,
@@ -65,8 +70,7 @@ async function recordEvidence(
     workload,
     sourceRevision: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
     build: "optimized Vite --mode test; served through vite preview (--pages)",
-    measuredBoundary:
-      "synthetic HTMLElement.click -> React commit/layout; optional second rAF after >=1 frame opportunity; no verified physical paint",
+    measuredBoundary: boundary,
     budgetMs: INTERACTION_BUDGET_MS,
     enforcement: enforceTiming ? "opt-in strict" : "advisory shared-runner",
     target: process.env.SCRABBLE_PERF_TARGET ?? null,
@@ -214,5 +218,129 @@ test.describe("phone-sized touch Chromium emulation (not a physical phone)", () 
     for (const [name, samples] of Object.entries(measurements)) {
       enforceBudget(summary(samples).p95Ms, "Emulated phone: " + name);
     }
+  });
+});
+
+async function verifyTrustedPopulatedGestures(
+  page: Page,
+  browser: Browser,
+  testInfo: TestInfo,
+  input: "mouse" | "touch",
+) {
+  testInfo.setTimeout(60_000);
+  await prepare(page);
+  await page.evaluate(() => {
+    const fixture = (
+      window as Window & { scrabblePerformance?: PerformanceApi & { showPopulatedEditor: () => void } }
+    ).scrabblePerformance;
+    if (fixture === undefined) {
+      throw new Error("Optimized editor performance fixture is missing");
+    }
+    fixture.showPopulatedEditor();
+  });
+
+  const editor = page.getByRole("region", { name: "Move editor", exact: true });
+  await expect(editor).toBeVisible();
+  await expect(editor.locator(".phone-board-grid button")).toHaveCount(225);
+  await expect(editor.locator(".committed-square")).toHaveCount(81);
+
+  const ownRack = playerSnapshot.parse(authoredRack.snapshots.playing).own_rack.tiles;
+  const findTile = (letter: "A" | "H") => {
+    const tile = ownRack.find(
+      (candidate) => candidate.face.kind === "letter" && candidate.face.letter === letter,
+    );
+    if (tile === undefined) {
+      throw new Error("Missing authored tile " + letter);
+    }
+    return tile.id;
+  };
+  const positions = [
+    { tileId: findTile("A"), square: 118 },
+    { tileId: findTile("H"), square: 119 },
+  ] as const;
+  const samples = {
+    selectInputToDomMs: [] as number[],
+    selectInputToFrameOpportunityMs: [] as number[],
+    placeInputToDomMs: [] as number[],
+    placeInputToFrameOpportunityMs: [] as number[],
+    resetInputToDomMs: [] as number[],
+    resetInputToFrameOpportunityMs: [] as number[],
+  };
+
+  for (let repetition = 0; repetition < 12; repetition++) {
+    for (const { tileId, square } of positions) {
+      const rackSelector = '.phone-rack [data-tile-id="' + tileId + '"] button';
+      const squareSelector = '[data-square-index="' + square + '"]';
+      const selected = await measureTrustedGesture(page, {
+        triggerSelector: rackSelector,
+        observedSelector: rackSelector,
+        expected: { kind: "attribute", name: "aria-pressed", value: "true" },
+        input,
+      });
+      samples.selectInputToDomMs.push(selected.inputToDomMs);
+      samples.selectInputToFrameOpportunityMs.push(selected.inputToFrameOpportunityMs);
+      await expect(editor.locator(rackSelector)).toHaveAttribute("aria-pressed", "true");
+
+      const placed = await measureTrustedGesture(page, {
+        triggerSelector: squareSelector,
+        observedSelector: squareSelector,
+        expected: { kind: "class", token: "tentative-square", present: true },
+        input,
+      });
+      samples.placeInputToDomMs.push(placed.inputToDomMs);
+      samples.placeInputToFrameOpportunityMs.push(placed.inputToFrameOpportunityMs);
+      await expect(editor.locator(squareSelector)).toHaveClass(/tentative-square/);
+    }
+
+    await expect(editor.locator(".tentative-square")).toHaveCount(2);
+    await expect(editor.locator(".committed-square")).toHaveCount(81);
+    if (repetition === 0) {
+      await testInfo.attach("trusted-" + input + "-populated-draft.png", {
+        body: await page.screenshot(),
+        contentType: "image/png",
+      });
+    }
+
+    const reset = await measureTrustedGesture(page, {
+      triggerSelector: ".draft-actions button:nth-child(2)",
+      observedSelector: '[data-square-index="118"]',
+      expected: { kind: "class", token: "tentative-square", present: false },
+      input,
+    });
+    samples.resetInputToDomMs.push(reset.inputToDomMs);
+    samples.resetInputToFrameOpportunityMs.push(reset.inputToFrameOpportunityMs);
+    await expect(editor.locator(".tentative-square")).toHaveCount(0);
+    await expect(editor.locator(".committed-square")).toHaveCount(81);
+  }
+
+  await recordEvidence(
+    page,
+    browser,
+    testInfo,
+    "trusted " + input + " pointer events; 81 committed tiles; 225 squares; 12 AH/reset cycles",
+    samples,
+    "trusted Playwright pointerdown event timestamp -> observed DOM state / second rAF; " +
+      "excludes Playwright selector/actionability overhead; not hardware input or physical paint",
+  );
+  for (const [name, measurements] of Object.entries(samples)) {
+    enforceBudget(summary(measurements).p95Ms, "Trusted " + input + ": " + name);
+  }
+}
+
+test("50 ms p95: trusted mouse gestures update the populated draft", async ({
+  page,
+  browser,
+}, testInfo) => {
+  await verifyTrustedPopulatedGestures(page, browser, testInfo, "mouse");
+});
+
+test.describe("trusted touch input in phone-sized Chromium emulation", () => {
+  test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+
+  test("50 ms p95: trusted touch gestures update the populated draft", async ({
+    page,
+    browser,
+  }, testInfo) => {
+    await verifyTrustedPopulatedGestures(page, browser, testInfo, "touch");
   });
 });
