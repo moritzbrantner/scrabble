@@ -105,7 +105,9 @@ test("50 ms p95: rendering changed Scrabble board snapshots", async ({
   const { layoutMs } = await page.evaluate(async () => {
     const fixture = (window as Window & { scrabblePerformance?: PerformanceApi })
       .scrabblePerformance;
-    if (fixture === undefined) throw new Error("Optimized board performance fixture is missing");
+    if (fixture === undefined) {
+      throw new Error("Optimized board performance fixture is missing");
+    }
     return fixture.measureBoardRefreshes();
   });
   const observed = summary(layoutMs).p95Ms;
@@ -122,7 +124,9 @@ test("50 ms p95: placing word tiles and clearing a move draft", async ({
   const { placeMs, resetMs } = await page.evaluate(async () => {
     const fixture = (window as Window & { scrabblePerformance?: PerformanceApi })
       .scrabblePerformance;
-    if (fixture === undefined) throw new Error("Optimized draft performance fixture is missing");
+    if (fixture === undefined) {
+      throw new Error("Optimized draft performance fixture is missing");
+    }
     return fixture.measureWordDraftInteractions();
   });
   const placement = summary(placeMs).p95Ms;
@@ -150,7 +154,9 @@ test("50 ms p95: populated board refresh and draft reach a frame opportunity", a
   const result = await page.evaluate(async () => {
     const fixture = (window as Window & { scrabblePerformance?: PerformanceApi })
       .scrabblePerformance;
-    if (fixture === undefined) throw new Error("Optimized performance fixture is missing");
+    if (fixture === undefined) {
+      throw new Error("Optimized performance fixture is missing");
+    }
     return {
       board: await fixture.measureBoardRefreshes("populated", true),
       draft: await fixture.measureWordDraftInteractions("populated", true),
@@ -187,7 +193,9 @@ test.describe("phone-sized touch Chromium emulation (not a physical phone)", () 
     const draft = await page.evaluate(async () => {
       const fixture = (window as Window & { scrabblePerformance?: PerformanceApi })
         .scrabblePerformance;
-      if (fixture === undefined) throw new Error("Optimized performance fixture is missing");
+      if (fixture === undefined) {
+        throw new Error("Optimized performance fixture is missing");
+      }
       return fixture.measureWordDraftInteractions("populated", true);
     });
     const measurements = {
