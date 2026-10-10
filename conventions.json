@@ -1,13 +1,5 @@
 {
   "schemaVersion": 1,
   "registry": "coding-agent-conventions",
-  "modules": [
-    "rust",
-    "react",
-    "moritzbrantner-ui",
-    "vite",
-    "playwright",
-    "tooling",
-    "benchmarking"
-  ]
+  "modules": ["rust", "react", "moritzbrantner-ui", "vite", "playwright", "tooling", "benchmarking"]
 }
