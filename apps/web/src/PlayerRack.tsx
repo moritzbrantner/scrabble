@@ -1,5 +1,6 @@
-import { useCopy } from "./preferences";
 import { Button } from "@moritzbrantner/ui/client";
+
+import { useCopy } from "./preferences";
 import { type PlayerSnapshot, type Ruleset } from "./public-state";
 
 /** Receives only the authenticated recipient's rack; public scores contain no private tiles. */

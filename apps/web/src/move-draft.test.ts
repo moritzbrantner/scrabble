@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
-import { playerSnapshot, ruleset, type PlayerSnapshot } from "./public-state";
+
 import data from "./fixtures/private-rack.json";
 import { draftProblem, editDraft, emptyDraft, reconcileDraft, type MoveDraft } from "./move-draft";
+import { playerSnapshot, ruleset, type PlayerSnapshot } from "./public-state";
 const snapshot = playerSnapshot.parse(data.snapshots.playing);
 const rules = ruleset.parse(data.ruleset);
 const tiles = snapshot.own_rack.tiles.filter((tile) => tile.face.kind === "letter");

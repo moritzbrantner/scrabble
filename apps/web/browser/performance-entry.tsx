@@ -2,14 +2,16 @@
 import { useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
-import { SharedBoard } from "../src/SharedBoard";
+
 import { fixtures } from "../src/fixtures";
 import privateRack from "../src/fixtures/private-rack.json" with { type: "json" };
 import { PreferencesProvider } from "../src/preferences";
 import { playerSnapshot, ruleset, type PublicSnapshot } from "../src/public-state";
-import { measureBoardRefreshes, measureWordDraftInteractions } from "./performance-fixture";
+import { SharedBoard } from "../src/SharedBoard";
 import { showEditor } from "./editor-fixture";
+import { measureBoardRefreshes, measureWordDraftInteractions } from "./performance-fixture";
 import { populatedPlayerSnapshot, type BoardFixturePhase } from "./populated-performance-state";
+
 import "../src/styles.css";
 
 const editorRules = ruleset.parse(privateRack.ruleset);

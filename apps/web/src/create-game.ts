@@ -1,5 +1,6 @@
-import { copy, translate, type Copy, type CopyKey } from "./copy";
 import { z } from "zod";
+
+import { copy, translate, type Copy, type CopyKey } from "./copy";
 import { id } from "./public-state";
 import { matchUrl } from "./transport/browser-match";
 

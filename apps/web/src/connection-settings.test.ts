@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+
 import { connectionSettings } from "./connection-settings";
 
 test("development direct boards need only a valid transport endpoint", () => {

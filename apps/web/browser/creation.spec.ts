@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
-import { z } from "zod";
 import jsQR from "jsqr";
+import { z } from "zod";
+
 import { type PublicSnapshot } from "../src/public-state";
 import { gameFixture as fixture, selectOpening } from "./game-fixture";
 

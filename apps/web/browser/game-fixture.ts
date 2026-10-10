@@ -1,7 +1,8 @@
 import { execFileSync } from "node:child_process";
-import { dirname } from "node:path";
-import { type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
+import { dirname } from "node:path";
+
+import { type Page } from "@playwright/test";
 import { z } from "zod";
 const path = process.env.SCRABBLE_GAME_FIXTURE;
 if (path === undefined) {

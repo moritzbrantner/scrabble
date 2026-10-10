@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+
 import { BrowserMatch } from "./browser-match";
 import { resumeCapability, type ResumeCapability } from "./resume-capability";
 

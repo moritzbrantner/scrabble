@@ -9,6 +9,7 @@ import {
   type ChangeEvent,
 } from "react";
 import { z } from "zod";
+
 import { formatNumber, translate, type Copy, type CopyKey, type Values } from "./copy";
 
 const preferences = z.strictObject({

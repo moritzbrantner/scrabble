@@ -1,8 +1,10 @@
 import { expect, test } from "bun:test";
+
 import { z } from "zod";
+
 import { placement } from "./game-protocol";
-import { playerSnapshot, ruleset } from "./public-state";
 import { draftMessages, draftProblem, emptyDraft } from "./move-draft";
+import { playerSnapshot, ruleset } from "./public-state";
 
 // Cargo may compile a different feature graph on a cold CI checkout; allow compilation time.
 test("browser structural guidance matches the Rust oracle across empty, committed and smaller boards", () => {

@@ -1,12 +1,14 @@
 import { expect, test } from "bun:test";
+
 import { renderToStaticMarkup } from "react-dom/server";
 import { z } from "zod";
+
 import data from "./fixtures/ruleset-variant.json";
-import { playerSnapshot, ruleset } from "./public-state";
 import { matchRules } from "./match-rules";
-import { SharedBoard } from "./SharedBoard";
-import { PlayerRack } from "./PlayerRack";
 import { draftProblem, editDraft, emptyDraft } from "./move-draft";
+import { PlayerRack } from "./PlayerRack";
+import { playerSnapshot, ruleset } from "./public-state";
+import { SharedBoard } from "./SharedBoard";
 
 const fixture = z
   .strictObject({ ruleset, playing: playerSnapshot, committed: playerSnapshot })

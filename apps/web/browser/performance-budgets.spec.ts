@@ -1,11 +1,13 @@
 import { execFileSync } from "node:child_process";
 import { arch, cpus, platform, release, totalmem } from "node:os";
+
 import { expect, test, type Browser, type Page, type TestInfo } from "@playwright/test";
-import { type BoardMeasurements, type DraftMeasurements } from "./performance-fixture";
-import { type BrowserWorkload } from "./populated-performance-state";
-import { measureTrustedGesture } from "./measure-trusted-gesture";
+
 import authoredRack from "../src/fixtures/private-rack.json" with { type: "json" };
 import { playerSnapshot } from "../src/public-state";
+import { measureTrustedGesture } from "./measure-trusted-gesture";
+import { type BoardMeasurements, type DraftMeasurements } from "./performance-fixture";
+import { type BrowserWorkload } from "./populated-performance-state";
 
 type PerformanceApi = {
   measureBoardRefreshes: (

@@ -1,13 +1,14 @@
-import { copy, type Copy } from "./copy";
-import { useCopy } from "./preferences";
 import { Button } from "@moritzbrantner/ui/client";
 import { useEffect, useRef, useState } from "react";
+
 import { ConnectionStatus } from "./ConnectionStatus";
+import { copy, type Copy } from "./copy";
 import { fixtures } from "./fixtures";
-import { matchRules, requireMatchRules } from "./match-rules";
 import { decodePlayerSnapshot, encodeGameCommand } from "./game-protocol";
-import { type PublicSnapshot, type Ruleset } from "./public-state";
+import { matchRules, requireMatchRules } from "./match-rules";
 import { PlayerInvite } from "./PlayerInvite";
+import { useCopy } from "./preferences";
+import { type PublicSnapshot, type Ruleset } from "./public-state";
 import { SharedBoard } from "./SharedBoard";
 import { BrowserMatch, matchUrl, type ConnectionState } from "./transport/browser-match";
 import { readBoardSession, saveBoardSession } from "./transport/resume-capability";

@@ -1,10 +1,11 @@
-import { copy, type Copy } from "./copy";
-import { useCopy } from "./preferences";
 import { Button } from "@moritzbrantner/ui/client";
 import { useEffect, useState } from "react";
+
+import { copy, type Copy } from "./copy";
 import { JoinError, lookupGame } from "./create-game";
-import { PlayerPhone } from "./PlayerPhone";
 import { validInviteId } from "./player-invite";
+import { PlayerPhone } from "./PlayerPhone";
+import { useCopy } from "./preferences";
 
 type State = { kind: "checking" | "ready" } | { kind: "failed"; message: Copy };
 export function JoinRoute({

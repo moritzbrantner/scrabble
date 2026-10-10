@@ -1,4 +1,5 @@
 import { z } from "zod";
+
 import data from "./fixtures/public.json";
 import { publicSnapshot, ruleset } from "./public-state";
 export const fixtures = z

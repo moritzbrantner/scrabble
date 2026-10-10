@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { type NetworkInterfaceInfo } from "node:os";
+
 import { localAddress } from "./local-address";
 
 function ipv4(address: string, internal = false): NetworkInterfaceInfo {

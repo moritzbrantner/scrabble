@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+
 import data from "../src/fixtures/private-rack.json" with { type: "json" };
 import { playerSnapshot, ruleset } from "../src/public-state";
 const rules = ruleset.parse(data.ruleset);

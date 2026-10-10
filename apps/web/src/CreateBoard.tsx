@@ -1,7 +1,7 @@
-import { type Copy } from "./copy";
-import { useCopy } from "./preferences";
 import { Button } from "@moritzbrantner/ui/client";
 import { useEffect, useRef, useState } from "react";
+
+import { type Copy } from "./copy";
 import {
   createGame,
   CreationError,
@@ -10,6 +10,7 @@ import {
   type JoinInformation,
 } from "./create-game";
 import { LiveBoard } from "./LiveBoard";
+import { useCopy } from "./preferences";
 
 type State =
   | { kind: "idle" | "creating" }

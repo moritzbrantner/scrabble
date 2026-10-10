@@ -1,10 +1,12 @@
 import { expect, test } from "bun:test";
+
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { z } from "zod";
+
 import data from "./fixtures/private-rack.json";
-import { id, playerSnapshot, ruleset } from "./public-state";
 import { PlayerRack } from "./PlayerRack";
+import { id, playerSnapshot, ruleset } from "./public-state";
 
 const fixtures = z
   .strictObject({

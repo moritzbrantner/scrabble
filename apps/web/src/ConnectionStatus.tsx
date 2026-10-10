@@ -1,6 +1,6 @@
-import { type ConnectionState } from "./transport/browser-match";
-import { useCopy } from "./preferences";
 import { type Copy } from "./copy";
+import { useCopy } from "./preferences";
+import { type ConnectionState } from "./transport/browser-match";
 
 export function ConnectionStatus({ state, failure }: { state: ConnectionState; failure?: Copy }) {
   const { t } = useCopy();

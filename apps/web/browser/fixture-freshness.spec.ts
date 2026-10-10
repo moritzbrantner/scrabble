@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+
 import { gameFixture, selectOpening } from "./game-fixture";
 
 test("creation fixture selection stays fresh after earlier tests consume the retry window", async ({

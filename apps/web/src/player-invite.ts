@@ -1,4 +1,5 @@
 import QRCode from "qrcode";
+
 import { matchUrl } from "./transport/browser-match";
 
 export function validInviteId(value: string): boolean {

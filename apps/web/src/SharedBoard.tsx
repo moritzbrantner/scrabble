@@ -1,6 +1,5 @@
 import { useCopy } from "./preferences";
 import { type PublicSnapshot, type Ruleset } from "./public-state";
-
 import { TurnHistory } from "./TurnHistory";
 
 export function SharedBoard({ snapshot, rules }: { snapshot: PublicSnapshot; rules: Ruleset }) {

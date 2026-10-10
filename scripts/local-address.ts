@@ -1,5 +1,5 @@
-import { networkInterfaces, type NetworkInterfaceInfo } from "node:os";
 import { isIPv4 } from "node:net";
+import { networkInterfaces, type NetworkInterfaceInfo } from "node:os";
 
 function privateAddress(address: string): boolean {
   if (!isIPv4(address)) {
