@@ -102,7 +102,7 @@ export function PlayerPhone({
     };
     const pagehide = () => client?.disconnect();
     window.addEventListener("pagehide", pagehide);
-    void Promise.resolve().then(async () => {
+    const connect = async () => {
       if (!active) {
         return;
       }
@@ -268,7 +268,10 @@ export function PlayerPhone({
           fail(error instanceof JoinError ? error.copy : copy("phone.connectFailed"));
         }
       }
-    });
+    };
+    Promise.resolve()
+      .then(connect)
+      .catch(() => fail(copy("phone.connectFailed")));
     return () => {
       active = false;
       controller.abort();
