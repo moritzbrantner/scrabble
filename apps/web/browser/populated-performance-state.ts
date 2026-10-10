@@ -65,19 +65,27 @@ export function populatedPlayerSnapshot(opening: PlayerSnapshot, rules: Ruleset)
   while (faces.length < indices.size) {
     const before = faces.length;
     for (const entry of stock) {
-      if (entry.count === 0) continue;
+      if (entry.count === 0) {
+        continue;
+      }
       faces.push(entry.face);
       entry.count--;
-      if (faces.length === indices.size) break;
+      if (faces.length === indices.size) {
+        break;
+      }
     }
-    if (faces.length === before) throw new Error("Insufficient tiles for populated fixture");
+    if (faces.length === before) {
+      throw new Error("Insufficient tiles for populated fixture");
+    }
   }
 
   const otherRackTiles = opening.public.players
     .filter((player) => player.id !== opening.own_rack.player_id)
     .reduce((sum, player) => sum + player.rack_count, 0);
   const remainingTiles = stock.reduce((sum, entry) => sum + entry.count, 0) - otherRackTiles;
-  if (remainingTiles < 1) throw new Error("Populated fixture must retain a nonempty bag");
+  if (remainingTiles < 1) {
+    throw new Error("Populated fixture must retain a nonempty bag");
+  }
 
   const board = [...indices]
     .sort((left, right) => left - right)
