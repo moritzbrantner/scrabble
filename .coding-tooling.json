@@ -8,6 +8,8 @@
   "requiredCapabilities": ["format:check", "lint", "typecheck", "test", "build", "test:e2e"],
   "capabilityCommands": {
     "scrabble": {
+      "format:check": ["bun", "run", "format:web:check"],
+      "lint": ["bun", "run", "lint:web"],
       "test:e2e": ["bun", "run", "test:browser"]
     }
   },
