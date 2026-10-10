@@ -10,7 +10,8 @@
     "scrabble": {
       "format:check": ["bun", "run", "format:web:check"],
       "lint": ["bun", "run", "lint:web"],
-      "test:e2e": ["bun", "run", "test:browser"]
+      "test:e2e": ["bun", "run", "test:browser"],
+      "benchmark": ["bun", "scripts/test-browser.ts", "--pages", "performance-budgets.spec.ts"]
     }
   },
   "taskKnowledge": {
