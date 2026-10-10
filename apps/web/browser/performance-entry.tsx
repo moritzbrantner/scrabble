@@ -8,10 +8,7 @@ import privateRack from "../src/fixtures/private-rack.json" with { type: "json" 
 import { PreferencesProvider } from "../src/preferences";
 import { playerSnapshot, ruleset, type PublicSnapshot } from "../src/public-state";
 import { measureBoardRefreshes, measureWordDraftInteractions } from "./performance-fixture";
-import {
-  populatedPlayerSnapshot,
-  type BoardFixturePhase,
-} from "./populated-performance-state";
+import { populatedPlayerSnapshot, type BoardFixturePhase } from "./populated-performance-state";
 import "../src/styles.css";
 
 const populated = populatedPlayerSnapshot(
@@ -21,10 +18,7 @@ const populated = populatedPlayerSnapshot(
 const populatedUpdated: PublicSnapshot = {
   ...populated,
   revision: String(BigInt(populated.revision) + 1n),
-  board: [
-    ...populated.board,
-    { coordinate: { row: 7, column: 13 }, letter: "A", is_blank: false },
-  ],
+  board: [...populated.board, { coordinate: { row: 7, column: 13 }, letter: "A", is_blank: false }],
   remaining_tiles: populated.remaining_tiles - 1,
 };
 const snapshots: Record<BoardFixturePhase, PublicSnapshot> = {
