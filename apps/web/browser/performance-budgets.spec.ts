@@ -97,10 +97,10 @@ async function prepare(page: Page) {
   await expect(page.getByRole("table", { name: "Scrabble board" })).toBeVisible();
 }
 
-test("50 ms p95: rendering changed Scrabble board snapshots", async (
-  { page, browser },
-  testInfo,
-) => {
+test("50 ms p95: rendering changed Scrabble board snapshots", async ({
+  page,
+  browser,
+}, testInfo) => {
   await prepare(page);
   const { layoutMs } = await page.evaluate(async () => {
     const fixture = (window as Window & { scrabblePerformance?: PerformanceApi })
@@ -114,10 +114,10 @@ test("50 ms p95: rendering changed Scrabble board snapshots", async (
   enforceBudget(observed, "React reconcile, DOM commit and layout of the shared board");
 });
 
-test("50 ms p95: placing word tiles and clearing a move draft", async (
-  { page, browser },
-  testInfo,
-) => {
+test("50 ms p95: placing word tiles and clearing a move draft", async ({
+  page,
+  browser,
+}, testInfo) => {
   await prepare(page);
   const { placeMs, resetMs } = await page.evaluate(async () => {
     const fixture = (window as Window & { scrabblePerformance?: PerformanceApi })
@@ -142,10 +142,10 @@ test("50 ms p95: placing word tiles and clearing a move draft", async (
   enforceBudget(reset, "Cancel draft -> editor DOM restored");
 });
 
-test("50 ms p95: populated board refresh and draft reach a frame opportunity", async (
-  { page, browser },
-  testInfo,
-) => {
+test("50 ms p95: populated board refresh and draft reach a frame opportunity", async ({
+  page,
+  browser,
+}, testInfo) => {
   await prepare(page);
   const result = await page.evaluate(async () => {
     const fixture = (window as Window & { scrabblePerformance?: PerformanceApi })
@@ -164,7 +164,13 @@ test("50 ms p95: populated board refresh and draft reach a frame opportunity", a
     resetLayoutMs: result.draft.resetMs,
     resetFrameOpportunityMs: result.draft.resetFrameOpportunityMs,
   };
-  await recordEvidence(page, browser, testInfo, "connected 81/82 tiles, 225 cells; AH edit", measurements);
+  await recordEvidence(
+    page,
+    browser,
+    testInfo,
+    "connected 81/82 tiles, 225 cells; AH edit",
+    measurements,
+  );
   for (const [name, samples] of Object.entries(measurements)) {
     enforceBudget(summary(samples).p95Ms, "Populated desktop: " + name);
   }
@@ -173,10 +179,10 @@ test("50 ms p95: populated board refresh and draft reach a frame opportunity", a
 test.describe("phone-sized touch Chromium emulation (not a physical phone)", () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 
-  test("50 ms p95: populated draft reaches a frame opportunity", async (
-    { page, browser },
-    testInfo,
-  ) => {
+  test("50 ms p95: populated draft reaches a frame opportunity", async ({
+    page,
+    browser,
+  }, testInfo) => {
     await prepare(page);
     const draft = await page.evaluate(async () => {
       const fixture = (window as Window & { scrabblePerformance?: PerformanceApi })
