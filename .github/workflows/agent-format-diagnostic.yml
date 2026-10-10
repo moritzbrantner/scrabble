@@ -1,0 +1,21 @@
+name: Agent formatting diagnostics
+
+on:
+  push:
+    branches:
+      - agent/adopt-coding-tooling
+
+jobs:
+  format-diff:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.2
+      - name: Print canonical formatting diff (no branch writes)
+        run: |
+          bunx oxfmt@0.71.0 .coding-tooling.json AGENTS.md conventions.json
+          git --no-pager diff -- .coding-tooling.json AGENTS.md conventions.json
