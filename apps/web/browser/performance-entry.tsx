@@ -8,13 +8,16 @@ import privateRack from "../src/fixtures/private-rack.json" with { type: "json" 
 import { PreferencesProvider } from "../src/preferences";
 import { playerSnapshot, ruleset, type PublicSnapshot } from "../src/public-state";
 import { measureBoardRefreshes, measureWordDraftInteractions } from "./performance-fixture";
+import { showEditor } from "./editor-fixture";
 import { populatedPlayerSnapshot, type BoardFixturePhase } from "./populated-performance-state";
 import "../src/styles.css";
 
-const populated = populatedPlayerSnapshot(
+const editorRules = ruleset.parse(privateRack.ruleset);
+const populatedSnapshot = populatedPlayerSnapshot(
   playerSnapshot.parse(privateRack.snapshots.playing),
-  ruleset.parse(privateRack.ruleset),
-).public;
+  editorRules,
+);
+const populated = populatedSnapshot.public;
 const populatedUpdated: PublicSnapshot = {
   ...populated,
   revision: String(BigInt(populated.revision) + 1n),
@@ -32,6 +35,7 @@ type BenchmarkApi = {
   setBoard: (phase: BoardFixturePhase) => void;
   measureBoardRefreshes: typeof measureBoardRefreshes;
   measureWordDraftInteractions: typeof measureWordDraftInteractions;
+  showPopulatedEditor: () => void;
 };
 
 function BoardHarness() {
@@ -42,6 +46,7 @@ function BoardHarness() {
     setBoard: (next) => flushSync(() => setPhase(next)),
     measureBoardRefreshes,
     measureWordDraftInteractions,
+    showPopulatedEditor: () => showEditor(populatedSnapshot, editorRules),
   };
   return <SharedBoard snapshot={snapshots[phase]} rules={fixtures.ruleset} />;
 }
