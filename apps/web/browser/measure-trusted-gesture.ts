@@ -96,9 +96,10 @@ export async function measureTrustedGesture(
     // If Playwright's click fails before reading the result, do not leave a
     // browser-side unhandled rejection behind.
     void result.catch(() => {});
-    (
-      window as Window & { scrabblePendingGesture?: PendingGesture }
-    ).scrabblePendingGesture = { result, cancel: stop };
+    (window as Window & { scrabblePendingGesture?: PendingGesture }).scrabblePendingGesture = {
+      result,
+      cancel: stop,
+    };
   }, options);
 
   try {
