@@ -51,8 +51,7 @@ async function recordEvidence(
   testInfo: TestInfo,
   workload: string,
   measurements: Record<string, number[]>,
-  boundary =
-    "synthetic HTMLElement.click -> React commit/layout; optional second rAF after >=1 frame opportunity; no verified physical paint",
+  boundary = "synthetic HTMLElement.click -> React commit/layout; optional second rAF after >=1 frame opportunity; no verified physical paint",
 ) {
   const browserEnvironment = await page.evaluate(() => ({
     userAgent: navigator.userAgent,
@@ -231,7 +230,9 @@ async function verifyTrustedPopulatedGestures(
   await prepare(page);
   await page.evaluate(() => {
     const fixture = (
-      window as Window & { scrabblePerformance?: PerformanceApi & { showPopulatedEditor: () => void } }
+      window as Window & {
+        scrabblePerformance?: PerformanceApi & { showPopulatedEditor: () => void };
+      }
     ).scrabblePerformance;
     if (fixture === undefined) {
       throw new Error("Optimized editor performance fixture is missing");
