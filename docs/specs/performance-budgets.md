@@ -34,6 +34,34 @@ releases do not. The fixture renders the same production `SharedBoard` and
 | Populated desktop         | Connected, synthetic 81-tile board alternated with an 82-tile update | Same private rack, with 81 committed tiles; place A and H next to an existing run at squares 118 and 119 | 20 refresh; 24 tile placements; 12 resets, each also measured to second rAF |
 | Populated touch emulation | —                                                                    | Same populated board, Chromium `390 × 844`, touch enabled and mobile viewport                            | 24 tile placements; 12 resets, each also measured to second rAF             |
 
+### Trusted browser event journey
+
+The optimized test bundle also mounts the same production `MoveEditor` through
+the existing editor fixture for **actual Playwright mouse clicks** and
+**Playwright touchscreen taps** on a 390 × 844 emulated phone viewport.
+Each of 12 repetitions selects the authored A and H rack tiles, places them
+next to the synthetic populated board, checks both tentative tiles and all
+81 committed tiles, and resets the draft. The first completed two-letter
+draft is attached as a Playwright screenshot. Every event must report
+`isTrusted = true` and the expected `PointerEvent.pointerType`
+(`mouse` or `touch`).
+
+For each input, a capture-phase `pointerdown` listener takes the browser's
+event timestamp. An independent `MutationObserver` records when the
+target's actual rendered DOM state changes: selected rack tile, tentative
+board tile or cleared draft. The second animation-frame callback records
+a **separate frame-opportunity** sample using the same input timestamp.
+Each workload emits 24 rack-selection, 24 placement and 12 reset
+observations for both DOM and frame boundaries. Browser event timestamps
+include dispatch delay but not Playwright selector resolution or
+actionability/auto-scrolling before the event. A real mouse/touchscreen
+driver and the human interval between two gestures are not measured.
+
+These measurements complement the older synthetic `HTMLElement.click()`
+and `flushSync` fixtures; they do not silently replace or relabel the
+previous series. All p95 measurements retain the same 50 ms contract
+on a sufficiently controlled reference machine.
+
 The populated fixture uses a deterministic connected pattern and the authored
 ruleset's available tile inventory, reserving the visible private rack and the
 opponent's reported rack count. It exercises large-board reconciliation and
@@ -48,8 +76,8 @@ Playwright resolves controls **before** each edit timer. Synchronous measurement
 include real React event handling/reconciliation and a forced layout read,
 but exclude selector lookups, semantic assertions, initial mount, navigation and
 the network. Frame samples share the same start time; awaiting the second rAF
-does not move the work out of the measured interval. These are synthetic DOM
-click events, not trusted touch/pointer hardware events.
+does not move the work out of the measured interval. The original synchronous fixtures use synthetic DOM click events. The trusted
+browser-event journey described above uses browser-dispatched pointer events.
 
 The Rust fixture uses a deterministic 50,000-entry dictionary, four players
 and eight accepted pass turns before committing a legal `AT` opening. Fixture
@@ -117,7 +145,7 @@ production-performance defect. Do not restructure the board solely from
 a source-level suspicion about 225 regenerated element descriptions.
 
 A 50 ms interaction budget is not a guarantee of 60 FPS (about 16.67 ms
-per frame). Neither layout nor two-rAF browser evidence verifies actual
+per frame). Neither DOM mutation nor two-rAF browser evidence verifies actual
 physical screen paint, native mobile hardware, display compositor timing,
 real finger-to-glass latency, late-game authoritative game commits or the
 complete networked interaction on two phones. `playable-loop.spec.ts`
