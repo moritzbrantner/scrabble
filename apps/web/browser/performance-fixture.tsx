@@ -106,7 +106,7 @@ export async function measureBoardRefreshes(
     if (workload === "populated") {
       const addedSquare = table.tBodies.item(0)?.rows.item(7)?.cells.item(14);
       const hasAddedTile = addedSquare?.querySelector(".letter-tile") !== null;
-      if (addedSquare === undefined || hasAddedTile !== (phase === "populated-updated")) {
+      if (!addedSquare || hasAddedTile !== (phase === "populated-updated")) {
         throw new Error("The populated snapshot did not update the expected board square");
       }
     }
@@ -125,8 +125,7 @@ export async function measureWordDraftInteractions(
 ): Promise<DraftMeasurements> {
   const opening = playerSnapshot.parse(privateRack.snapshots.playing);
   const rules = ruleset.parse(privateRack.ruleset);
-  const snapshot =
-    workload === "opening" ? opening : populatedPlayerSnapshot(opening, rules);
+  const snapshot = workload === "opening" ? opening : populatedPlayerSnapshot(opening, rules);
   const squares = workload === "opening" ? ([112, 113] as const) : POPULATED_DRAFT_SQUARE_INDICES;
   const a = snapshot.own_rack.tiles.find(
     (tile) => tile.face.kind === "letter" && tile.face.letter === "A",
@@ -168,10 +167,7 @@ export async function measureWordDraftInteractions(
           container,
           '.phone-rack [data-tile-id="' + tileId + '"] button',
         );
-        const squareButton = requiredButton(
-          container,
-          '[data-square-index="' + squareIndex + '"]',
-        );
+        const squareButton = requiredButton(container, '[data-square-index="' + squareIndex + '"]');
         const started = performance.now();
         flushSync(() => rackButton.click());
         flushSync(() => squareButton.click());
