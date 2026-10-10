@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { useCopy } from "./preferences";
-import { JoinRoute } from "./JoinRoute";
-import { fixtures } from "./fixtures";
-import { CreateBoard } from "./CreateBoard";
-import { LiveBoard } from "./LiveBoard";
-import { SharedBoard } from "./SharedBoard";
+
 import { connectionSettings, type ConnectionMode } from "./connection-settings";
+import { CreateBoard } from "./CreateBoard";
+import { fixtures } from "./fixtures";
+import { JoinRoute } from "./JoinRoute";
+import { LiveBoard } from "./LiveBoard";
+import { useCopy } from "./preferences";
+import { SharedBoard } from "./SharedBoard";
 
 export function App() {
   const { t } = useCopy();

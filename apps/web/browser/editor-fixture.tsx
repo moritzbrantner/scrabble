@@ -1,5 +1,6 @@
 /** Browser-test harness only; absent from the application's production import graph. */
 import { createRoot, type Root } from "react-dom/client";
+
 import { MoveEditor } from "../src/MoveEditor";
 import { type PlayerSnapshot, type Ruleset } from "../src/public-state";
 let root: Root | undefined;

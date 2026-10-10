@@ -1,9 +1,10 @@
 /** Browser-test-only measurements of real Scrabble components; never imported by production. */
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
-import { MoveEditor } from "../src/MoveEditor";
+
 import { fixtures } from "../src/fixtures";
 import privateRack from "../src/fixtures/private-rack.json" with { type: "json" };
+import { MoveEditor } from "../src/MoveEditor";
 import { playerSnapshot, ruleset } from "../src/public-state";
 import {
   POPULATED_BOARD_TILE_COUNT,

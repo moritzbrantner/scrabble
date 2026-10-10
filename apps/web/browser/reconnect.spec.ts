@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+
 import { gameFixture, selectOpening } from "./game-fixture";
 import { observeSnapshots } from "./pages-observer";
 

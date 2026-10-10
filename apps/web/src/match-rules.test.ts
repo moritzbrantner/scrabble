@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
+
 import { fixtures } from "./fixtures";
 import variant from "./fixtures/ruleset-variant.json";
-import { playerSnapshot, ruleset } from "./public-state";
 import { matchRules, requireMatchRules } from "./match-rules";
+import { playerSnapshot, ruleset } from "./public-state";
 
 describe("match rules", () => {
   test("presentation derives each alphabet, distribution and geometry from its authoritative configuration", () => {

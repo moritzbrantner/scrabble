@@ -1,5 +1,7 @@
 import { fileURLToPath } from "node:url";
+
 import { z } from "zod";
+
 import { connectionSettings } from "../apps/web/src/connection-settings";
 
 const path = Bun.argv[2] ?? fileURLToPath(new URL("../deploy/client.json", import.meta.url));

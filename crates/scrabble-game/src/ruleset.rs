@@ -257,6 +257,10 @@ pub fn english_fixture() -> Ruleset {
 }
 
 /// Small authored German-language fixture, not an official distribution or tournament word list.
+#[expect(
+    clippy::expect_used,
+    reason = "the compiled-in German ruleset is committed content validated by tests"
+)]
 pub fn german_fixture() -> Ruleset {
     let rules: Ruleset = serde_json::from_str(include_str!("../fixtures/de-mini-ruleset.json"))
         .expect("committed German ruleset parses");

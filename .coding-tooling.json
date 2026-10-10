@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "profile": "repository-foundation-v1",
+  "tiers": {
+    "fast": ["format:check", "lint", "typecheck", "test"],
+    "full": ["format:check", "lint", "typecheck", "test", "build", "test:e2e"]
+  },
+  "requiredCapabilities": ["format:check", "lint", "typecheck", "test", "build", "test:e2e"],
+  "capabilityCommands": {
+    "scrabble": {
+      "format:check": ["bun", "run", "format:web:check"],
+      "lint": ["bun", "run", "lint:web"],
+      "test:e2e": ["bun", "run", "test:browser"],
+      "benchmark": ["bun", "scripts/test-browser.ts", "--pages", "performance-budgets.spec.ts"]
+    }
+  },
+  "taskKnowledge": {
+    "schemaVersion": 1,
+    "alwaysInstructions": ["CONTEXT.md"],
+    "completion": {
+      "command": ["bun", "run", "check"],
+      "source": "package.json"
+    },
+    "scopes": []
+  }
+}

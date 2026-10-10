@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
-import { renderToStaticMarkup } from "react-dom/server";
+
 import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+
 import { ConnectionStatus } from "./ConnectionStatus";
 import { fixtures } from "./fixtures";
-import wireFixtures from "./transport/fixtures/wire.json";
 import {
   commandEnvelope,
   decodePlayerSnapshot,
@@ -12,6 +13,7 @@ import {
   type WordRejection,
 } from "./game-protocol";
 import { type ConnectionState } from "./transport/browser-match";
+import wireFixtures from "./transport/fixtures/wire.json";
 
 const encoder = new TextEncoder();
 function snapshot(value: unknown) {

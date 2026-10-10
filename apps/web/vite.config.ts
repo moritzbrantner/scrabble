@@ -1,7 +1,8 @@
-import { defineConfig } from "vite";
-import tailwindcss from "@tailwindcss/vite";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+
+import tailwindcss from "@tailwindcss/vite";
+import { defineConfig } from "vite";
 
 const certificate = process.env.LOCAL_TLS_CERT;
 const privateKey = process.env.LOCAL_TLS_KEY;

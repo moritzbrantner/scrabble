@@ -1,12 +1,10 @@
-import { boardCommands } from "./editor-commands";
-import { copy, type Copy, type CopyKey } from "./copy";
-import { useCopy } from "./preferences";
 import { Button } from "@moritzbrantner/ui/client";
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
-import { type PlayerSnapshot, type Ruleset } from "./public-state";
+
+import { copy, type Copy, type CopyKey } from "./copy";
+import { boardCommands } from "./editor-commands";
 import { type CommandEnvelope, type WordRejection } from "./game-protocol";
 import { useTouchInput } from "./input-capability";
-import { PlayerRack } from "./PlayerRack";
 import {
   draftProblem,
   editDraft,
@@ -15,6 +13,9 @@ import {
   type DraftAction,
   type MoveDraft,
 } from "./move-draft";
+import { PlayerRack } from "./PlayerRack";
+import { useCopy } from "./preferences";
+import { type PlayerSnapshot, type Ruleset } from "./public-state";
 
 type EditorState = {
   draft: MoveDraft;

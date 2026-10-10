@@ -1,9 +1,11 @@
 import { fileURLToPath } from "node:url";
+
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page, type Locator } from "@playwright/test";
+
+import fixtures from "../src/fixtures/public.json" with { type: "json" };
 import { selectOpening } from "./game-fixture";
 import { observeSnapshots } from "./pages-observer";
-import fixtures from "../src/fixtures/public.json" with { type: "json" };
 
 async function phoneVisual(page: Page, name: string) {
   const style = await page.addStyleTag({

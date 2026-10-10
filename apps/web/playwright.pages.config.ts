@@ -1,5 +1,7 @@
-import { defineConfig } from "@playwright/test";
 import { fileURLToPath } from "node:url";
+
+import { defineConfig } from "@playwright/test";
+
 import development from "./playwright.config";
 const port = process.env.SCRABBLE_BROWSER_PORT;
 export default defineConfig({

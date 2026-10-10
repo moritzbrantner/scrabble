@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+
 import { catalogs, copy, formatNumber, translate, type CopyKey } from "./copy";
 
 const placeholders = (text: string) =>

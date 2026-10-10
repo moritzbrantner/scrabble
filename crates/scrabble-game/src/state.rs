@@ -649,9 +649,7 @@ impl GameState {
             .enumerate()
             .filter_map(|(index, entry)| {
                 entry.as_ref().map(|tile| BoardTile {
-                    // Constructor validated odd dimensions in 1..=15; row/column are provably in bounds.
-                    coordinate: Coordinate::new((index / size) as u8, (index % size) as u8)
-                        .expect("validated board dimensions"),
+                    coordinate: board_coordinate(index, size),
                     letter: tile.letter,
                     is_blank: tile.is_blank(),
                 })
@@ -721,6 +719,16 @@ impl GameState {
         }
         Ok(())
     }
+}
+
+/// Board cell `index` on a `size`-wide board. The constructor validated odd dimensions in
+/// 1..=15 and the board holds `size * size` cells, so row and column are provably in bounds.
+#[expect(
+    clippy::expect_used,
+    reason = "board dimensions are validated by the constructor"
+)]
+fn board_coordinate(index: usize, size: usize) -> Coordinate {
+    Coordinate::new((index / size) as u8, (index % size) as u8).expect("validated board dimensions")
 }
 
 #[cfg(test)]

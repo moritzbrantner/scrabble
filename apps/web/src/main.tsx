@@ -1,7 +1,9 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { PreferencesProvider, initialPreferences } from "./preferences";
+
 import { App } from "./App";
+import { PreferencesProvider, initialPreferences } from "./preferences";
+
 import "./styles.css";
 
 const root = document.getElementById("root");

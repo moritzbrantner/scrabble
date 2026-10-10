@@ -1,7 +1,8 @@
-import { useCopy } from "./preferences";
 import { Button } from "@moritzbrantner/ui/client";
 import { useMemo, useState } from "react";
+
 import { inviteQr, playerInviteUrl } from "./player-invite";
+import { useCopy } from "./preferences";
 
 export function PlayerInvite({ matchId }: { matchId: string }) {
   const { t, locale } = useCopy();

@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { z } from "zod";
+
 import data from "../src/fixtures/ruleset-variant.json" with { type: "json" };
 import { playerSnapshot, ruleset } from "../src/public-state";
 const variant = z

@@ -1,5 +1,5 @@
-import { type PublicSnapshot } from "./public-state";
 import { useCopy } from "./preferences";
+import { type PublicSnapshot } from "./public-state";
 
 export function TurnHistory({ snapshot }: { snapshot: PublicSnapshot }) {
   const { t, number } = useCopy();

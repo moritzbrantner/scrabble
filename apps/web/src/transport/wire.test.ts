@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+
+import { matchUrl } from "./browser-match";
 import fixtures from "./fixtures/wire.json";
 import {
   contract,
@@ -11,7 +13,6 @@ import {
   ProtocolError,
   SnapshotReassembler,
 } from "./wire";
-import { matchUrl } from "./browser-match";
 const text = new TextEncoder();
 function bytes(hex: string): Uint8Array {
   return Uint8Array.from(hex.match(/../g) ?? [], (pair) => Number.parseInt(pair, 16));

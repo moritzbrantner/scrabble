@@ -1,5 +1,7 @@
 import { test, expect } from "bun:test";
+
 import { renderToStaticMarkup } from "react-dom/server";
+
 import { App } from "./App";
 import { fixtures } from "./fixtures";
 import { publicSnapshot } from "./public-state";

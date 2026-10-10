@@ -1,5 +1,6 @@
-import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
+
+import { expect, test } from "@playwright/test";
 import { z } from "zod";
 const path = process.env.SCRABBLE_TRANSPORT_FIXTURE;
 if (path === undefined) {

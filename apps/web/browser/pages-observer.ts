@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+
 import { playerSnapshot, type PlayerSnapshot } from "../src/public-state";
 import { SnapshotReassembler } from "../src/transport/wire";
 

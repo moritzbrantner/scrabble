@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+
 import { playerInviteUrl, validInviteId } from "./player-invite";
 const matchId = `g_${"0".repeat(16)}_${"a".repeat(32)}`;
 test("Pages invites rebuild an unambiguous public route without private query state", () => {

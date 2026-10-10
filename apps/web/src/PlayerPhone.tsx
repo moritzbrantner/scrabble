@@ -1,17 +1,20 @@
-import { copy, type Copy } from "./copy";
-import { useCopy } from "./preferences";
 import { Button, Input } from "@moritzbrantner/ui/client";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
-import { JoinError, lookupGame } from "./create-game";
+
 import { ConnectionStatus } from "./ConnectionStatus";
+import { copy, type Copy } from "./copy";
+import { JoinError, lookupGame } from "./create-game";
+import { fixtures } from "./fixtures";
 import {
   decodePlayerSnapshot,
   decodeWordRejection,
   encodeGameCommand,
   type WordRejection,
 } from "./game-protocol";
-import { fixtures } from "./fixtures";
 import { matchRules, requireMatchRules } from "./match-rules";
+import { MoveEditor } from "./MoveEditor";
+import { PlayerRack } from "./PlayerRack";
+import { useCopy } from "./preferences";
 import { type PlayerSnapshot, type Ruleset } from "./public-state";
 import { BrowserMatch, matchUrl, type ConnectionState } from "./transport/browser-match";
 import {
@@ -20,8 +23,6 @@ import {
   savePlayerSession,
   type ResumeCapability,
 } from "./transport/resume-capability";
-import { MoveEditor } from "./MoveEditor";
-import { PlayerRack } from "./PlayerRack";
 import { ProtocolError } from "./transport/wire";
 
 type Intent =
@@ -102,7 +103,7 @@ export function PlayerPhone({
     };
     const pagehide = () => client?.disconnect();
     window.addEventListener("pagehide", pagehide);
-    void Promise.resolve().then(async () => {
+    const connect = async () => {
       if (!active) {
         return;
       }
@@ -268,7 +269,10 @@ export function PlayerPhone({
           fail(error instanceof JoinError ? error.copy : copy("phone.connectFailed"));
         }
       }
-    });
+    };
+    Promise.resolve()
+      .then(connect)
+      .catch(() => fail(copy("phone.connectFailed")));
     return () => {
       active = false;
       controller.abort();
