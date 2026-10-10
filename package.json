@@ -8,7 +8,7 @@
     "dev:server": "cargo run -p scrabble-server --locked",
     "dev:tls": "cargo run -p scrabble-server --example local_tls --locked",
     "format": "oxfmt . && cargo fmt --all",
-    "format:check": "oxfmt . && git --no-pager diff -- apps/web/browser/measure-trusted-gesture.ts apps/web/browser/performance-budgets.spec.ts apps/web/browser/performance-entry.tsx docs/specs/performance-budgets.md && cargo fmt --all --check",
+    "format:check": "oxfmt --check . && cargo fmt --all --check",
     "lint": "oxlint --type-aware --tsconfig tsconfig.json apps/web scripts && cargo clippy --workspace --all-targets --locked -- -D warnings",
     "typecheck": "tsc --noEmit",
     "test": "cargo test --workspace --all-targets --locked && bun test apps/web/src scripts",
