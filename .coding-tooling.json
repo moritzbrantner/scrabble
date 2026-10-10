@@ -46,6 +46,7 @@
         "check"
       ],
       "source": "package.json"
-    }
+    },
+    "scopes": []
   }
 }
