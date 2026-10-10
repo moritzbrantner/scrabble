@@ -28,11 +28,11 @@ releases do not. The fixture renders the same production `SharedBoard` and
 
 ### Browser workload matrix
 
-| Workload | Shared board | Move editor | Samples |
-| --- | --- | --- | --- |
-| Opening baseline | Existing playing/finished snapshots with two committed letters | Empty board, authored A and H rack, center squares 112 and 113 | 20 refresh; 24 tile placements; 12 resets |
-| Populated desktop | Connected, synthetic 81-tile board alternated with an 82-tile update | Same private rack, with 81 committed tiles; place A and H next to an existing run at squares 118 and 119 | 20 refresh; 24 tile placements; 12 resets, each also measured to second rAF |
-| Populated touch emulation | — | Same populated board, Chromium `390 × 844`, touch enabled and mobile viewport | 24 tile placements; 12 resets, each also measured to second rAF |
+| Workload                  | Shared board                                                         | Move editor                                                                                              | Samples                                                                     |
+| ------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Opening baseline          | Existing playing/finished snapshots with two committed letters       | Empty board, authored A and H rack, center squares 112 and 113                                           | 20 refresh; 24 tile placements; 12 resets                                   |
+| Populated desktop         | Connected, synthetic 81-tile board alternated with an 82-tile update | Same private rack, with 81 committed tiles; place A and H next to an existing run at squares 118 and 119 | 20 refresh; 24 tile placements; 12 resets, each also measured to second rAF |
+| Populated touch emulation | —                                                                    | Same populated board, Chromium `390 × 844`, touch enabled and mobile viewport                            | 24 tile placements; 12 resets, each also measured to second rAF             |
 
 The populated fixture uses a deterministic connected pattern and the authored
 ruleset's available tile inventory, reserving the visible private rack and the
@@ -105,11 +105,11 @@ Merged [PR #78](https://github.com/moritzbrantner/scrabble/pull/78) recorded the
 **shared-runner, optimized-build, opening-workload** p95 values in
 [Actions run 37924771444](https://github.com/moritzbrantner/scrabble/actions/runs/37924771444):
 
-| Browser operation | p95 |
-| --- | ---: |
-| Word-draft placement | 12.30 ms |
-| Draft cancellation/reset | 6.60 ms |
-| Shared board refresh (225 cells) | 5.30 ms |
+| Browser operation                |      p95 |
+| -------------------------------- | -------: |
+| Word-draft placement             | 12.30 ms |
+| Draft cancellation/reset         |  6.60 ms |
+| Shared board refresh (225 cells) |  5.30 ms |
 
 Earlier 43–67 ms results came from the development build and included
 test-only selector/assertion overhead. They are not evidence of a
