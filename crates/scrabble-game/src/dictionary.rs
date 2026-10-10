@@ -99,6 +99,10 @@ impl Dictionary for WordList {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "the compiled-in authored dictionary is committed content validated by tests"
+)]
 pub fn authored_fixture() -> Arc<WordList> {
     static FIXTURE: OnceLock<Arc<WordList>> = OnceLock::new();
     Arc::clone(FIXTURE.get_or_init(|| {
