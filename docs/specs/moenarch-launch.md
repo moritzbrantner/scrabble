@@ -23,6 +23,7 @@ An existing board can attach public launch context to its **own tab's** canonica
 The moenarch.com launcher must register or otherwise obtain exactly one immutable `lobbyId -> matchId` binding from an **authorized lobby host**, and use that binding for every participant and retry. The current setup service exposes no such binding API; its `GET /lobbies/<id>` only returns participant/expiry metadata. Scrabble cannot prove that two arbitrary links with the same public session ID refer to the same match, and it must not claim to do so.
 
 A future service-side binding contract must:
+
 - Authorize creation/confirmation using the **existing host participant capability**, never a public lobby ID; retain that credential only in the owning launcher process.
 - Store only a bounded, short-lived **public Scrabble match ID**, not game state, player racks, credentials, or simulation history. Reject a conflicting second binding, including concurrent submissions.
 - Return the same binding for duplicate retries; expose only the public match ID to guests; validate match identity against the Scrabble API before use.
