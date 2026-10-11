@@ -1,5 +1,6 @@
 import QRCode from "qrcode";
 
+import { moenarchLaunch } from "./moenarch-launch";
 import { matchUrl } from "./transport/browser-match";
 
 export function validInviteId(value: string): boolean {
@@ -16,9 +17,17 @@ export function playerInviteUrl(
   if (!validInviteId(matchId) || !/^\/(?:[A-Za-z0-9_-]+\/)*$/.test(base)) {
     throw new Error("Invalid game invitation.");
   }
+  const launch = moenarchLaunch(page.searchParams);
+  if (launch.kind === "invalid" || launch.kind === "unbound") {
+    throw new Error("Invalid moenarch session link.");
+  }
   const invite = new URL(base, page.origin);
   invite.searchParams.set("view", "player");
   invite.searchParams.set("match", matchId);
+  if (launch.kind === "linked") {
+    invite.searchParams.set("launch", "moenarch");
+    invite.searchParams.set("session", launch.sessionId);
+  }
   const languages = page.searchParams.getAll("lang");
   if (languages.length === 1 && ["en", "de", "es"].includes(languages[0] ?? "")) {
     invite.searchParams.set("lang", languages[0] ?? "en");
