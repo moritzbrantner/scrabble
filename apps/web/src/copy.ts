@@ -54,7 +54,7 @@ export const en = {
   "join.checkFailed": "Unable to check this game. Check your connection and retry.",
   "join.differentGame": "The server returned a different game.",
   "launch.invalid": "Invalid moenarch.com session link. Ask for a new invitation.",
-  "launch.unbound": "This moenarch.com session has no Scrabble match. Ask the host for a game link."
+  "launch.unbound": "This moenarch.com session has no Scrabble match. Ask the host for a game link.",
   "phone.savedUnreadable":
     "The saved player session cannot be read. You can explicitly join as a new player.",
   "phone.saveFailed": "Unable to save this player session. Allow tab storage and reconnect.",
@@ -275,7 +275,7 @@ const de: Record<CopyKey, string> = {
     "Dieses Spiel konnte nicht geprüft werden. Prüfe deine Verbindung und versuche es erneut.",
   "join.differentGame": "Der Server hat ein anderes Spiel geliefert.",
   "launch.invalid": "Ungültiger moenarch.com-Sitzungslink. Bitte um eine neue Einladung.",
-  "launch.unbound": "Für diese moenarch.com-Sitzung ist kein Scrabble-Spiel verknüpft. Bitte den Gastgeber um einen Spiellink."
+  "launch.unbound": "Für diese moenarch.com-Sitzung ist kein Scrabble-Spiel verknüpft. Bitte den Gastgeber um einen Spiellink.",
   "phone.savedUnreadable":
     "Die gespeicherte Sitzung kann nicht gelesen werden. Du kannst ausdrücklich als neuer Spieler beitreten.",
   "phone.saveFailed":
@@ -504,7 +504,7 @@ const es: Record<CopyKey, string> = {
     "No se pudo comprobar la partida. Comprueba tu conexión e inténtalo de nuevo.",
   "join.differentGame": "El servidor devolvió otra partida.",
   "launch.invalid": "Enlace de sesión de moenarch.com no válido. Solicita otra invitación.",
-  "launch.unbound": "Esta sesión de moenarch.com no tiene una partida de Scrabble vinculada. Solicita un enlace al anfitrión."
+  "launch.unbound": "Esta sesión de moenarch.com no tiene una partida de Scrabble vinculada. Solicita un enlace al anfitrión.",
   "phone.savedUnreadable": "No se puede leer la sesión guardada. Puedes entrar como jugador nuevo.",
   "phone.saveFailed":
     "No se pudo guardar la sesión. Permite el almacenamiento de la pestaña y vuelve a conectar.",
