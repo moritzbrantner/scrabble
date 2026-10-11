@@ -2,7 +2,20 @@
 
 The authoritative service runs separately from GitHub Pages. The committed Compose topology exposes UDP 443 for native WebTransport and TCP 443 for HTTPS creation/invite lookup. Its gateway exposes only `/api/`, `/healthz`, and `/readyz`; detailed runtime status and management endpoints stay inside the Compose network. Both services run without root privileges or writable image filesystems.
 
-The owner has selected local hosting for now; see [local game setup](server-executable.md#local-game-setup). Public hosting is deferred. This document preserves the prepared future public topology, not evidence of a deployed service. Physical phone acceptance is also outstanding.
+The public target is the existing Hetzner host at `moenarch.com`. The deployment below runs the same executable behind the host nginx service. The Compose topology remains the canonical isolated deployment check and an option for dedicated hosts. Local hosting remains available; see [local game setup](server-executable.md#local-game-setup). Physical phone acceptance is separate from desktop browser acceptance.
+
+## Existing Hetzner host
+
+The host has systemd and nginx, with other applications already using TCP 443. Run the binary built by the pinned Dockerfile under `deploy/scrabble-server.service`, rather than installing a second container gateway. This deployment adapter deliberately reuses existing host infrastructure; it does not replace the canonical Compose test topology.
+
+- Install the executable at `/opt/scrabble/scrabble-server`, owned by root, mode 0755. Build it from the reviewed revision with the repository Dockerfile, extract `/usr/local/bin/scrabble-server`, and record its SHA-256. Do not deploy a binary built against a newer host glibc.
+- Create the `scrabble` system account and install `deploy/hetzner.env.example` as `/etc/scrabble/server.env`, mode 0600. The unit creates owner-only `/var/lib/scrabble` for the seed and recovery bundle. Retain the SCOWL content and notices at `/opt/scrabble/content`.
+- The unit uses systemd credentials to read the existing moenarch.com certificate and key without granting the service access to the certificate directory. Install `deploy/renew-scrabble-tls` as an executable Certbot deploy hook; it gracefully restarts only after that certificate is renewed.
+- Include `deploy/hetzner-nginx.conf` inside the existing moenarch.com TLS server block. Run `nginx -t` before reloading. HTTPS creation and lookup use `/scrabble-api/`; health and readiness use `/scrabble-healthz` and `/scrabble-readyz`. Detailed management routes are not proxied, and request access logging is disabled for these locations.
+- Permit UDP 443 through the host and provider firewalls for WebTransport. Keep TCP 18080 and 18081 blocked from the public network: the native executable binds those listeners to all interfaces, so host firewall isolation is required.
+- Enable and start `scrabble-server.service`, check readiness through trusted HTTPS, and then release Pages with the committed `deploy/client.json`. The game endpoint is `https://moenarch.com/game`; the API endpoint is `https://moenarch.com/scrabble-api`. TCP 443 continues to terminate at nginx, while UDP 443 terminates at Scrabble. Do not advertise HTTP/3 on this UDP port.
+
+For upgrades, stop the unit gracefully, back up `/var/lib/scrabble` with owner-only permissions, retain the previous executable and immutable content, install the candidate, and start the unit. Apply the same recovery/rollback restrictions described below. Certificate-hook restarts use the same graceful shutdown and recovery boundary.
 
 ## Host prerequisites
 
