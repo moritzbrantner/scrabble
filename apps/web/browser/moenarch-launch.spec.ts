@@ -70,7 +70,10 @@ test("explicit moenarch match links join and resume the same real Rust match acr
     const editor = first.getByRole("region", { name: "Move editor", exact: true });
     const rack = first.getByRole("list", { name: "Your rack", exact: true });
     for (const [index, letter] of ["A", "T"].entries()) {
-      await rack.getByRole("button", { name: new RegExp(`^${letter},`) }).first().click();
+      await rack
+        .getByRole("button", { name: new RegExp(`^${letter},`) })
+        .first()
+        .click();
       await editor
         .getByRole("button", { name: new RegExp(`^Row 8, column ${8 + index}:`) })
         .click();
