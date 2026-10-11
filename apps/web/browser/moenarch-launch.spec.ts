@@ -55,7 +55,9 @@ test("explicit moenarch match links join and resume the same real Rust match acr
       await phone.goto(invite.href);
       await phone.getByLabel("Player name", { exact: true }).fill(index === 0 ? "Ada" : "Lin");
       await phone.getByRole("button", { name: "Join game", exact: true }).click();
-      await expect(phone.getByRole("heading", { name: index === 0 ? "Ada" : "Lin" })).toBeVisible();
+      await expect(
+        phone.getByRole("heading", { name: index === 0 ? "Ada" : "Lin", exact: true }),
+      ).toBeVisible();
     }
     const firstIdentity = await first.getByTestId("player-identity").textContent();
     const secondIdentity = await second.getByTestId("player-identity").textContent();
@@ -80,9 +82,8 @@ test("explicit moenarch match links join and resume the same real Rust match acr
     await first.reload();
     await expect(first.getByRole("heading", { name: "Ada", exact: true })).toBeVisible();
     await expect(first.getByTestId("player-identity")).toHaveText(firstIdentity ?? "");
-    await expect(
-      first.getByRole("list", { name: "Your rack", exact: true }).getByRole("listitem"),
-    ).toHaveCount(7);
+    const restoredRack = first.getByRole("list", { name: "Your rack", exact: true });
+    await expect(restoredRack.getByRole("listitem")).toHaveCount(7);
     await page.reload();
     await expect(page.getByText("Turn 2", { exact: true })).toBeVisible();
     await expect(roster.getByRole("listitem")).toHaveCount(2);
