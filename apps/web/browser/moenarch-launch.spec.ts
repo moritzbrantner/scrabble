@@ -80,7 +80,9 @@ test("explicit moenarch match links join and resume the same real Rust match acr
     await first.reload();
     await expect(first.getByRole("heading", { name: "Ada", exact: true })).toBeVisible();
     await expect(first.getByTestId("player-identity")).toHaveText(firstIdentity ?? "");
-    await expect(first.getByRole("list", { name: "Your rack", exact: true }).getByRole("listitem")).toHaveCount(7);
+    await expect(
+      first.getByRole("list", { name: "Your rack", exact: true }).getByRole("listitem"),
+    ).toHaveCount(7);
     await page.reload();
     await expect(page.getByText("Turn 2", { exact: true })).toBeVisible();
     await expect(roster.getByRole("listitem")).toHaveCount(2);
