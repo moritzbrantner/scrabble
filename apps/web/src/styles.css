@@ -471,8 +471,9 @@ body {
   gap: 0.5rem;
   padding-block: 0.5rem;
 }
-.preference-fields [role="alert"] {
-  grid-column: 1 / -1;
+.app-preferences > [role="alert"] {
+  flex-basis: 100%;
+  margin: 0;
 }
 
 .keyboard-help dl > div {
