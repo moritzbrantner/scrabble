@@ -110,26 +110,28 @@ export function PreferencesProvider({
                 </NativeSelectOption>
               ))}
             </NativeSelect>
-            <label htmlFor={themeId}>{t("settings.theme")}</label>
-            <NativeSelect
-              id={themeId}
-              value={value.theme}
-              onChange={(event: ChangeEvent<HTMLSelectElement>) => {
-                const parsed = preferences.shape.theme.safeParse(event.target.value);
-                if (parsed.success) {
-                  update({ ...value, theme: parsed.data });
-                }
-              }}
-            >
-              {(["light", "dark", "system"] as const).map((theme) => (
-                <NativeSelectOption key={theme} value={theme}>
-                  {t(`settings.${theme}`)}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
             {storageFailed && <p role="alert">{t("settings.storage")}</p>}
           </div>
         </details>
+        <div className="appearance-field">
+          <label htmlFor={themeId}>{t("settings.theme")}</label>
+          <NativeSelect
+            id={themeId}
+            value={value.theme}
+            onChange={(event: ChangeEvent<HTMLSelectElement>) => {
+              const parsed = preferences.shape.theme.safeParse(event.target.value);
+              if (parsed.success) {
+                update({ ...value, theme: parsed.data });
+              }
+            }}
+          >
+            {(["light", "dark", "system"] as const).map((theme) => (
+              <NativeSelectOption key={theme} value={theme}>
+                {t(`settings.${theme}`)}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </div>
       </aside>
     </PreferencesContext>
   );
