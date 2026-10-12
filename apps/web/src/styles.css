@@ -440,10 +440,24 @@ body {
 }
 
 .app-preferences {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: flex-start;
+  gap: 0.5rem;
   max-width: 70rem;
   margin: 0.5rem auto;
   padding: 0.5rem;
   font-size: 0.875rem;
+}
+.appearance-field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+}
+.appearance-field select {
+  min-height: 44px;
 }
 .app-preferences summary {
   cursor: pointer;
@@ -457,8 +471,9 @@ body {
   gap: 0.5rem;
   padding-block: 0.5rem;
 }
-.preference-fields [role="alert"] {
-  grid-column: 1 / -1;
+.app-preferences > [role="alert"] {
+  flex-basis: 100%;
+  margin: 0;
 }
 
 .keyboard-help dl > div {
