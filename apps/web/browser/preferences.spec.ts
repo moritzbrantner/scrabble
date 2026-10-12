@@ -36,6 +36,7 @@ test("language and explicit themes persist; system theme follows the browser", a
   await expect(page.locator("html")).toHaveClass("dark");
   await page.getByLabel("Apariencia", { exact: true }).selectOption("light");
   await expect(page.locator("html")).not.toHaveClass("dark");
+  expect(await bodyBackground()).toBe(lightBackground);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
 
