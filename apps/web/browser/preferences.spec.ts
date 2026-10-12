@@ -7,9 +7,15 @@ test("language and explicit themes persist; system theme follows the browser", a
   await expect(page.locator("html")).toHaveAttribute("lang", "de");
   await expect(page.getByRole("table", { name: "Scrabble-Spielbrett" })).toBeVisible();
   expect(await page.evaluate(() => localStorage.length)).toBe(0);
-  await page.getByText("Einstellungen", { exact: true }).click();
-  await page.getByLabel("Darstellung", { exact: true }).selectOption("dark");
+  // Appearance must be discoverable without expanding Settings or disturbing the match.
+  const appearance = page.getByLabel("Darstellung", { exact: true });
+  await expect(appearance).toBeVisible();
+  const lightBackground = await page.locator("body").evaluate((body) => getComputedStyle(body).backgroundColor);
+  await appearance.selectOption("dark");
   await expect(page.locator("html")).toHaveClass("dark");
+  const darkBackground = await page.locator("body").evaluate((body) => getComputedStyle(body).backgroundColor);
+  expect(darkBackground).not.toBe(lightBackground);
+  await page.getByText("Einstellungen", { exact: true }).click();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.getByLabel("Sprache der Oberfläche", { exact: true }).selectOption("es");
   await expect(page.getByRole("table", { name: "Tablero de Scrabble" })).toBeVisible();
@@ -47,6 +53,9 @@ test("unsupported language and corrupt preferences fall back to English", async 
 test("an existing validation error changes language without a reload", async ({ page }) => {
   await page.goto("./?view=player&match=invalid");
   await expect(page.getByRole("alert")).toBeVisible();
+  // The same appearance preference applies to invalid/unavailable player routes.
+  await page.getByLabel("Appearance", { exact: true }).selectOption("dark");
+  await expect(page.locator("html")).toHaveClass("dark");
   const before = await page.getByRole("alert").textContent();
   await page.getByText("Settings", { exact: true }).click();
   await page.getByLabel("Interface language", { exact: true }).selectOption("de");
