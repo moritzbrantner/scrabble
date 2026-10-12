@@ -10,11 +10,12 @@ test("language and explicit themes persist; system theme follows the browser", a
   // Appearance must be discoverable without expanding Settings or disturbing the match.
   const appearance = page.getByLabel("Darstellung", { exact: true });
   await expect(appearance).toBeVisible();
-  const lightBackground = await page.locator("body").evaluate((body) => getComputedStyle(body).backgroundColor);
+  const bodyBackground = () =>
+    page.locator("body").evaluate((body) => getComputedStyle(body).backgroundColor);
+  const lightBackground = await bodyBackground();
   await appearance.selectOption("dark");
   await expect(page.locator("html")).toHaveClass("dark");
-  const darkBackground = await page.locator("body").evaluate((body) => getComputedStyle(body).backgroundColor);
-  expect(darkBackground).not.toBe(lightBackground);
+  expect(await bodyBackground()).not.toBe(lightBackground);
   await page.getByText("Einstellungen", { exact: true }).click();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.getByLabel("Sprache der Oberfläche", { exact: true }).selectOption("es");
