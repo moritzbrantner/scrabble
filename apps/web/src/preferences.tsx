@@ -110,7 +110,6 @@ export function PreferencesProvider({
                 </NativeSelectOption>
               ))}
             </NativeSelect>
-            {storageFailed && <p role="alert">{t("settings.storage")}</p>}
           </div>
         </details>
         <div className="appearance-field">
@@ -132,6 +131,7 @@ export function PreferencesProvider({
             ))}
           </NativeSelect>
         </div>
+        {storageFailed && <p role="alert">{t("settings.storage")}</p>}
       </aside>
     </PreferencesContext>
   );
