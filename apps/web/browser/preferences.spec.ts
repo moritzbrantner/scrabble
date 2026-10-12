@@ -66,6 +66,24 @@ test("an existing validation error changes language without a reload", async ({ 
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
 
+test("blocked storage is announced without opening Settings when changing appearance", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Storage.prototype.setItem = () => {
+      throw new Error("Storage disabled");
+    };
+  });
+  await page.goto("./?fixture=playing");
+  await expect(page.locator(".app-preferences details")).not.toHaveAttribute("open", "");
+  await page.getByLabel("Appearance", { exact: true }).selectOption("dark");
+  await expect(page.locator("html")).toHaveClass("dark");
+  await expect(page.getByRole("alert")).toHaveText(
+    "Preferences could not be saved. They apply to this page.",
+  );
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
+
 test("restricted preference storage keeps the page usable and explains persistence", async ({
   page,
 }) => {
