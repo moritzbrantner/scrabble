@@ -2,6 +2,7 @@
 
 ## Domain and authority
 
+- `docs/DECISION-ATLAS.md` is the owner-approved product-intent authority. Preserve stable Decision/Question IDs; do not infer implementation from a Decision or select answers to consequential Questions. Detailed acceptance remains in relevant `docs/specs/`; issues track bounded work, not product authority.
 - Read `CONTEXT.md` for the match, rack, bag, proposed placement, preview, and committed-move vocabulary.
 - Preserve a single authoritative ruleset, turn and score transition, board state, and private rack ownership. Inspect the existing Rust game/server and browser interfaces before changing their boundary.
 - `apps/web` owns browser presentation and interaction; do not implement server-authoritative game rules in React.
