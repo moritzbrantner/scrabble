@@ -71,7 +71,7 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
 
 - **1.15 Longest formed word is the single-tile main word.**  
   Status: owner-approved 2026-10-13. Answers 1.14 (choice B).  
-  When placing one tile on a hexagonal board forms multiple words along different axes, the game **automatically selects the longest newly formed word as the main word**. If several words are equally long, use a deterministic tie-breaker that yields the same result across clients, replay, and recovery. Show the selected main word and its scoring consequences clearly before confirmation, particularly under Decision 1.13's main-word-only premium policy. Do not require the player to choose the direction. Decision 1.21 later approves multi-letter tile faces; Question 1.22 keeps the scoring-relevant definition of “longest” unresolved when such faces occur.
+  When placing one tile on a hexagonal board forms multiple words along different axes, the game **automatically selects the longest newly formed word as the main word**. If several words are equally long, use a deterministic tie-breaker that yields the same result across clients, replay, and recovery. Show the selected main word and its scoring consequences clearly before confirmation, particularly under Decision 1.13's main-word-only premium policy. Do not require the player to choose the direction. Decision 1.21 later approves multi-letter tile faces; Decision 1.23 subsequently settles the scoring-relevant length metric (historical Question 1.22).
 
 - **1.16 Shareable saved word-list library.**  
   Status: owner-approved 2026-10-13. Answers 1.9 (choice C).  
@@ -95,10 +95,15 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
 
 - **1.21 Configurable multi-letter tile faces.**  
   Status: owner-approved 2026-10-13. Answers 1.7 (choice B).  
-  A ruleset may define a tile whose face contains several letters, such as **CH** or **SCH**, alongside ordinary single-letter tiles. Each such tile is **one physical tile**: it takes **one rack slot**, occupies **one board cell**, and has **one configured point value**, irrespective of the number of letters printed on its face. The whole face contributes its letters in order to words formed along the board, and dictionary validation uses the resulting spelling. Tile-frequency and value choices remain part of the selected immutable match ruleset. Preserve the existing single-letter profiles and game authority. How a word's length is compared when hexagonal main-word selection encounters multi-letter faces remains Question 1.22; no length metric is inferred from this choice.
+  A ruleset may define a tile whose face contains several letters, such as **CH** or **SCH**, alongside ordinary single-letter tiles. Each such tile is **one physical tile**: it takes **one rack slot**, occupies **one board cell**, and has **one configured point value**, irrespective of the number of letters printed on its face. The whole face contributes its letters in order to words formed along the board, and dictionary validation uses the resulting spelling. Tile-frequency and value choices remain part of the selected immutable match ruleset. Preserve the existing single-letter profiles and game authority. Decision 1.23 subsequently selects a configurable length metric with tile count as the default (historical Question 1.22).
 
 - **1.22** [question] **What makes a word the longest when tiles can have multiple letters?**  
+  Answered 2026-10-13 by Decision 1.23 (choice C with B as default). Retained as a historical Question.  
   Under Decision 1.15, a single tile forming several hexagonal words automatically chooses the longest as the main word. If one candidate uses CH or SCH tiles, should “longest” mean the number of spelled letters, the number of board cells/tiles, or a configurable ruleset setting? The answer changes scoring under the main-word-only premium policy in 1.13. Do not silently choose one until the owner answers.
+
+- **1.23 Configurable main-word length with a tile-count default.**  
+  Status: owner-approved 2026-10-13. Answers 1.22 (choice C, with B as the default).  
+  Each ruleset may choose whether the **longest** word used for automatic hexagonal main-word selection under Decision 1.15 is determined by the **number of occupied board cells / physical tiles** or by the **number of letters in the fully spelled word**. **Default: count tiles**, so a CH or SCH tile contributes one unit to word length; a ruleset may explicitly opt into letter-counting, where CH contributes two letters and SCH three. The length metric is part of the selected immutable match ruleset and must produce the same main word, stable tie-break, scoring preview, committed result, replay and recovery. Every formed word is still validated against its full spelling under Decisions 1.11 and 1.21; this choice changes only main-word length comparison, not dictionary spelling, tile point value or board occupancy. Preserve existing square-board play and ruleset compatibility.
 
 ## 2. Game clients and interface controls
 
