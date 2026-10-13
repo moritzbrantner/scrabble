@@ -77,7 +77,15 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
   Custom word lists may be uploaded and saved for reuse in later matches, and players can **share a saved list with other players through a link**. A recipient can access the linked list for use in Scrabble rather than having to receive and re-upload its source file. The library should support reuse beyond one match or one browser session; the user-facing intention is a reusable shareable library, not deployment-only dictionaries. Sharing a list does not change an already running match's immutable selected dictionary or invalidate replay/recovery. Exactly who can edit, delete, copy, or revoke a shared list, and how the owner is identified, remain unanswered in 1.17.
 
 - **1.17** [question] **What can someone with a shared word-list link do?**  
+  Answered 2026-10-13 by Decision 1.18 for recipient behavior (choice C); ownership and original-list management remain open in Question 1.19. Retained as a historical Question.  
   Should a shared link only grant access to select/use a saved list, grant collaborators editing permission, or give recipients independent copies they can modify? Also settle who can change/delete the original and how ownership is established without breaking dictionaries referenced by running or recoverable matches. Do not infer these permissions from Decision 1.16 alone.
+
+- **1.18 Shared word lists can be copied independently.**  
+  Status: owner-approved 2026-10-13. Answers 1.17 (recipient-permissions choice C).  
+  A player opening a shared custom word-list link can **save an independent copy** and edit that copy for their own future games. Editing the recipient's copy must not modify the original shared list, other recipients' copies, or word-list versions selected by existing matches. A link can still provide access to use the shared original in a match under Decision 1.16; this choice does not grant collaborators write access to the original. How the original's owner is identified and manages their list remains Question 1.19.
+
+- **1.19** [question] **How is ownership of a saved custom word list established and recovered?**  
+  Should owners manage lists through an account across devices, an anonymous device-held capability, or guest ownership with an optional account upgrade? Define who can edit/delete or stop sharing the original and what happens when a device or credential is lost. Recipients' editable copies remain independent under 1.18. Existing matches must retain their selected immutable dictionary identity regardless of library changes. This choice must be settled before promising durable library management and owner controls.
 
 ## 2. Game clients and interface controls
 
