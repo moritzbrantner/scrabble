@@ -131,13 +131,18 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
 
 - **3.1 Optional configurable time controls.**  
   Status: owner-approved 2026-10-13.  
-  Match setup should allow trying different time settings, including a total time allowance and an optional allowance added on starting a turn (30 seconds was an example, not an approved default). Clock configuration belongs to the match, not display-only browser preferences. Exact clock ownership and expiration semantics remain unresolved in 3.2–3.3.
+  Match setup should allow trying different time settings, including a total time allowance and an optional allowance added on starting a turn (30 seconds was an example, not an approved default). Clock configuration belongs to the match, not display-only browser preferences. Decision 3.4 subsequently resolves the choice of expiration consequence (historical Question 3.2); how time is counted and granted remains unresolved in 3.3.
 
 - **3.2** [question] **What happens when a player's allotted time runs out?**  
-  Choose the match-visible consequence (for example automatic pass, loss/forfeit, or another rule), including whether an expired clock ends the match immediately. No rule is approved yet.
+  Answered 2026-10-13 by Decision 3.4 (choice C: match-configurable forfeit or automatic pass). Retained as a historical Question.  
+  Choose the match-visible consequence (for example automatic pass, loss/forfeit, or another rule), including whether an expired clock ends the match immediately.
 
 - **3.3** [question] **What time is counted, and when is an allowance granted?**  
   Is total time per player, per turn, or shared? Is additional time granted when each turn starts, after completing it, or by another rule? How do pausing, disconnects, reconnects and server recovery affect elapsed time? These choices must be settled before a playable clock implementation.
+
+- **3.4 Configurable clock-expiration consequence.**  
+  Status: owner-approved 2026-10-13. Answers 3.2 (choice C).  
+  For a time-controlled match, match setup lets the host choose what happens when a player's allotted clock expires: **forfeit**, in which the expired player loses their participation in the game, or **automatic pass**, in which the player's current turn ends without a placed word while they remain a participant. The chosen consequence is part of the match's fixed, authoritative time-control configuration; it is not merely a browser display setting or a preference that can change mid-match. Matches without enabled clocks have no timeout consequence. The mechanics of per-player versus per-turn allowances, when time is added, what happens if an automatically passed player has no time on their next turn, and clock continuity over disconnections/recovery remain unresolved under Question 3.3. Forfeit handling in a match with more than two players must respect the existing match-completion and turn-authority model rather than silently assuming a two-player-only result.
 
 ## Existing baseline and boundaries
 
