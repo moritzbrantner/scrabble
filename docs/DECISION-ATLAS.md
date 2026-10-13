@@ -109,7 +109,7 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
 
 - **2.1 Mobile-style client experience across devices.**  
   Status: owner-approved 2026-10-13.  
-  Gameplay clients should have an interaction layout resembling the mobile client even when used in a desktop web browser. Keep the play area and frequent actions primary rather than replacing them with a conventional desktop application shell. Whether the separate shared-board presentation is also covered remains unanswered in 2.4.
+  Gameplay clients should have an interaction layout resembling the mobile client even when used in a desktop web browser. Keep the play area and frequent actions primary rather than replacing them with a conventional desktop application shell. Decision 2.5 subsequently preserves a distinct large-screen shared-board presentation (historical Question 2.4).
 
 - **2.2 Non-disruptive settings dialog.**  
   Status: owner-approved 2026-10-13.  
@@ -120,7 +120,12 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
   A language selector for **interface text** and a light/dark appearance control should remain directly discoverable in the game interface, without opening the settings modal. The existing system-theme option may remain. Switching interface language must not change the word list, language, tile distribution or other match rules.
 
 - **2.4** [question] **Does the mobile-style layout also replace the dedicated shared-board view?**  
+  Answered 2026-10-13 by Decision 2.5 (choice A); retained as a historical Question.  
   The existing product has an independently presented shared public board and player-specific private-rack controls. Should the common board remain a distinct large-screen presentation, or should it adopt the same mobile-like client layout? Do not silently remove either role.
+
+- **2.5 Distinct shared-display and player-controller layouts.**  
+  Status: owner-approved 2026-10-13. Answers 2.4 (choice A).  
+  The **public shared board remains a separate presentation optimized for larger displays**, showing the board and public match state without exposing private player racks or duplicating player-only editing controls. The **player's own gameplay interface stays compact and mobile-style** on phones and desktop browsers, with rack, placement and frequent turn actions prioritized. Do not force the shared-display view into a phone-controller shell or replace the player's interaction layout with a large-screen shared-board dashboard. Both presentations use the same authoritative match state and retain the distinct shared-board versus player identity/visibility boundaries. This preserves the existing two-role product model rather than requesting a new alternative-layout setting.
 
 ## 3. Match clocks
 
