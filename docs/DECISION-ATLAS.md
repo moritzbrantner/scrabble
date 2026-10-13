@@ -35,7 +35,7 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
   Should word lists be selected from server-provided options, pasted/uploaded by the host, managed as reusable custom profiles, or some combination? Who may provide a list, and what validation, provenance and sharing rules apply? Current implementation supplies profiles at deployment time; this Question must not be silently answered by that implementation.
 
 - **1.6** [question] **What constitutes a legal word on a hexagonal board?**  
-  Partly answered 2026-10-13 by 1.10: words follow any of the three straight hex-grid axes, without bends. The rules for validating incidental cross-words, first-turn placement, and premiums on hexagonal boards remain unresolved. Do not adapt square-grid placement logic by visual substitution alone.
+  Partly answered 2026-10-13 by 1.10 (three straight word axes) and 1.11 (validate and score every newly formed crossing word). First-turn placement and how conventional premiums apply to hexagonal geometry remain unresolved. Do not adapt square-grid placement logic by visual substitution alone.
 
 - **1.7** [question] **Are multi-letter tiles part of the configurable tile-set goal?**  
   Does “different tiles with different letters” mean one configurable character per tile (including Unicode letters such as Ä), or should a tile optionally represent several characters such as CH? The existing native ruleset supports individual Unicode scalar tile faces.
@@ -50,6 +50,10 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
 - **1.10 Hexagonal words use three straight axes.**  
   Status: owner-approved 2026-10-13. Partially answers 1.6 (direction choice A).  
   Hexagonal Scrabble allows words to extend in a straight line along **any of the hexagon grid's three axes**. A single word does not bend or change axes. This retains Scrabble-like straight-word placement but permits additional crossing possibilities compared with a square board. Which cross-words require validation, first-turn placement rules, and how existing premiums work on this geometry remain open under 1.6.
+
+- **1.11 Every newly formed hexagonal crossing word counts.**  
+  Status: owner-approved 2026-10-13. Partially answers 1.6 (crossing-rule choice A).  
+  When a placement on a hexagonal board forms additional words along either of the other straight axes, **every newly formed word must pass the configured word-list validation, and every newly formed word scores points**, just as the main word does. A placement containing any invalid newly formed word cannot be committed. This does not yet determine first-turn placement or the interaction of existing premium squares with hexagonal intersections; those remain in Question 1.6.
 
 ## 2. Game clients and interface controls
 
