@@ -45,6 +45,7 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
   Players can choose from predefined word lists, upload their own, and save uploaded lists for use in later matches. The selected list defines valid words for its match independently of the interface language. Do not treat existing server-only dictionary configuration as satisfying the requested player-facing import and reuse. This Decision does not settle how a player's saved lists are scoped or shared (see 1.9).
 
 - **1.9** [question] **Who can access and reuse saved custom word lists?**  
+  Answered 2026-10-13 by Decision 1.16 (choice C: saved reusable lists are accessible through shareable links). Sharing permissions and owner management remain open in Question 1.17. Retained as a historical Question.  
   Should a saved upload be reusable only in the same browser/device, associated with a player's identity across devices, or shareable with other hosts? Define who can view, change or delete saved lists without compromising dictionaries required to replay or recover ongoing matches. This does not block selecting existing profiles under 1.1.
 
 - **1.10 Hexagonal words use three straight axes.**  
@@ -70,6 +71,13 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
 - **1.15 Longest formed word is the single-tile main word.**  
   Status: owner-approved 2026-10-13. Answers 1.14 (choice B).  
   When placing one tile on a hexagonal board forms multiple words along different axes, the game **automatically selects the longest newly formed word as the main word**. If several words are equally long, use a deterministic tie-breaker that yields the same result across clients, replay, and recovery. Show the selected main word and its scoring consequences clearly before confirmation, particularly under Decision 1.13's main-word-only premium policy. Do not require the player to choose the direction. This decision does not resolve the separate possibility of multi-character tile faces in 1.7.
+
+- **1.16 Shareable saved word-list library.**  
+  Status: owner-approved 2026-10-13. Answers 1.9 (choice C).  
+  Custom word lists may be uploaded and saved for reuse in later matches, and players can **share a saved list with other players through a link**. A recipient can access the linked list for use in Scrabble rather than having to receive and re-upload its source file. The library should support reuse beyond one match or one browser session; the user-facing intention is a reusable shareable library, not deployment-only dictionaries. Sharing a list does not change an already running match's immutable selected dictionary or invalidate replay/recovery. Exactly who can edit, delete, copy, or revoke a shared list, and how the owner is identified, remain unanswered in 1.17.
+
+- **1.17** [question] **What can someone with a shared word-list link do?**  
+  Should a shared link only grant access to select/use a saved list, grant collaborators editing permission, or give recipients independent copies they can modify? Also settle who can change/delete the original and how ownership is established without breaking dictionaries referenced by running or recoverable matches. Do not infer these permissions from Decision 1.16 alone.
 
 ## 2. Game clients and interface controls
 
