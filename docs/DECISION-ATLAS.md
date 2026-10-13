@@ -63,6 +63,9 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
   Status: owner-approved 2026-10-13. Answers the premium-intersection part of Question 1.6 (choice C), completing its recorded hexagonal rule choices together with 1.10–1.12.  
   Each hexagonal board variant specifies how its existing double/triple letter and word premiums apply when a newly placed tile forms multiple words: either **classic all-word application** (the premium affects every newly formed word containing that tile) or **main-word-only application** (the premium affects only the main word; crossing words still score without that premium). Both modes retain normal validation and scoring of every newly formed word under Decision 1.11. A premium is consumed by its newly placed tile after that move, not re-applied on later turns. The choice belongs to the selected board/ruleset configuration and remains fixed for an ongoing match; it is not a mid-match toggle. Existing classic square-board scoring is unchanged.
 
+- **1.14** [question] **Which newly formed word is the main word after a single-tile placement?**  
+  When one tile completes multiple straight words along different hexagonal axes, Decision 1.13's main-word-only premium policy makes the main-word identity affect scoring. Should the player explicitly select the main direction, should the game pick the longest formed word with a deterministic tie-break, or should a fixed axis precedence decide automatically? The chosen main word and scores must be understandable before committing; do not silently assign a scoring-affecting direction.
+
 ## 2. Game clients and interface controls
 
 - **2.1 Mobile-style client experience across devices.**  
