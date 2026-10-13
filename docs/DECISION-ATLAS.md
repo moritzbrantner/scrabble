@@ -31,6 +31,7 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
   The game should make it possible to try different board configurations beyond the existing square layout. A hexagonal board is a desired experimental **game mode**, not merely a different graphic for unchanged square-grid rules. The hexagonal word-placement/scoring semantics remain unresolved in 1.6.
 
 - **1.5** [question] **How do players define and make word lists available?**  
+  Answered 2026-10-13 by 1.8 for list sources and reuse; list ownership/sharing details remain in 1.9.  
   Should word lists be selected from server-provided options, pasted/uploaded by the host, managed as reusable custom profiles, or some combination? Who may provide a list, and what validation, provenance and sharing rules apply? Current implementation supplies profiles at deployment time; this Question must not be silently answered by that implementation.
 
 - **1.6** [question] **What constitutes a legal word on a hexagonal board?**  
@@ -38,6 +39,13 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
 
 - **1.7** [question] **Are multi-letter tiles part of the configurable tile-set goal?**  
   Does “different tiles with different letters” mean one configurable character per tile (including Unicode letters such as Ä), or should a tile optionally represent several characters such as CH? The existing native ruleset supports individual Unicode scalar tile faces.
+
+- **1.8 Predefined and reusable custom word lists.**  
+  Status: owner-approved 2026-10-13. Answers 1.5.  
+  Players can choose from predefined word lists, upload their own, and save uploaded lists for use in later matches. The selected list defines valid words for its match independently of the interface language. Do not treat existing server-only dictionary configuration as satisfying the requested player-facing import and reuse. This Decision does not settle how a player's saved lists are scoped or shared (see 1.9).
+
+- **1.9** [question] **Who can access and reuse saved custom word lists?**  
+  Should a saved upload be reusable only in the same browser/device, associated with a player's identity across devices, or shareable with other hosts? Define who can view, change or delete saved lists without compromising dictionaries required to replay or recover ongoing matches. This does not block selecting existing profiles under 1.1.
 
 ## 2. Game clients and interface controls
 
