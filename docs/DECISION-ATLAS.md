@@ -35,7 +35,7 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
   Should word lists be selected from server-provided options, pasted/uploaded by the host, managed as reusable custom profiles, or some combination? Who may provide a list, and what validation, provenance and sharing rules apply? Current implementation supplies profiles at deployment time; this Question must not be silently answered by that implementation.
 
 - **1.6** [question] **What constitutes a legal word on a hexagonal board?**  
-  Decide the word directions, adjacency and crossing rules, starting-square/first-turn rules, and how the existing premium types apply to hexagonal geometry. Do not adapt square-grid placement logic by visual substitution alone.
+  Partly answered 2026-10-13 by 1.10: words follow any of the three straight hex-grid axes, without bends. The rules for validating incidental cross-words, first-turn placement, and premiums on hexagonal boards remain unresolved. Do not adapt square-grid placement logic by visual substitution alone.
 
 - **1.7** [question] **Are multi-letter tiles part of the configurable tile-set goal?**  
   Does “different tiles with different letters” mean one configurable character per tile (including Unicode letters such as Ä), or should a tile optionally represent several characters such as CH? The existing native ruleset supports individual Unicode scalar tile faces.
@@ -46,6 +46,10 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
 
 - **1.9** [question] **Who can access and reuse saved custom word lists?**  
   Should a saved upload be reusable only in the same browser/device, associated with a player's identity across devices, or shareable with other hosts? Define who can view, change or delete saved lists without compromising dictionaries required to replay or recover ongoing matches. This does not block selecting existing profiles under 1.1.
+
+- **1.10 Hexagonal words use three straight axes.**  
+  Status: owner-approved 2026-10-13. Partially answers 1.6 (direction choice A).  
+  Hexagonal Scrabble allows words to extend in a straight line along **any of the hexagon grid's three axes**. A single word does not bend or change axes. This retains Scrabble-like straight-word placement but permits additional crossing possibilities compared with a square board. Which cross-words require validation, first-turn placement rules, and how existing premiums work on this geometry remain open under 1.6.
 
 ## 2. Game clients and interface controls
 
