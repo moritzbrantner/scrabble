@@ -166,7 +166,12 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
   During an active timed match, **players and hosts cannot manually pause or resume the clocks**. Do not provide a host-only pause button, unanimous-vote pause flow, or an unapproved player-facing pause command. Time proceeds under the chosen cumulative or per-turn rules (Decision 3.5), including through player disconnections while the server is available (Decision 3.6). Only an actual server outage/restart freezes remaining time (Decision 3.7), with the configured automatic-pass or forfeit outcome (Decision 3.4) and invalid cumulative/no-increment combinations prevented by Decision 3.8. Manual interruption must not masquerade as an infrastructure outage. This does not require introducing a new pause feature or changing match rules mid-game.
 
 - **3.10** [question] **What should the new-match form initially select for time controls?**  
+  Answered 2026-10-13 by Decision 3.11 (choice A: start untimed); retained as a historical Question.  
   When a host opens the create-match form, should it start **untimed** unless the host explicitly enables a clock, start with a suggested **timed preset**, or **remember the previous clock configuration** after first use (starting untimed for new users)? This is a match-creation UX default, not permission to change a running match. No default duration, model, increment or expiration policy was approved in Decisions 3.1 and 3.4–3.9; do not silently invent a timed preset or override the user's explicit choice.
+
+- **3.11 New-match clock setup starts untimed.**  
+  Status: owner-approved 2026-10-13. Answers 3.10 (choice A).  
+  Every newly opened match-creation flow **initially has clocks disabled**. The host must **explicitly enable time controls** before choosing a timed mode and its valid parameters; creating a match without enabling them keeps it untimed. Do not silently preselect a timed preset or automatically restore a previously used timed setup as the next match's selection. This is the **initial selection of the create-match form**, not a prohibition on configuring either cumulative or per-turn clocks under Decisions 3.1 and 3.4–3.9. Preserve the host's current explicit choice while they edit the same pending match form, and clearly indicate whether that match is timed. The user has not selected default durations, increments, a timed model, or a timeout consequence for newly enabled clocks.
 
 ## Existing baseline and boundaries
 
