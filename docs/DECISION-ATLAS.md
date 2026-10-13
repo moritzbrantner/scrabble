@@ -20,7 +20,7 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
 
 - **1.2 Configurable tile sets.**  
   Status: owner-approved 2026-10-13.  
-  Different game variants may define which letters appear on tiles and their frequency and values. A match uses one selected, fixed set of rules; a configuration change does not retroactively alter ongoing matches or replays. The precise representation of any multi-letter tiles remains open in 1.7.
+  Different game variants may define which letters appear on tiles and their frequency and values. A match uses one selected, fixed set of rules; a configuration change does not retroactively alter ongoing matches or replays. Later Decision 1.21 authorizes multi-letter tile faces (historical Question 1.7).
 
 - **1.3 Keep conventional premium types for now.**  
   Status: owner-approved 2026-10-13.  
@@ -38,6 +38,7 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
   Resolved 2026-10-13 by Decisions 1.10 (three straight word axes), 1.11 (validate and score every newly formed crossing word), 1.12 (opening word covers the center hexagon), and 1.13 (board-variant premium policy). Retained as a historical Question. Hexagonal play is not merely square-grid logic drawn with different geometry.
 
 - **1.7** [question] **Are multi-letter tiles part of the configurable tile-set goal?**  
+  Answered 2026-10-13 by Decision 1.21 (choice B); retained as a historical Question.  
   Does “different tiles with different letters” mean one configurable character per tile (including Unicode letters such as Ä), or should a tile optionally represent several characters such as CH? The existing native ruleset supports individual Unicode scalar tile faces.
 
 - **1.8 Predefined and reusable custom word lists.**  
@@ -70,7 +71,7 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
 
 - **1.15 Longest formed word is the single-tile main word.**  
   Status: owner-approved 2026-10-13. Answers 1.14 (choice B).  
-  When placing one tile on a hexagonal board forms multiple words along different axes, the game **automatically selects the longest newly formed word as the main word**. If several words are equally long, use a deterministic tie-breaker that yields the same result across clients, replay, and recovery. Show the selected main word and its scoring consequences clearly before confirmation, particularly under Decision 1.13's main-word-only premium policy. Do not require the player to choose the direction. This decision does not resolve the separate possibility of multi-character tile faces in 1.7.
+  When placing one tile on a hexagonal board forms multiple words along different axes, the game **automatically selects the longest newly formed word as the main word**. If several words are equally long, use a deterministic tie-breaker that yields the same result across clients, replay, and recovery. Show the selected main word and its scoring consequences clearly before confirmation, particularly under Decision 1.13's main-word-only premium policy. Do not require the player to choose the direction. Decision 1.21 later approves multi-letter tile faces; Question 1.22 keeps the scoring-relevant definition of “longest” unresolved when such faces occur.
 
 - **1.16 Shareable saved word-list library.**  
   Status: owner-approved 2026-10-13. Answers 1.9 (choice C).  
@@ -91,6 +92,13 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
 - **1.20 Guest word-list ownership with optional account linking.**  
   Status: owner-approved 2026-10-13. Answers 1.19 (choice C).  
   Players can upload, save, use, edit, and manage their own reusable custom word lists **without creating an account first**. Guest ownership is retained by a private device-held ownership capability, not by the public sharing link. Players may optionally link their existing guest-owned lists to an account later, preserving those lists, independent copies, and their current share links rather than restarting their library; linked owners can manage their lists from their account on another device. Only the current owner may modify, delete, or stop sharing the original; a person using a share link may use it or save an independently editable copy under 1.18, not edit the owner's version. Losing an unlinked guest ownership capability may lose management access; the interface must communicate this without falsely promising recovery. Edits and deletes must not rewrite or invalidate immutable dictionary versions already bound to running or recoverable matches. The identity provider, account sign-in UX, and any cross-product account integration are not selected by this Decision.
+
+- **1.21 Configurable multi-letter tile faces.**  
+  Status: owner-approved 2026-10-13. Answers 1.7 (choice B).  
+  A ruleset may define a tile whose face contains several letters, such as **CH** or **SCH**, alongside ordinary single-letter tiles. Each such tile is **one physical tile**: it takes **one rack slot**, occupies **one board cell**, and has **one configured point value**, irrespective of the number of letters printed on its face. The whole face contributes its letters in order to words formed along the board, and dictionary validation uses the resulting spelling. Tile-frequency and value choices remain part of the selected immutable match ruleset. Preserve the existing single-letter profiles and game authority. How a word's length is compared when hexagonal main-word selection encounters multi-letter faces remains Question 1.22; no length metric is inferred from this choice.
+
+- **1.22** [question] **What makes a word the longest when tiles can have multiple letters?**  
+  Under Decision 1.15, a single tile forming several hexagonal words automatically chooses the longest as the main word. If one candidate uses CH or SCH tiles, should “longest” mean the number of spelled letters, the number of board cells/tiles, or a configurable ruleset setting? The answer changes scoring under the main-word-only premium policy in 1.13. Do not silently choose one until the owner answers.
 
 ## 2. Game clients and interface controls
 
