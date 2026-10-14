@@ -859,11 +859,30 @@ async fn retirement_racing_a_rematch_never_leaves_a_link_for_a_retired_match() {
 
     assert_eq!(stack.games.rematch_link_count().await, 0);
 
-    // Concurrent order: both operations are released together, then one is delayed by a
-    // varying offset so the rounds sweep across the window where creation and retirement meet.
-    // Whichever wins, the registry keeps no link for a retired match, which HTTP cannot show.
+    // Deterministic order, other side: a linked match's retirement removes its registry link.
+    let linked = board_match(&stack, &"a2".repeat(16), now, true).await;
+    let (status, _) = stack
+        .post_json(
+            &format!("/games/{}/rematch", linked.join.match_id),
+            &rematch_body(&"a2".repeat(16), &"a3".repeat(16), now),
+        )
+        .await;
+    assert_eq!(status, 200);
+    assert_eq!(stack.games.rematch_link_count().await, 1);
+    stack
+        .games
+        .retire(&linked.id, linked.join.expires_at)
+        .await
+        .unwrap();
+    assert_eq!(stack.games.rematch_link_count().await, 0);
+    drop(linked.board);
+
+    // Concurrent smoke rounds: both operations are released together, then one is delayed by a
+    // varying offset. Barriers align only start times, not the window between rematch
+    // validation and link insertion, so these rounds do not guarantee a stale interleaving;
+    // that window is guarded structurally by the creation lock shared with retirement.
+    // Whichever order occurs, the registry keeps no link for a retired match.
     let offsets_ms: [i64; 12] = [0, 0, 0, 0, 1, -1, 2, -2, 5, -5, 50, -50];
-    let (mut linked, mut refused) = (0, 0);
     for (round, offset) in offsets_ms.into_iter().enumerate() {
         let nonce = format!("{:02x}", 0xb0 + round).repeat(16);
         let request = format!("{:02x}", 0xd0 + round).repeat(16);
@@ -891,14 +910,13 @@ async fn retirement_racing_a_rematch_never_leaves_a_link_for_a_retired_match() {
             .unwrap()
             .expect("an expired finished match is always retirable");
         match created.0 {
-            200 => linked += 1,
+            200 => {}
             _ => {
                 assert_eq!(
                     created,
                     (404, serde_json::json!({"error": "unknown-match"})),
                     "round {round}"
                 );
-                refused += 1;
             }
         }
         assert_eq!(
@@ -929,9 +947,4 @@ async fn retirement_racing_a_rematch_never_leaves_a_link_for_a_retired_match() {
         assert_eq!(stack.games.rematch_link_count().await, 0);
         drop(finished.board);
     }
-    // The extreme offsets guarantee both orders were exercised, not only one side of the race.
-    assert!(
-        linked > 0 && refused > 0,
-        "linked {linked}, refused {refused}"
-    );
 }
