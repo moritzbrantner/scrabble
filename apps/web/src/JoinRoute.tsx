@@ -65,12 +65,16 @@ export function JoinRoute({
         {...(name === undefined ? {} : { initialName: name })}
         onFollowRematch={(join, previousName) => {
           // Rebuild from the invite whitelist so no other query field follows the player.
-          const location = playerInviteUrl(
-            new URL(window.location.href),
-            join.matchId,
-            Boolean(import.meta.env.DEV),
-            import.meta.env.BASE_URL,
-          );
+          // Ambiguous development fields are dropped from the address rather than blocking the
+          // follow; this tab keeps its already validated connection settings.
+          const page = new URL(window.location.href);
+          const base = import.meta.env.BASE_URL;
+          let location: URL;
+          try {
+            location = playerInviteUrl(page, join.matchId, Boolean(import.meta.env.DEV), base);
+          } catch {
+            location = playerInviteUrl(page, join.matchId, false, base);
+          }
           window.history.replaceState(null, "", location);
           setFollowed({ matchId: join.matchId, name: previousName });
         }}

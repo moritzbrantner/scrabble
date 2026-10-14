@@ -262,6 +262,11 @@ impl Games {
             .insert(finished.as_str().to_owned(), join.clone());
         Ok(join)
     }
+    /// Number of recorded finished-to-rematch links. Diagnostic and test observation only.
+    #[doc(hidden)]
+    pub async fn rematch_link_count(&self) -> usize {
+        self.rematches.lock().await.len()
+    }
     /// Public discovery of a finished match's rematch for its phones.
     pub async fn rematch_of(
         &self,
