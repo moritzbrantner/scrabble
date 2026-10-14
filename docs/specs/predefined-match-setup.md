@@ -18,7 +18,7 @@ creation form's explicit existing default rules and selection.
 
 `GET /profiles` returns version 1, public `wordLists`, `tileProfiles` and
 `boardProfiles` metadata with immutable content identities and safe public tile
-and square-board presentation, plus `defaults.selection` and `defaults.rules`.
+and square-board presentation, plus `defaults.selection`, `defaults.rules` and `defaults.legacyCompatible`.
 It never returns word-list contents, initialization keys, capabilities or
 private state. Catalog discovery uses the existing configured API origin.
 
@@ -32,6 +32,16 @@ error reasons support translated, actionable UI feedback. Retrying identical
 inputs with the same creation key recovers the same game; changing selected
 sources or effective settings under that key returns an explicit conflict.
 The separate shared-board proof remains private and verified by the server.
+
+`defaults.legacyCompatible` is computed by the server from exact effective
+word-set, tile, board and general-rule equivalence to the original deployment
+configuration. Untouched equivalent defaults keep the existing version-2
+creation path and its identities/native-opening fixtures. An explicit selector
+or advanced-rule edit uses version 3, even if the host later restores the
+same values; non-equivalent catalog defaults also require version 3. Equivalent
+legacy defaults do not falsely claim the new composed profile provenance:
+explicit version-3 creation binds the selected source identities; legacy
+version-2 creation retains its original complete configuration identity.
 
 ## Immutable initialization and recovery
 
@@ -73,3 +83,62 @@ Custom word-list libraries (#97:1.8/1.16/1.18/1.20), private tile libraries
 3.4–3.11) remain their owning scopes. This predefined selector does not claim
 those journeys available. #94 retains any original acceptance not delivered by
 this bounded slice; it may not close from a catalog or backend test alone.
+
+## Exact catalog schemas
+
+Operator input (unknown fields rejected):
+
+```json
+{
+  "version": 1,
+  "wordLists": [
+    {
+      "identity": { "name": "words-basic", "revision": "1" },
+      "label": "Basic words",
+      "file": "words.txt"
+    }
+  ],
+  "tileProfiles": [
+    {
+      "identity": { "name": "tiles-standard", "revision": "1" },
+      "label": "Standard tiles",
+      "tiles": []
+    }
+  ],
+  "boardProfiles": [
+    {
+      "identity": { "name": "board-classic", "revision": "1" },
+      "label": "Classic board",
+      "boardSize": 15,
+      "premiums": []
+    }
+  ],
+  "defaultSelection": {
+    "wordList": "words-basic",
+    "tile": "tiles-standard",
+    "board": "board-classic"
+  }
+}
+```
+
+The empty content arrays above illustrate field names only and are invalid
+source profiles; real tile and premium arrays use the existing Ruleset shapes.
+Default names identify operator sources before content fingerprinting. Word-file
+paths resolve relative to the catalog file or are explicit absolute paths.
+Labels are authored content; ordinary control names and errors are translated.
+
+Public catalog output uses `version`, `wordLists`, `tileProfiles`, `boardProfiles`
+and `defaults`. Each word-list row has `identity` and `label`; each tile row
+also has `tiles`; each board row also has `boardSize` and `premiums`. All identities
+are fingerprinted ContentIdentity values. Defaults have `selection` with
+`wordList`, `tile`, `board` identities; `rules` with the six snake_case MatchRules
+fields; and boolean `legacyCompatible`. Paths and words are not included.
+
+Configured creation errors are HTTP 400 `unknown-profile` with `profile`
+(`wordList`, `tile`, or `board`), HTTP 400 `incompatible-profiles` with sorted
+`letters`, HTTP 400 `invalid-match-rules`, and HTTP 409 `creation-conflict`.
+Malformed requests retain HTTP 400 `invalid-request`. None allocates or mutates
+a match. Expected accessible English labels are **Word list**, **Tile profile**,
+**Board layout**, **Advanced match rules**, **Rack size**, **Bingo bonus**,
+**Exchange minimum**, **Scoreless-turn limit**, **Minimum players**, and
+**Maximum players**; localized equivalents cover the same controls.
