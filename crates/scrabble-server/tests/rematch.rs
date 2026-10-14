@@ -777,3 +777,113 @@ async fn rematch_respects_capacity_and_drain_without_recording_a_link() {
     );
     drop(finished.board);
 }
+
+#[tokio::test]
+async fn a_rematch_intent_reusing_the_finished_match_creation_request_is_rejected() {
+    let stack = Stack::new(8, Duration::ZERO).await;
+    let now = unix_seconds().unwrap();
+    let board_nonce = "88".repeat(16);
+    let finished = board_match(&stack, &board_nonce, now, true).await;
+    let path = format!("/games/{}/rematch", finished.join.match_id);
+    let before = stack.evidence(&finished.id).await;
+    let hosted = stack.hosted().await;
+    // Within the creation window, the finished match's own intent derives its own ID.
+    assert_eq!(
+        stack
+            .factory
+            .board_creation_id(&board_nonce, now)
+            .unwrap()
+            .as_str(),
+        finished.join.match_id
+    );
+    assert_eq!(
+        stack
+            .post_json(&path, &rematch_body(&board_nonce, &board_nonce, now))
+            .await,
+        (400, serde_json::json!({"error": "invalid-request"})),
+        "a match cannot become its own rematch"
+    );
+    assert_eq!(stack.hosted().await, hosted);
+    assert_eq!(
+        stack.get(&path).await,
+        (404, serde_json::json!({"error": "no-rematch"}))
+    );
+    let after = stack.evidence(&finished.id).await;
+    assert_eq!(after.canonical["game"], before.canonical["game"]);
+    assert!(after.records == before.records);
+    // A genuine new intent still succeeds afterwards.
+    let (status, created) = stack
+        .post_json(&path, &rematch_body(&board_nonce, &"99".repeat(16), now))
+        .await;
+    assert_eq!(status, 200, "{created}");
+    assert_ne!(
+        created["matchId"],
+        serde_json::json!(finished.join.match_id)
+    );
+    drop(finished.board);
+}
+
+#[tokio::test]
+async fn retirement_racing_a_rematch_never_leaves_a_link_for_a_retired_match() {
+    let stack = Stack::new(8, Duration::ZERO).await;
+    let now = unix_seconds().unwrap();
+
+    // Deterministic order: once retired, a rematch is refused and nothing is recorded.
+    let retired = board_match(&stack, &"a0".repeat(16), now, true).await;
+    let path = format!("/games/{}/rematch", retired.join.match_id);
+    stack
+        .games
+        .retire(&retired.id, retired.join.expires_at)
+        .await
+        .unwrap();
+    let hosted = stack.hosted().await;
+    let body = rematch_body(&"a0".repeat(16), &"a1".repeat(16), now);
+    assert_eq!(
+        stack.post_json(&path, &body).await,
+        (404, serde_json::json!({"error": "unknown-match"}))
+    );
+    assert_eq!(stack.hosted().await, hosted, "no rematch was created");
+    assert_eq!(
+        stack.get(&path).await,
+        (404, serde_json::json!({"error": "unknown-match"}))
+    );
+    drop(retired.board);
+
+    // Concurrent order: whichever wins, a retired match never exposes a rematch link.
+    for round in 0..3_u8 {
+        let nonce = format!("{:02x}", 0xb0 + round).repeat(16);
+        let request = format!("{:02x}", 0xc0 + round).repeat(16);
+        let finished = board_match(&stack, &nonce, now, true).await;
+        let path = format!("/games/{}/rematch", finished.join.match_id);
+        let body = rematch_body(&nonce, &request, now);
+        let (retirement, created) = tokio::join!(
+            stack.games.retire(&finished.id, finished.join.expires_at),
+            stack.post_json(&path, &body)
+        );
+        retirement.expect("an expired finished match is always retirable");
+        assert!(
+            created.0 == 200 || created == (404, serde_json::json!({"error": "unknown-match"})),
+            "{created:?}"
+        );
+        assert!(
+            stack
+                .host
+                .statuses()
+                .await
+                .iter()
+                .all(|status| status.id != finished.id),
+            "the finished match is gone"
+        );
+        assert_eq!(
+            stack.get(&path).await,
+            (404, serde_json::json!({"error": "unknown-match"})),
+            "round {round}: no link survives retirement"
+        );
+        assert_eq!(
+            stack.post_json(&path, &body).await,
+            (404, serde_json::json!({"error": "unknown-match"})),
+            "round {round}: a retry cannot revive the link"
+        );
+        drop(finished.board);
+    }
+}
