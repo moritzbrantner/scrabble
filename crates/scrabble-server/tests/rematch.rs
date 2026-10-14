@@ -660,7 +660,11 @@ async fn board_rematch_is_one_fresh_lobby_linked_once_and_leaves_the_finished_ma
         after.records == before.records,
         "replay evidence of the finished match is unchanged"
     );
-    let still = snapshot(&finished.phones[1].connection, |_| true).await;
+    // This connection's earlier datagrams were never drained; skip buffered pre-finish projections.
+    let still = snapshot(&finished.phones[1].connection, |view| {
+        view.public.revision.get() >= finished_view.public.revision.get()
+    })
+    .await;
     assert_eq!(still.public.phase, finished_view.public.phase);
     assert_eq!(still.public.revision, finished_view.public.revision);
     assert_eq!(still.public.history, finished_view.public.history);
