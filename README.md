@@ -4,7 +4,7 @@ A shared-board and private-phone multiplayer Scrabble application, under constru
 
 ## Development
 
-Install Bun 1.4.2 and Rust (the toolchain file selects 1.98.1 with Clippy and rustfmt). From a fresh checkout:
+Install Bun 1.4.2 and Rust (the toolchain file selects 1.99.0 with Clippy and rustfmt). From a fresh checkout:
 
 ```sh
 bun install --frozen-lockfile
@@ -12,6 +12,8 @@ cargo fetch --locked
 bunx playwright install --with-deps chromium
 bun run check
 ```
+
+An optional locked Nix shell (`nix develop`, from `flake.nix`/`flake.lock`) provides Bun 1.4.2, Git and rustup; rustup still takes the exact Rust toolchain from `rust-toolchain.toml`, and Playwright's Chromium is still installed with the command above. Required CI does not use Nix: the manual `Scrabble Provisioning Comparison` workflow runs the identical `bun run check` under conventional and Nix provisioning to measure them (#81). To roll the pilot back, delete `flake.nix`, `flake.lock` and that workflow; nothing else depends on them.
 
 For a playable local game, prepare the English dictionary once, then run `bun run dev:local` and open the complete game URL it prints. This starts the canonical local Compose server and the browser client together. See [local game setup](docs/specs/server-executable.md#local-game-setup) for prerequisites and persistent storage.
 
