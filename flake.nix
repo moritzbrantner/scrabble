@@ -48,6 +48,7 @@
               mkdir -p "$out/bin"
               unzip -q "$src"
               install -m755 "${bunAsset.archive}/bun" "$out/bin/bun"
+              ln -s bun "$out/bin/bunx"
             '';
           };
         in
