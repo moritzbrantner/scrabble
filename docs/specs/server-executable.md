@@ -78,3 +78,26 @@ Send SIGINT or SIGTERM for graceful shutdown. The runtime marks readiness unavai
 `cargo test -p scrabble-server --locked` exercises configuration, factory, simulation and a Unix real-executable test. The process test allocates OS-assigned UDP/TCP ports and temporary TLS/state files, uses actual WebTransport clients, hosts two independent matches, sends SIGTERM, restarts and reconnects with preserved racks/turns and fenced sequences. It needs neither a browser nor external services. The usual `bun run check` includes this evidence plus the existing Chromium adapter acceptance.
 
 Shared convention sourceRevision: `46d8793bb3034326561f876dcc67dbaa5aa1e432`.
+
+## Independent predefined match setup
+
+The create-game form can select an operator-provided word list, tile profile and
+square-board profile independently, plus advanced rack/scoring/exchange/player
+rules. See [the catalog and initialization contract](predefined-match-setup.md).
+`SCRABBLE_PROFILE_CATALOG_FILE` points to the strict source catalog; relative
+word paths resolve beside that file. Without a catalog, the existing deployment
+configuration remains available, including unchanged untouched v2 creation.
+Explicit edits use configured v3 creation and an opaque `p_` match ID.
+
+`SCRABBLE_MATCH_CONFIGURATION_DIR` defaults to `configurations/` beside the seed.
+In production use an absolute durable directory separate from runtime recovery.
+Preserve it with the seed and recovery during upgrades. It holds authenticated
+per-match initialization and shared immutable word versions, not private racks
+or command authority. Deleting/corrupting required inputs fails recovery closed.
+Source edits apply only to future selections. The existing v1 rematch API creates
+a new deployment-default v2 game; configured-profile carryover is not promised.
+
+Release the frontend and server together: the three-selector frontend needs the
+real public catalog API and configured-match routing. Public availability still
+requires the feature's recorded post-deployment owner journey, rather than a
+successful local fixture.

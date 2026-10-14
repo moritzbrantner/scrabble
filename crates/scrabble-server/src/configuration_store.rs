@@ -9,7 +9,7 @@ use crate::{
 };
 use game_server::MatchId;
 use ring::{
-    digest,
+    digest, hmac,
     rand::{SecureRandom, SystemRandom},
 };
 use scrabble_game::{dictionary::WordList, ruleset::Ruleset};
@@ -30,6 +30,7 @@ struct Manifest {
     sources: ProfileSelection,
     rules: Ruleset,
     dictionary_hash: String,
+    authentication: String,
 }
 pub(crate) struct RegisteredConfiguration {
     pub selection: Selection,
@@ -37,6 +38,7 @@ pub(crate) struct RegisteredConfiguration {
 }
 pub(crate) struct ConfigurationStore {
     directory: PathBuf,
+    key: hmac::Key,
     cache: Mutex<HashMap<String, Arc<RegisteredConfiguration>>>,
     dictionaries: Mutex<HashSet<String>>,
     restored_words: Mutex<HashMap<String, Arc<WordListProfile>>>,
@@ -78,6 +80,9 @@ fn publish(path: &Path, bytes: &[u8]) -> ErrorResult<()> {
         #[cfg(unix)]
         {
             fs::File::open(parent)?.sync_all()?;
+            if let Some(ancestor) = parent.parent().filter(|path| !path.as_os_str().is_empty()) {
+                fs::File::open(ancestor)?.sync_all()?;
+            }
         }
         Ok(())
     })();
@@ -88,13 +93,25 @@ fn publish(path: &Path, bytes: &[u8]) -> ErrorResult<()> {
     Ok(())
 }
 impl ConfigurationStore {
-    pub fn new(directory: PathBuf) -> Self {
+    pub fn new(directory: PathBuf, key: hmac::Key) -> Self {
         Self {
             directory,
+            key,
             cache: Mutex::new(HashMap::new()),
             dictionaries: Mutex::new(HashSet::new()),
             restored_words: Mutex::new(HashMap::new()),
         }
+    }
+    fn authenticated_bytes(id: &MatchId, manifest: &Manifest) -> ErrorResult<Vec<u8>> {
+        Ok(serde_json::to_vec(&(
+            "scrabble/configured-initialization/v1",
+            id.as_str(),
+            manifest.version,
+            &manifest.selection,
+            &manifest.sources,
+            &manifest.rules,
+            &manifest.dictionary_hash,
+        ))?)
     }
     fn manifest(&self, id: &MatchId) -> PathBuf {
         self.directory.join(format!("{}.json", id.as_str()))
@@ -125,6 +142,22 @@ impl ConfigurationStore {
         {
             return Err("invalid persisted initialization".into());
         }
+        let signature = (0..manifest.authentication.len())
+            .step_by(2)
+            .map(|index| {
+                manifest
+                    .authentication
+                    .get(index..index + 2)
+                    .and_then(|pair| u8::from_str_radix(pair, 16).ok())
+                    .ok_or("invalid initialization authenticator")
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        hmac::verify(
+            &self.key,
+            &Self::authenticated_bytes(id, &manifest)?,
+            &signature,
+        )
+        .map_err(|_| "initialization authentication failed")?;
         let key = serde_json::to_string(&(&manifest.sources.word_list, &manifest.dictionary_hash))?;
         let cached = self
             .restored_words
@@ -205,13 +238,17 @@ impl ConfigurationStore {
             versions.insert(prepared.word_hash.clone());
         }
         drop(versions);
-        let manifest = Manifest {
+        let mut manifest = Manifest {
             version: 1,
             selection: selection.clone(),
             sources: prepared.sources,
             rules: prepared.composed.rules.clone(),
             dictionary_hash: prepared.word_hash,
+            authentication: String::new(),
         };
+        manifest.authentication = crate::dictionary::hexadecimal(
+            hmac::sign(&self.key, &Self::authenticated_bytes(id, &manifest)?).as_ref(),
+        );
         publish(&self.manifest(id), &serde_json::to_vec(&manifest)?)?;
         self.cache
             .lock()

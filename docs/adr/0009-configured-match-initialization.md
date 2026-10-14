@@ -11,8 +11,8 @@ than a silent fallback to the current deployment configuration.
 
 Persist selected source identities, original source identities and effective
 Ruleset before publishing a configured match. Store one content-addressed
-normalized word set per selected content version, shared across matches. Atomic
-no-overwrite publication and full fingerprint verification prevent a retry,
+normalized word set per selected content version, shared across matches. Seed-keyed domain-separated authentication binds each manifest to its exact
+match ID. Atomic no-overwrite publication and full fingerprint verification prevent a retry,
 source edit or corrupted file from replacing a match's original inputs. No
 creation nonce, seed, rack or mutable game state belongs in these manifests.
 Canonical reconstruction reuses the same source constructors/composer and then

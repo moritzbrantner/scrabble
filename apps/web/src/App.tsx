@@ -5,7 +5,7 @@ import { CreateBoard } from "./CreateBoard";
 import { fixtures } from "./fixtures";
 import { moenarchLaunch, reportMoenarchMatch } from "./moenarch-launch";
 import { JoinRoute } from "./JoinRoute";
-import { LiveBoard } from "./LiveBoard";
+import { ConnectedBoard } from "./ConnectedBoard";
 import { useCopy } from "./preferences";
 import { SharedBoard } from "./SharedBoard";
 
@@ -68,7 +68,7 @@ export function App() {
   }
   if (endpoint && matchId) {
     return (
-      <LiveBoard
+      <ConnectedBoard
         endpoint={endpoint}
         matchId={matchId}
         onBoardOwned={reportMoenarchMatch}

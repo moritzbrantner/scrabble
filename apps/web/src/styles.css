@@ -514,7 +514,7 @@ body {
 }
 .match-setup input {
   min-height: 2.75rem;
-  background: var(--surface);
+  background: var(--background);
   color: inherit;
   border: 1px solid currentColor;
   padding: 0.5rem;

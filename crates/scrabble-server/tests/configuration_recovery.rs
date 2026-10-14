@@ -183,6 +183,15 @@ async fn configured_initialization_corruption_never_falls_back_and_exact_restora
         Some(&serde_json::json!({"version":2,"requestId":"98".repeat(16),"requestedAt":now})),
     )
     .await;
+    let mut different = request.clone();
+    different["requestId"] = "99".repeat(16).into();
+    different["rules"]["bingo_bonus"] = 17.into();
+    let different_join = api(api_port, "POST", "/games", Some(&different)).await;
+    let foreign_manifest = fs::read(root.join("configurations").join(format!(
+        "{}.json",
+        different_join["matchId"].as_str().unwrap()
+    )))
+    .unwrap();
     let client = Endpoint::client(
         ClientConfig::builder()
             .with_bind_default()
@@ -206,7 +215,7 @@ async fn configured_initialization_corruption_never_falls_back_and_exact_restora
     let word_bytes = fs::read(&words).unwrap();
     let image =
         RecoveryImage::read_file(&root.join("recovery").join(format!("{id}.recovery"))).unwrap();
-    for scenario in 0..5 {
+    for scenario in 0..6 {
         match scenario {
             0 => fs::remove_file(&manifest).unwrap(),
             1 => fs::write(&manifest, b"{").unwrap(),
@@ -218,6 +227,7 @@ async fn configured_initialization_corruption_never_falls_back_and_exact_restora
             }
             3 => fs::remove_file(&words).unwrap(),
             4 => fs::write(&words, b"ZZ\n").unwrap(),
+            5 => fs::write(&manifest, &foreign_manifest).unwrap(),
             _ => unreachable!(),
         }
         let factory = MatchFactory::new(&ServerConfig::from_values(&values).unwrap()).unwrap();

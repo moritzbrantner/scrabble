@@ -91,7 +91,13 @@ fn seed(config: &ServerConfig) -> ErrorResult<[u8; 32]> {
             Ok(seed)
         }
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
-            if config.recovery_directory.exists() {
+            if config.recovery_directory.exists()
+                || (config.match_configuration_directory.exists()
+                    && fs::read_dir(&config.match_configuration_directory)?
+                        .next()
+                        .transpose()?
+                        .is_some())
+            {
                 return Err(
                     "recovery exists without its initialization seed; refusing new initialization"
                         .into(),
@@ -136,12 +142,14 @@ impl MatchFactory {
             &rules,
             &dictionary,
         )?;
+        let key = hmac::Key::new(hmac::HMAC_SHA256, &seed(config)?);
         Ok(Self {
             catalog: Arc::new(catalog),
             store: Arc::new(crate::configuration_store::ConfigurationStore::new(
                 config.match_configuration_directory.clone(),
+                key.clone(),
             )),
-            key: hmac::Key::new(hmac::HMAC_SHA256, &seed(config)?),
+            key,
             rules,
             dictionary,
         })

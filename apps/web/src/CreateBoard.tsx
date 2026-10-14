@@ -9,7 +9,7 @@ import {
   type CreateRequest,
   type JoinInformation,
 } from "./create-game";
-import { LiveBoard } from "./LiveBoard";
+import { ConnectedBoard } from "./ConnectedBoard";
 import { reportMoenarchMatch } from "./moenarch-launch";
 import { useCopy } from "./preferences";
 import { fetchProfiles } from "./profile-catalog";
@@ -155,7 +155,7 @@ export function CreateBoard({
   if (state.kind === "created") {
     return (
       <>
-        <LiveBoard
+        <ConnectedBoard
           key={state.join.matchId}
           onBoardOwned={reportMoenarchMatch}
           api={api}
