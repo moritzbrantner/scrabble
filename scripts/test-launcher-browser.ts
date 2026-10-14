@@ -60,7 +60,7 @@ try {
     ...process.env,
     CARGO_TARGET_DIR: target,
   });
-  await run(["bun", "run", "build"], join(setupRoot, "web"));
+  await run([process.env.SCRABBLE_SETUP_BUN ?? "bun", "run", "build"], join(setupRoot, "web"));
   const gameDirectory = join(directory, "games");
   const game = Bun.spawn(
     [

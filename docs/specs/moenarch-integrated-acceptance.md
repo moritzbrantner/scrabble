@@ -99,3 +99,21 @@ physical phones and the public post-merge deployment remain outside this
 local gateway result. Record **Awaiting live deployment verification** on #80
 before requesting merge and keep/reopen it until actual public acceptance is
 recorded. Public endpoints existing or a green local fixture do not close #80.
+
+## Independent local-network permission correction
+
+The first adapter candidate reached authoritative creation but public Pages
+origin → loopback native WebTransport failed with “Unable to connect”.
+Chromium gates that local-fixture topology behind local-network permission.
+Granting `local-network-access` **only to the trusted github.io origin in the
+three test browser contexts** made the entire real journey pass, including
+legal AT, distinct identities/private racks, reconnect, rematch without
+replacing the original binding, and actual setup expiry followed by canonical
+player reconnect. TLS verification and the explicit test certificate fingerprint
+remain intact; production application code receives no permission override.
+The observed diagnostic run used Bun 1.4.0 and is not exact-toolchain acceptance.
+Final candidate verification uses Scrabble's pinned Bun 1.4.2; the optional
+`SCRABBLE_SETUP_BUN` executable override lets the runner build the upstream
+launcher with that repository's separately pinned Bun 1.4.0. Record that final
+run and both source revisions on issue #80 rather than inferring public live
+acceptance from this local gateway result.

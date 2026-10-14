@@ -98,6 +98,12 @@ test("actual moenarch launcher creates one authoritative board, two players comm
   const secondContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
   let creations = 0;
   for (const context of [hostContext, firstContext, secondContext]) {
+    // The gateway preserves public Pages origin while the native transport is
+    // intentionally loopback. Grant this local-fixture permission only here;
+    // normal TLS and pinned test-certificate verification remain active.
+    await context.grantPermissions(["local-network-access"], {
+      origin: "https://moritzbrantner.github.io",
+    });
     await gateway(context, () => {
       creations++;
     });
