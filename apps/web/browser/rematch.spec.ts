@@ -56,7 +56,8 @@ test("finished match shows a summary and the board starts a one-tap rematch", as
       [ada, "Ada"],
       [lin, "Lin"],
     ] as const) {
-      await phone.goto(invite);
+      // Ada's invite carries extra private-looking fields that must not follow her to the rematch.
+      await phone.goto(phone === ada ? `${invite}&token=deadbeef&name=Ada` : invite);
       await phone.getByLabel("Player name", { exact: true }).fill(name);
       await phone.getByRole("button", { name: "Join game", exact: true }).click();
       await expect(phone.getByRole("heading", { name, exact: true })).toBeVisible();
@@ -140,7 +141,14 @@ test("finished match shows a summary and the board starts a one-tap rematch", as
     expect(rematchId).not.toBe(finishedId);
     expect([...rematchUrl.searchParams.keys()].sort()).toEqual(["match", "view"]);
     expect(new URL(page.url()).searchParams.get("match")).toBe(rematchId);
-    expect(page.url()).not.toMatch(/requestId|boardRequestId|token|Ada|Lin/i);
+    // Fail closed on parameter names and whole values; hex IDs may contain letters like "ada".
+    const boardParams = new URL(page.url()).searchParams;
+    expect([...boardParams.keys()].every((key) => ["match", "view", "lang"].includes(key))).toBe(
+      true,
+    );
+    expect(
+      [...boardParams.values()].some((value) => ["ada", "lin"].includes(value.toLowerCase())),
+    ).toBe(false);
     await expect(page.getByRole("button", { name: "Start game", exact: true })).toBeVisible();
     const linked = await request.get(lookup);
     expect(linked.status()).toBe(200);
@@ -160,7 +168,7 @@ test("finished match shows a summary and the board starts a one-tap rematch", as
     expect(adaUrl.searchParams.get("view")).toBe("player");
     expect(adaUrl.searchParams.get("match")).toBe(rematchId);
     expect([...adaUrl.searchParams.keys()].sort()).toEqual(["match", "view"]);
-    expect(ada.url()).not.toMatch(/token|reconnect|sequence|Ada/i);
+    expect([...adaUrl.searchParams.values()].sort()).toEqual([rematchId, "player"].sort());
     const routes = await ada.evaluate(() =>
       Object.keys(sessionStorage)
         .filter((key) => key.startsWith("scrabble:player:v1:"))

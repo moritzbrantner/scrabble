@@ -244,6 +244,10 @@ impl Games {
             .factory
             .board_creation_id(&request.request_id, request.requested_at)
             .map_err(|_| GameOperationError::Internal)?;
+        if &id == finished {
+            // Reusing the finished match's own creation intent would link it to itself.
+            return Err(GameOperationError::InvalidRequest);
+        }
         if let Some(existing) = self.rematches.lock().await.get(finished.as_str()) {
             return if existing.match_id == id.as_str() {
                 Ok(existing.clone())
@@ -257,6 +261,11 @@ impl Games {
             .await
             .insert(finished.as_str().to_owned(), join.clone());
         Ok(join)
+    }
+    /// Number of recorded finished-to-rematch links. Diagnostic and test observation only.
+    #[doc(hidden)]
+    pub async fn rematch_link_count(&self) -> usize {
+        self.rematches.lock().await.len()
     }
     /// Public discovery of a finished match's rematch for its phones.
     pub async fn rematch_of(
@@ -373,6 +382,8 @@ impl Games {
         })
     }
     pub async fn retire(&self, id: &MatchId, now: u64) -> Result<(), GameOperationError> {
+        // Serialized with creation so a racing rematch cannot link a match retired meanwhile.
+        let _creation = self.creation.lock().await;
         let due = self
             .host
             .inspect(id, |runtime| {

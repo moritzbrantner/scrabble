@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 
 import { copy, type Copy } from "./copy";
 import { JoinError, lookupGame } from "./create-game";
-import { validInviteId } from "./player-invite";
+import { playerInviteUrl, validInviteId } from "./player-invite";
 import { PlayerPhone } from "./PlayerPhone";
 import { useCopy } from "./preferences";
 
@@ -64,8 +64,17 @@ export function JoinRoute({
         key={matchId}
         {...(name === undefined ? {} : { initialName: name })}
         onFollowRematch={(join, previousName) => {
-          const location = new URL(window.location.href);
-          location.searchParams.set("match", join.matchId);
+          // Rebuild from the invite whitelist so no other query field follows the player.
+          // Ambiguous development fields are dropped from the address rather than blocking the
+          // follow; this tab keeps its already validated connection settings.
+          const page = new URL(window.location.href);
+          const base = import.meta.env.BASE_URL;
+          let location: URL;
+          try {
+            location = playerInviteUrl(page, join.matchId, Boolean(import.meta.env.DEV), base);
+          } catch {
+            location = playerInviteUrl(page, join.matchId, false, base);
+          }
           window.history.replaceState(null, "", location);
           setFollowed({ matchId: join.matchId, name: previousName });
         }}
