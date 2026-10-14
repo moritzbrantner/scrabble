@@ -51,32 +51,84 @@ pub struct Ruleset {
     pub minimum_players: u8,
     pub maximum_players: u8,
 }
-impl Ruleset {
+impl ContentIdentity {
     pub fn validate(&self) -> Result<(), ContractError> {
-        for identity in [&self.identity, &self.dictionary] {
-            if identity.name.is_empty()
-                || identity.name.len() > 64
-                || !identity
-                    .name
-                    .bytes()
-                    .all(|byte| byte.is_ascii_alphanumeric() || b"-_.".contains(&byte))
-                || identity.revision.is_empty()
-                || identity.revision.len() > 192
-                || !identity
-                    .revision
-                    .bytes()
-                    .all(|byte| byte.is_ascii_alphanumeric() || b"-_.+:".contains(&byte))
-            {
-                return Err(ContractError(
-                    "content identity requires bounded identifiers and revisions".into(),
-                ));
+        if self.name.is_empty()
+            || self.name.len() > 64
+            || !self
+                .name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"-_.".contains(&byte))
+            || self.revision.is_empty()
+            || self.revision.len() > 192
+            || !self
+                .revision
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"-_.+:".contains(&byte))
+        {
+            return Err(ContractError(
+                "content identity requires bounded identifiers and revisions".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Square-board invariants shared by source profiles and effective match configurations.
+pub fn validate_board(board_size: u8, premiums: &[Premium]) -> Result<(), ContractError> {
+    if board_size == 0
+        || board_size > 15
+        || board_size.is_multiple_of(2)
+        || premiums.len() != usize::from(board_size).pow(2)
+    {
+        return Err(ContractError(
+            "invalid ruleset dimensions or turn limits".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// Tile-source invariants, independent of the selected rack size and player count.
+pub fn validate_tiles(tiles: &[TileDefinition]) -> Result<u32, ContractError> {
+    if tiles.len() > 64 {
+        return Err(ContractError(
+            "tile alphabet exceeds supported bound".into(),
+        ));
+    }
+    let mut letters = BTreeSet::new();
+    let mut blank = false;
+    let mut total = 0_u32;
+    for tile in tiles {
+        if tile.count == 0 {
+            return Err(ContractError("empty tile definition".into()));
+        }
+        total += u32::from(tile.count);
+        match tile.face {
+            TileFace::Letter { letter } => {
+                if !letter.is_alphabetic() || !letters.insert(letter) {
+                    return Err(ContractError("invalid or duplicate alphabet letter".into()));
+                }
+            }
+            TileFace::Blank {} => {
+                if blank || tile.value != 0 {
+                    return Err(ContractError("invalid blank definition".into()));
+                }
+                blank = true;
             }
         }
-        if self.board_size == 0
-            || self.board_size > 15
-            || self.board_size.is_multiple_of(2)
-            || self.premiums.len() != usize::from(self.board_size).pow(2)
-            || self.rack_size == 0
+    }
+    if letters.is_empty() || total > 200 {
+        return Err(ContractError("invalid tile distribution".into()));
+    }
+    Ok(total)
+}
+
+impl Ruleset {
+    pub fn validate(&self) -> Result<(), ContractError> {
+        self.identity.validate()?;
+        self.dictionary.validate()?;
+        validate_board(self.board_size, &self.premiums)?;
+        if self.rack_size == 0
             || self.rack_size > 15
             || self.scoreless_turn_limit == 0
             || self.minimum_players < 2
@@ -87,37 +139,8 @@ impl Ruleset {
                 "invalid ruleset dimensions or turn limits".into(),
             ));
         }
-        if self.tiles.len() > 64 {
-            return Err(ContractError(
-                "tile alphabet exceeds supported bound".into(),
-            ));
-        }
-        let mut letters = BTreeSet::new();
-        let mut blank = false;
-        let mut total = 0_u32;
-        for tile in &self.tiles {
-            if tile.count == 0 {
-                return Err(ContractError("empty tile definition".into()));
-            }
-            total += u32::from(tile.count);
-            match tile.face {
-                TileFace::Letter { letter } => {
-                    if !letter.is_alphabetic() || !letters.insert(letter) {
-                        return Err(ContractError("invalid or duplicate alphabet letter".into()));
-                    }
-                }
-                TileFace::Blank {} => {
-                    if blank || tile.value != 0 {
-                        return Err(ContractError("invalid blank definition".into()));
-                    }
-                    blank = true;
-                }
-            }
-        }
-        if letters.is_empty()
-            || total < u32::from(self.maximum_players) * u32::from(self.rack_size)
-            || total > 200
-        {
+        let total = validate_tiles(&self.tiles)?;
+        if total < u32::from(self.maximum_players) * u32::from(self.rack_size) {
             return Err(ContractError("invalid tile distribution".into()));
         }
         Ok(())

@@ -5,6 +5,7 @@ pub mod factory;
 pub mod game_api;
 pub mod games;
 pub mod hosting;
+pub mod profiles;
 pub mod simulation;
 
 pub mod replay;
