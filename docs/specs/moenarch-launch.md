@@ -18,10 +18,13 @@ https://moritzbrantner.github.io/scrabble/?launch=moenarch&session=0123ABCDEFGH&
 This explicit board route offers **Create game**. The popup creates its match
 through Scrabble's existing idempotent creation API and keeps the private
 creation proof and board reconnect capsule in their existing tab-owned
-boundaries. After creation it adds the canonical match ID to its own URL and
-reports only `{type:"scrabble-match-created",session,match}` to its opener,
+boundaries. After creation it adds the canonical match ID to its own URL. Only after an
+authoritative snapshot confirms that this connection owns the board does it
+report `{type:"scrabble-match-created",session,match}` to its opener,
 using the fixed target origin `https://moenarch.com`. Reloading a linked board
-can repeat that public report, allowing an identical binding retry. Rematches
+can repeat that public report only after its private reconnect capsule has
+restored authoritative board ownership, allowing an identical binding retry.
+An HTTP creation response or a public match URL alone never publishes a binding. Rematches
 remove the original `launch` and `session` fields and never replace the original
 lobby's immutable reference.
 
@@ -50,7 +53,8 @@ or incompatible routing identities fail before admission.
 The player invitation and QR retain only supported public routing fields,
 match identity and optional language. They never forward creation proofs,
 participant tokens, reconnect capabilities, arbitrary query fields or URL
-fragments. A canonical Pages match invitation continues to work after setup
+fragments. Following a rematch also removes the original lobby context from
+the phone route, because that context belongs only to the finished match. A canonical Pages match invitation continues to work after setup
 lobby expiry; Pages does not require another setup lookup to reconnect to its
 independent, longer-lived Scrabble match. An expired launcher invitation itself
 cannot resolve a discarded binding and reports that failure. Reloading the

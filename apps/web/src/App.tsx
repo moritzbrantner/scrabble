@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { connectionSettings, type ConnectionMode } from "./connection-settings";
 import { CreateBoard } from "./CreateBoard";
@@ -16,12 +16,6 @@ export function App() {
     typeof window === "undefined" ? null : new URLSearchParams(window.location.search),
   );
   const launch = moenarchLaunch(connection ?? new URLSearchParams());
-  useEffect(() => {
-    const match = connection?.get("match");
-    if (match) {
-      reportMoenarchMatch(match);
-    }
-  }, [connection]);
   if (launch.kind === "invalid" || launch.kind === "unbound") {
     return (
       <main className="create-board">
@@ -73,7 +67,14 @@ export function App() {
     );
   }
   if (endpoint && matchId) {
-    return <LiveBoard endpoint={endpoint} matchId={matchId} {...localTrust} />;
+    return (
+      <LiveBoard
+        endpoint={endpoint}
+        matchId={matchId}
+        onBoardOwned={reportMoenarchMatch}
+        {...localTrust}
+      />
+    );
   }
   if (endpoint && api) {
     return <CreateBoard endpoint={endpoint} api={api} {...localTrust} />;

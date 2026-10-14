@@ -48,7 +48,6 @@ export function CreateBoard({
         location.searchParams.set("match", join.matchId);
         window.history.replaceState(null, "", location);
         setState({ kind: "created", join });
-        reportMoenarchMatch(join.matchId);
       }
     } catch (error) {
       if (!controller.signal.aborted) {
@@ -65,6 +64,7 @@ export function CreateBoard({
       <>
         <LiveBoard
           key={state.join.matchId}
+          onBoardOwned={reportMoenarchMatch}
           api={api}
           onRematch={(join, rematchRequest) => {
             request.current = rematchRequest;

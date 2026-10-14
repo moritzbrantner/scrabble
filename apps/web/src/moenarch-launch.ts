@@ -41,7 +41,7 @@ export function moenarchLaunch(params: URLSearchParams): MoenarchLaunch {
   return { kind: "linked", sessionId: sessions[0] ?? "" };
 }
 
-/** Only public routing crosses origins. The creating board retains its private proof. */
+/** Invoke only after authoritative board ownership is confirmed; send public routing only. */
 export function reportMoenarchMatch(matchId: string): void {
   const page = new URL(window.location.href);
   const launch = moenarchLaunch(page.searchParams);

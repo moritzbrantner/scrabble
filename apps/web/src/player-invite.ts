@@ -24,7 +24,7 @@ export function playerInviteUrl(
   const invite = new URL(base, page.origin);
   invite.searchParams.set("view", "player");
   invite.searchParams.set("match", matchId);
-  if (launch.kind === "linked") {
+  if (launch.kind === "linked" && page.searchParams.get("match") === matchId) {
     invite.searchParams.set("launch", "moenarch");
     invite.searchParams.set("session", launch.sessionId);
   }
