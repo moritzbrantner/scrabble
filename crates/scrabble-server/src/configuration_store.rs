@@ -129,7 +129,17 @@ impl ConfigurationStore {
         let path = self.manifest(id);
         match fs::symlink_metadata(&path) {
             Ok(_) => {}
-            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                if self
+                    .cache
+                    .lock()
+                    .map_err(|_| "initialization cache unavailable")?
+                    .contains_key(id.as_str())
+                {
+                    return Err("persisted match initialization is missing".into());
+                }
+                return Ok(None);
+            }
             Err(error) => return Err(error.into()),
         }
         let manifest: Manifest = serde_json::from_slice(&regular_bytes(&path, 128 * 1024)?)?;

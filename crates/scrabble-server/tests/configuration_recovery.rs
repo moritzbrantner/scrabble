@@ -81,11 +81,31 @@ async fn api(
     path: &str,
     body: Option<&serde_json::Value>,
 ) -> serde_json::Value {
-    timeout(Duration::from_secs(5),async {
-        let body=body.map(serde_json::Value::to_string).unwrap_or_default();let mut stream=tokio::net::TcpStream::connect(("127.0.0.1",port)).await.unwrap();
+    let (status, body) = api_response(port, method, path, body).await;
+    assert_eq!(status, 200, "{body}");
+    body
+}
+async fn api_response(
+    port: u16,
+    method: &str,
+    path: &str,
+    body: Option<&serde_json::Value>,
+) -> (u16, serde_json::Value) {
+    timeout(Duration::from_secs(5), async {
+        let body = body.map(serde_json::Value::to_string).unwrap_or_default();
+        let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .unwrap();
         stream.write_all(format!("{method} {path} HTTP/1.1\r\nHost: localhost\r\nOrigin: http://localhost:5173\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).as_bytes()).await.unwrap();
-        let mut bytes=Vec::new();stream.take(128*1024).read_to_end(&mut bytes).await.unwrap();let text=String::from_utf8(bytes).unwrap();assert!(text.starts_with("HTTP/1.1 200"),"{text}");serde_json::from_str(text.split_once("\r\n\r\n").unwrap().1).unwrap()
-    }).await.unwrap()
+        let mut bytes = Vec::new();
+        stream.take(128 * 1024).read_to_end(&mut bytes).await.unwrap();
+        let text = String::from_utf8(bytes).unwrap();
+        let (headers, body) = text.split_once("\r\n\r\n").unwrap();
+        let status = headers.split_whitespace().nth(1).unwrap().parse().unwrap();
+        (status, serde_json::from_str(body).unwrap())
+    })
+    .await
+    .unwrap()
 }
 async fn connect(
     client: &Endpoint<wtransport::endpoint::endpoint_side::Client>,
@@ -201,6 +221,41 @@ async fn configured_initialization_corruption_never_falls_back_and_exact_restora
     .unwrap();
     let (original, credential, before) =
         connect(&client, port, configured["matchPath"].as_str().unwrap()).await;
+    let live_manifest = root
+        .join("configurations")
+        .join(format!("{}.json", configured["matchId"].as_str().unwrap()));
+    let original_initialization = fs::read(&live_manifest).unwrap();
+    fs::remove_file(&live_manifest).unwrap();
+    let mut changed_retry = request.clone();
+    changed_retry["rules"]["bingo_bonus"] = 17.into();
+    let (status, rejected) = api_response(api_port, "POST", "/games", Some(&changed_retry)).await;
+    assert!(
+        (400..600).contains(&status),
+        "changed retry must fail closed"
+    );
+    assert!(
+        rejected["error"]
+            .as_str()
+            .is_some_and(|error| !error.is_empty())
+    );
+    assert!(
+        !live_manifest.exists(),
+        "missing initialization cannot be replaced with new rules"
+    );
+    assert_eq!(
+        api(status_port, "GET", "/status", None).await["capacity"]["hostedMatches"],
+        3,
+        "a failed changed retry cannot allocate another match"
+    );
+    let (other, _, still_live) =
+        connect(&client, port, configured["matchPath"].as_str().unwrap()).await;
+    assert_eq!(still_live.public.configuration, before.public.configuration);
+    fs::write(&live_manifest, &original_initialization).unwrap();
+    assert_eq!(
+        api(api_port, "POST", "/games", Some(&request)).await,
+        configured
+    );
+    drop(other);
     stop(&mut child).await;
     drop(original);
     let id = MatchId::new(configured["matchId"].as_str().unwrap()).unwrap();
@@ -266,6 +321,11 @@ async fn configured_initialization_corruption_never_falls_back_and_exact_restora
     );
     fs::write(&words, &word_bytes).unwrap();
     assert!(reused.create(&other_id).is_ok());
+    fs::remove_file(&manifest).unwrap();
+    assert!(
+        reused.create(&id).is_err(),
+        "cached match cannot be reinitialized after its manifest disappears"
+    );
     fs::write(&manifest, b"{").unwrap();
     assert!(
         reused.create(&id).is_err(),
