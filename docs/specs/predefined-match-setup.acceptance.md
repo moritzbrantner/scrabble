@@ -104,10 +104,18 @@ It uses the actual native fixture and forwarding snapshot observer:
 - An explicit rule edit restored to its old value still sends v3 with selected
   provenance, rather than silently falling back to legacy v2.
 
-The untouched **frontend** `legacyCompatible=false` branch is not directly
-covered by the global browser fixture, whose default must stay equivalent to
-preserve the old AT/TA/CTA journeys. Native false-flag/v3 behavior is covered;
-this frontend branch remains an explicit acceptance gap before feature completion.
+An additional independent acceptance context closes the untouched **frontend**
+`legacyCompatible=false` gap before production edits. A separate invocation sets
+`SCRABBLE_BROWSER_COMPACT_DEFAULT=1`; the test example changes only its actual
+operator catalog's default board to the existing compact profile before startup.
+The normal fixture, original words/opening search and default-v2 checks remain
+unchanged. No API response is mocked. The fifth browser case reads the real false
+flag, leaves the form untouched, checks the exact v3 source/settings request,
+starts a real match and checks the native seven-square board, selected center
+premium and rack size through actual host and guest snapshots. Separate dev and
+optimized Pages invocations bind their clients to that invocation's actual server.
+A default suite run explicitly skips this case because it requires the alternate
+fixture; the two focused invocations below are mandatory before merge.
 A successful selector test does not prove physical-device or public deployment
 acceptance, the custom libraries, hex mechanics or match clocks.
 
@@ -131,9 +139,23 @@ red baseline. Logs are retained in `/tmp/scrabble-94-{native-final,clippy-final,
 browser-dev,browser-pages}.log` in the author environment.
 
 The final implementation
-must run all four native contracts, all four browser contracts in both dev and
+must run all four native contracts, the four normal browser contracts in both dev and
 production-like Pages, existing creation/AT→TA→CTA checks, full `bun run check`
-and deployment checks. Independently reverify any acceptance-fixture, harness
+and deployment checks. Also run both alternate-default journeys:
+
+```sh
+SCRABBLE_BROWSER_COMPACT_DEFAULT=1 bun scripts/test-browser.ts --grep 'untouched non-equivalent'
+SCRABBLE_BROWSER_COMPACT_DEFAULT=1 bun scripts/test-browser.ts --pages --grep 'untouched non-equivalent'
+```
+
+Both alternate-default baseline invocations against unchanged production fail
+genuinely at the actual `/profiles` response: expected 200, received 404.
+The false flag, request version and native match assertions are unrun at baseline.
+Logs: `/tmp/scrabble94-compact-{dev,pages}-baseline.log`. Both disposable native
+targets were cleaned. Type checking, web lint and formatting pass; no full gate
+is claimed on the intentionally red baseline.
+
+Independently reverify any acceptance-fixture, harness
 or expectation change. Production edits begin only after this committed
 handoff. Shared convention source revision:
 `5ad0db36974c8b0e5f9812c90ee34a4f227852c3`.

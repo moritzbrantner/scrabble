@@ -200,6 +200,13 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             profile_catalog::LEGACY_WORDS
         },
     )?;
+    // A separate acceptance invocation exercises an untouched, non-legacy default
+    // through the real catalog authority; ordinary fixtures retain their exact defaults.
+    if std::env::var("SCRABBLE_BROWSER_COMPACT_DEFAULT").as_deref() == Ok("1") {
+        let mut document: serde_json::Value = serde_json::from_slice(&std::fs::read(&catalog)?)?;
+        document["defaultSelection"]["board"] = serde_json::json!("acceptance-compact-board");
+        std::fs::write(&catalog, serde_json::to_vec_pretty(&document)?)?;
+    }
     values.insert(
         "SCRABBLE_PROFILE_CATALOG_FILE".into(),
         catalog.to_str().ok_or("invalid catalog path")?.into(),

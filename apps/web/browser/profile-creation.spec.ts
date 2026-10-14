@@ -8,7 +8,11 @@ import { gameFixture } from "./game-fixture";
 import { observeSnapshots } from "./pages-observer";
 
 const identity = z.object({ name: z.string(), revision: z.string() });
-const selection = z.object({ wordList: identity, tile: identity, board: identity });
+const selection = z.object({
+  wordList: identity,
+  tile: identity,
+  board: identity,
+});
 const settings = z.strictObject({
   rack_size: ruleset.shape.rack_size,
   bingo_bonus: ruleset.shape.bingo_bonus,
@@ -31,7 +35,11 @@ const catalogSchema = z.strictObject({
       premiums: ruleset.shape.premiums,
     }),
   ),
-  defaults: z.strictObject({ selection, rules: settings, legacyCompatible: z.boolean() }),
+  defaults: z.strictObject({
+    selection,
+    rules: settings,
+    legacyCompatible: z.boolean(),
+  }),
 });
 async function catalog(request: APIRequestContext) {
   const response = await request.get(`${gameFixture.api}/profiles`);
@@ -140,7 +148,9 @@ test("three independent selectors and exact advanced values drive two simultaneo
     ]) {
       await page.getByLabel(label!, { exact: true }).fill(value!);
     }
-    await page.screenshot({ path: test.info().outputPath("profile-chooser.png") });
+    await page.screenshot({
+      path: test.info().outputPath("profile-chooser.png"),
+    });
     await page.getByRole("button", { name: "Create game", exact: true }).click();
     await expect(page.getByRole("link", { name: "Join this game", exact: true })).toBeVisible();
     await second.goto(entry());
@@ -175,7 +185,10 @@ test("three independent selectors and exact advanced values drive two simultaneo
     expect(initial.public.configuration.bingo_bonus).toBe(17);
     expect(initial.public.configuration.maximum_players).toBe(2);
     const phone = first.pages[0];
-    const editor = phone.getByRole("region", { name: "Move editor", exact: true });
+    const editor = phone.getByRole("region", {
+      name: "Move editor",
+      exact: true,
+    });
     let expectedPoints = 0;
     for (const [index, tile] of initialPhone.own_rack.tiles.entries()) {
       expectedPoints +=
@@ -191,7 +204,9 @@ test("three independent selectors and exact advanced values drive two simultaneo
         .getByRole("button")
         .click();
       await editor
-        .getByRole("button", { name: new RegExp(`^Row 4, column ${4 + index}:`) })
+        .getByRole("button", {
+          name: new RegExp(`^Row 4, column ${4 + index}:`),
+        })
         .click();
       if (tile.face.kind === "blank") {
         await phone
@@ -309,4 +324,46 @@ test("an explicit rule edit restored to the same value still binds v3 source pro
   const sent = z.object({ version: z.literal(3), selection, rules: settings }).parse(bodies[0]);
   expect(sent.selection).toEqual(sources.defaults.selection);
   expect(sent.rules).toEqual(sources.defaults.rules);
+});
+
+test("untouched non-equivalent catalog defaults bind v3 and reach the real compact board", async ({
+  page,
+  browser,
+  request,
+}) => {
+  test.setTimeout(60_000);
+  test.skip(
+    process.env.SCRABBLE_BROWSER_COMPACT_DEFAULT !== "1",
+    "separate real compact-default fixture invocation",
+  );
+  const sources = await catalog(request);
+  expect(sources.defaults.legacyCompatible).toBe(false);
+  expect(sources.defaults.selection.board.name).toBe("acceptance-compact-board");
+  const state = await observeSnapshots(page, "1", true);
+  const bodies: unknown[] = [];
+  page.on("request", (request) => {
+    if (request.url() === `${gameFixture.api}/games` && request.method() === "POST") {
+      bodies.push(request.postDataJSON());
+    }
+  });
+  await page.goto(entry());
+  await expect(board(page)).toBeVisible();
+  await expect(board(page).locator("option:checked")).toHaveText("Compact square 7");
+  await page.getByRole("button", { name: "Create game", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Join this game", exact: true })).toBeVisible();
+  expect(bodies).toHaveLength(1);
+  const sent = z.object({ version: z.literal(3), selection, rules: settings }).parse(bodies[0]);
+  expect(sent.selection).toEqual(sources.defaults.selection);
+  expect(sent.rules).toEqual(sources.defaults.rules);
+  const group = await guests(browser, page);
+  try {
+    await expect.poll(() => state()?.public.configuration.board_size).toBe(7);
+    await expect.poll(() => group.readers[0]?.()?.public.configuration.board_size).toBe(7);
+    expect(state()?.public.configuration.premiums[24]).toBe("triple_word");
+    expect(state()?.public.configuration.rack_size).toBe(sources.defaults.rules.rack_size);
+  } finally {
+    for (const context of group.contexts) {
+      await context.close();
+    }
+  }
 });
