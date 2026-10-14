@@ -584,6 +584,7 @@ async fn board_rematch_is_one_fresh_lobby_linked_once_and_leaves_the_finished_ma
 
     // Phones of the finished match discover the same public join information.
     assert_eq!(stack.get(&path).await, first);
+    assert_eq!(stack.games.rematch_link_count().await, 1, "one link");
     assert_eq!(
         stack.get(&format!("/games/{}", rematch.match_id)).await,
         first
@@ -711,6 +712,11 @@ async fn board_rematch_is_one_fresh_lobby_linked_once_and_leaves_the_finished_ma
         .await
         .unwrap();
     assert_eq!(
+        stack.games.rematch_link_count().await,
+        0,
+        "retirement removes the link"
+    );
+    assert_eq!(
         stack.get(&path).await,
         (404, serde_json::json!({"error": "unknown-match"}))
     );
@@ -746,6 +752,7 @@ async fn rematch_respects_capacity_and_drain_without_recording_a_link() {
         (404, serde_json::json!({"error": "no-rematch"})),
         "a refused rematch records no link"
     );
+    assert_eq!(stack.games.rematch_link_count().await, 0);
     assert_eq!(stack.hosted().await, 2);
 
     // Freeing capacity lets the same intent succeed.
@@ -758,6 +765,7 @@ async fn rematch_respects_capacity_and_drain_without_recording_a_link() {
     let (status, created) = stack.post_json(&path, &body).await;
     assert_eq!(status, 200, "{created}");
     assert_eq!(stack.get(&path).await, (200, created.clone()));
+    assert_eq!(stack.games.rematch_link_count().await, 1);
 
     // A draining service refuses even an idempotent retry, like ordinary creation.
     stack.shutdown.send(()).await.unwrap();
@@ -823,7 +831,7 @@ async fn a_rematch_intent_reusing_the_finished_match_creation_request_is_rejecte
     drop(finished.board);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn retirement_racing_a_rematch_never_leaves_a_link_for_a_retired_match() {
     let stack = Stack::new(8, Duration::ZERO).await;
     let now = unix_seconds().unwrap();
@@ -849,21 +857,55 @@ async fn retirement_racing_a_rematch_never_leaves_a_link_for_a_retired_match() {
     );
     drop(retired.board);
 
-    // Concurrent order: whichever wins, a retired match never exposes a rematch link.
-    for round in 0..3_u8 {
+    assert_eq!(stack.games.rematch_link_count().await, 0);
+
+    // Concurrent order: both operations are released together, then one is delayed by a
+    // varying offset so the rounds sweep across the window where creation and retirement meet.
+    // Whichever wins, the registry keeps no link for a retired match, which HTTP cannot show.
+    let offsets_ms: [i64; 12] = [0, 0, 0, 0, 1, -1, 2, -2, 5, -5, 50, -50];
+    let (mut linked, mut refused) = (0, 0);
+    for (round, offset) in offsets_ms.into_iter().enumerate() {
         let nonce = format!("{:02x}", 0xb0 + round).repeat(16);
-        let request = format!("{:02x}", 0xc0 + round).repeat(16);
+        let request = format!("{:02x}", 0xd0 + round).repeat(16);
         let finished = board_match(&stack, &nonce, now, true).await;
         let path = format!("/games/{}/rematch", finished.join.match_id);
         let body = rematch_body(&nonce, &request, now);
-        let (retirement, created) = tokio::join!(
-            stack.games.retire(&finished.id, finished.join.expires_at),
-            stack.post_json(&path, &body)
-        );
-        retirement.expect("an expired finished match is always retirable");
-        assert!(
-            created.0 == 200 || created == (404, serde_json::json!({"error": "unknown-match"})),
-            "{created:?}"
+        let barrier = Arc::new(tokio::sync::Barrier::new(2));
+        let games = Arc::clone(&stack.games);
+        let (id, expires_at) = (finished.id.clone(), finished.join.expires_at);
+        let release = Arc::clone(&barrier);
+        let retirement = tokio::spawn(async move {
+            release.wait().await;
+            if offset > 0 {
+                sleep(Duration::from_millis(offset.unsigned_abs())).await;
+            }
+            games.retire(&id, expires_at).await
+        });
+        barrier.wait().await;
+        if offset < 0 {
+            sleep(Duration::from_millis(offset.unsigned_abs())).await;
+        }
+        let created = stack.post_json(&path, &body).await;
+        retirement
+            .await
+            .unwrap()
+            .expect("an expired finished match is always retirable");
+        match created.0 {
+            200 => linked += 1,
+            _ => {
+                assert_eq!(
+                    created,
+                    (404, serde_json::json!({"error": "unknown-match"})),
+                    "round {round}"
+                );
+                refused += 1;
+            }
+        }
+        assert_eq!(
+            stack.games.rematch_link_count().await,
+            0,
+            "round {round} (offset {offset} ms, POST {}): retirement left a registry link",
+            created.0
         );
         assert!(
             stack
@@ -884,6 +926,12 @@ async fn retirement_racing_a_rematch_never_leaves_a_link_for_a_retired_match() {
             (404, serde_json::json!({"error": "unknown-match"})),
             "round {round}: a retry cannot revive the link"
         );
+        assert_eq!(stack.games.rematch_link_count().await, 0);
         drop(finished.board);
     }
+    // The extreme offsets guarantee both orders were exercised, not only one side of the race.
+    assert!(
+        linked > 0 && refused > 0,
+        "linked {linked}, refused {refused}"
+    );
 }
