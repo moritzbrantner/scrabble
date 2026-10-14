@@ -11,6 +11,7 @@ export default defineConfig({
     "**/playable-loop.spec.ts",
     "**/production-configuration.spec.ts",
     "**/performance-budgets.spec.ts",
+    "**/rematch.spec.ts",
   ],
   outputDir: "../../test-results/pages-browser",
   webServer: {

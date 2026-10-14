@@ -6,7 +6,10 @@ use crate::{
 use game_server::{BrowserRoutePrefix, LiveHostError, LiveMatchHost, MatchId, MatchRuntime};
 use scrabble_game::identity::GameId;
 use serde::{Deserialize, Serialize};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    collections::HashMap,
+    time::{SystemTime, UNIX_EPOCH},
+};
 use tokio::sync::Mutex;
 
 pub const CREATE_RETRY_SECONDS: u64 = 120;
@@ -37,7 +40,38 @@ impl CreateGame {
         Ok(())
     }
 }
-#[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
+/// A shared board's request to follow its finished match with a fresh one (#33).
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CreateRematch {
+    pub version: u8,
+    /// The finished match's private creation nonce, proving the request comes from its board.
+    pub board_request_id: String,
+    pub request_id: String,
+    pub requested_at: u64,
+}
+impl CreateRematch {
+    fn creation(&self) -> CreateGame {
+        CreateGame {
+            version: 2,
+            request_id: self.request_id.clone(),
+            requested_at: self.requested_at,
+        }
+    }
+    pub fn validate(&self, now: u64) -> Result<(), GameOperationError> {
+        if self.version != 1
+            || self.board_request_id.len() != 32
+            || !self
+                .board_request_id
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            return Err(GameOperationError::InvalidRequest);
+        }
+        self.creation().validate(now)
+    }
+}
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct JoinInformation {
     pub version: u8,
@@ -57,6 +91,10 @@ pub enum GameOperationError {
     AtCapacity,
     UnknownMatch,
     NotRetirable,
+    BoardRejected,
+    NotFinished,
+    RematchExists,
+    NoRematch,
     Internal,
 }
 impl From<LiveHostError> for GameOperationError {
@@ -83,6 +121,9 @@ pub struct Games {
     prefix: BrowserRoutePrefix,
     reconnect_grace_ticks: u64,
     creation: Mutex<()>,
+    /// Finished match -> its rematch. Kept beside placement, outside both simulations, their
+    /// replay and recovery evidence; removed when the finished match retires.
+    rematches: Mutex<HashMap<String, JoinInformation>>,
 }
 impl Games {
     pub fn new(
@@ -97,6 +138,7 @@ impl Games {
             prefix,
             reconnect_grace_ticks,
             creation: Mutex::new(()),
+            rematches: Mutex::new(HashMap::new()),
         }
     }
     pub async fn create(
@@ -116,6 +158,15 @@ impl Games {
             _ => return Err(GameOperationError::InvalidRequest),
         }
         .map_err(|_| GameOperationError::Internal)?;
+        self.place_created(&id, request.requested_at).await
+    }
+    /// Places a newly derived match, or confirms an earlier placement of the same ID.
+    /// Callers hold the creation lock.
+    async fn place_created(
+        &self,
+        id: &MatchId,
+        requested_at: u64,
+    ) -> Result<JoinInformation, GameOperationError> {
         let statuses = self.host.statuses().await;
         // Even a duplicate retry is rejected during drain. Placement remains the final authority.
         if !self.host.is_serving() {
@@ -124,10 +175,10 @@ impl Games {
         if self.host.is_draining().await {
             return Err(GameOperationError::Draining);
         }
-        if statuses.iter().any(|status| status.id == id) {
+        if statuses.iter().any(|status| &status.id == id) {
             // A read lease verifies that retirement has not already fenced this match.
             self.host
-                .inspect(&id, |runtime| {
+                .inspect(id, |runtime| {
                     if runtime.is_draining() || runtime.is_frozen() {
                         Err(GameOperationError::Draining)
                     } else {
@@ -138,13 +189,13 @@ impl Games {
         } else {
             if statuses
                 .iter()
-                .any(|status| game_id(&status.id) == game_id(&id))
+                .any(|status| game_id(&status.id) == game_id(id))
             {
                 return Err(GameOperationError::Internal);
             }
             let simulation = self
                 .factory
-                .create(&id)
+                .create(id)
                 .map_err(|_| GameOperationError::Internal)?;
             self.host
                 .place(
@@ -157,10 +208,95 @@ impl Games {
         Ok(JoinInformation {
             version: 1,
             match_id: id.as_str().to_owned(),
-            game_id: game_id(&id),
-            match_path: self.prefix.match_path(&id),
-            expires_at: request.requested_at.saturating_add(MATCH_LIFETIME_SECONDS),
+            game_id: game_id(id),
+            match_path: self.prefix.match_path(id),
+            expires_at: requested_at.saturating_add(MATCH_LIFETIME_SECONDS),
         })
+    }
+    /// Starts (or idempotently confirms) the one rematch of a finished board match. Nothing is
+    /// submitted to the finished runtime; the link lives only in this registry.
+    pub async fn rematch(
+        &self,
+        finished: &MatchId,
+        request: &CreateRematch,
+        now: u64,
+    ) -> Result<JoinInformation, GameOperationError> {
+        request.validate(now)?;
+        let _creation = self.creation.lock().await;
+        if !self.host.is_serving() {
+            return Err(GameOperationError::NotServing);
+        }
+        if self.host.is_draining().await {
+            return Err(GameOperationError::Draining);
+        }
+        let phase = self.phase(finished).await?;
+        let authorized = self
+            .factory
+            .board_authority(finished)
+            .is_ok_and(|authority| authority.verify(&request.board_request_id));
+        if !authorized {
+            return Err(GameOperationError::BoardRejected);
+        }
+        if !matches!(phase, scrabble_game::protocol::Phase::Finished { .. }) {
+            return Err(GameOperationError::NotFinished);
+        }
+        let id = self
+            .factory
+            .board_creation_id(&request.request_id, request.requested_at)
+            .map_err(|_| GameOperationError::Internal)?;
+        if let Some(existing) = self.rematches.lock().await.get(finished.as_str()) {
+            return if existing.match_id == id.as_str() {
+                Ok(existing.clone())
+            } else {
+                Err(GameOperationError::RematchExists)
+            };
+        }
+        let join = self.place_created(&id, request.requested_at).await?;
+        self.rematches
+            .lock()
+            .await
+            .insert(finished.as_str().to_owned(), join.clone());
+        Ok(join)
+    }
+    /// Public discovery of a finished match's rematch for its phones.
+    pub async fn rematch_of(
+        &self,
+        finished: &MatchId,
+        now: u64,
+    ) -> Result<JoinInformation, GameOperationError> {
+        self.lookup_checked(finished, now, false).await?;
+        self.rematches
+            .lock()
+            .await
+            .get(finished.as_str())
+            .cloned()
+            .ok_or(GameOperationError::NoRematch)
+    }
+    async fn phase(
+        &self,
+        id: &MatchId,
+    ) -> Result<scrabble_game::protocol::Phase, GameOperationError> {
+        self.host
+            .inspect(id, |runtime| {
+                if runtime.is_draining() || runtime.is_frozen() {
+                    return Err(GameOperationError::Draining);
+                }
+                let snapshot = runtime
+                    .snapshot()
+                    .map_err(|_| GameOperationError::Internal)?;
+                #[derive(Deserialize)]
+                struct GameHeader {
+                    phase: scrabble_game::protocol::Phase,
+                }
+                #[derive(Deserialize)]
+                struct Projection {
+                    game: GameHeader,
+                }
+                serde_json::from_slice::<Projection>(&snapshot.payload)
+                    .map(|projection| projection.game.phase)
+                    .map_err(|_| GameOperationError::Internal)
+            })
+            .await?
     }
     pub async fn lookup(
         &self,
@@ -251,6 +387,7 @@ impl Games {
             return Err(GameOperationError::NotRetirable);
         }
         self.host.retire(id).await?;
+        self.rematches.lock().await.remove(id.as_str());
         Ok(())
     }
     pub async fn sweep(&self, now: u64) {

@@ -9,6 +9,7 @@ export default defineConfig({
     "**/playable-loop.spec.ts",
     "**/production-configuration.spec.ts",
     "**/performance-budgets.spec.ts",
+    "**/rematch.spec.ts",
   ],
   timeout: 30_000,
   retries: 0,

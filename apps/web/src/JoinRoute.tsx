@@ -9,7 +9,7 @@ import { useCopy } from "./preferences";
 
 type State = { kind: "checking" | "ready" } | { kind: "failed"; message: Copy };
 export function JoinRoute({
-  matchId,
+  matchId: invitedMatchId,
   endpoint,
   api,
   certificateHash,
@@ -20,6 +20,10 @@ export function JoinRoute({
   certificateHash?: string;
 }) {
   const { t } = useCopy();
+  // A followed rematch replaces the invited match in place, carrying the previous name (#33).
+  const [{ matchId, name }, setFollowed] = useState<{ matchId: string; name?: string }>({
+    matchId: invitedMatchId,
+  });
   const [state, setState] = useState<State>({ kind: "checking" });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -57,6 +61,14 @@ export function JoinRoute({
   if (state.kind === "ready" && endpoint !== undefined && api !== undefined) {
     return (
       <PlayerPhone
+        key={matchId}
+        {...(name === undefined ? {} : { initialName: name })}
+        onFollowRematch={(join, previousName) => {
+          const location = new URL(window.location.href);
+          location.searchParams.set("match", join.matchId);
+          window.history.replaceState(null, "", location);
+          setFollowed({ matchId: join.matchId, name: previousName });
+        }}
         api={api}
         endpoint={endpoint}
         matchId={matchId}

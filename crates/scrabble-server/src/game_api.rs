@@ -1,5 +1,5 @@
 //! Small, bounded HTTP request boundary. The upstream runtime owns placement and session fencing.
-use crate::games::{CreateGame, GameOperationError, Games, unix_seconds};
+use crate::games::{CreateGame, CreateRematch, GameOperationError, Games, unix_seconds};
 use game_server::MatchId;
 use std::{io, sync::Arc, time::Duration};
 use tokio::{
@@ -44,6 +44,10 @@ fn operation_error(error: GameOperationError) -> Response {
         GameOperationError::AtCapacity => Response::error(429, "at-capacity"),
         GameOperationError::UnknownMatch => Response::error(404, "unknown-match"),
         GameOperationError::NotRetirable => Response::error(409, "not-retirable"),
+        GameOperationError::BoardRejected => Response::error(403, "board-rejected"),
+        GameOperationError::NotFinished => Response::error(409, "not-finished"),
+        GameOperationError::RematchExists => Response::error(409, "rematch-exists"),
+        GameOperationError::NoRematch => Response::error(404, "no-rematch"),
         GameOperationError::Internal => Response::error(500, "internal-error"),
     }
 }
@@ -154,6 +158,15 @@ async fn read_request(stream: &mut TcpStream) -> Result<Request, Response> {
         body,
     })
 }
+fn join_response(result: Result<crate::games::JoinInformation, GameOperationError>) -> Response {
+    match result {
+        Ok(join) => match serde_json::to_string(&join) {
+            Ok(body) => Response { status: 200, body },
+            Err(_) => operation_error(GameOperationError::Internal),
+        },
+        Err(error) => operation_error(error),
+    }
+}
 async fn route(request: Request, games: &Games, board_origin: &str) -> Response {
     if request
         .origin
@@ -162,14 +175,21 @@ async fn route(request: Request, games: &Games, board_origin: &str) -> Response 
     {
         return Response::error(403, "origin-rejected");
     }
-    let new_admission = request.path.ends_with("/join");
-    let is_game = request.path.strip_prefix("/games/").and_then(|id| {
-        MatchId::new(if new_admission {
-            id.strip_suffix("/join")?
+    #[derive(Clone, Copy, PartialEq)]
+    enum Resource {
+        Match,
+        Join,
+        Rematch,
+    }
+    let is_game = request.path.strip_prefix("/games/").and_then(|rest| {
+        let (id, resource) = if let Some(id) = rest.strip_suffix("/join") {
+            (id, Resource::Join)
+        } else if let Some(id) = rest.strip_suffix("/rematch") {
+            (id, Resource::Rematch)
         } else {
-            id
-        })
-        .ok()
+            (rest, Resource::Match)
+        };
+        Some((MatchId::new(id).ok()?, resource))
     });
     if request.path != "/games" && is_game.is_none() {
         return Response::error(404, "not-found");
@@ -193,37 +213,38 @@ async fn route(request: Request, games: &Games, board_origin: &str) -> Response 
                 Ok(create) => create,
                 Err(_) => return Response::error(400, "invalid-request"),
             };
-            match games.create(&create, now).await {
-                Ok(join) => match serde_json::to_string(&join) {
-                    Ok(body) => Response { status: 200, body },
-                    Err(_) => operation_error(GameOperationError::Internal),
-                },
-                Err(error) => operation_error(error),
-            }
+            join_response(games.create(&create, now).await)
         }
+        "POST" => match is_game {
+            Some((id, Resource::Rematch)) => {
+                if request.content_type.as_deref() != Some("application/json") {
+                    return Response::error(415, "json-required");
+                }
+                let rematch: CreateRematch = match serde_json::from_slice(&request.body) {
+                    Ok(rematch) => rematch,
+                    Err(_) => return Response::error(400, "invalid-request"),
+                };
+                join_response(games.rematch(&id, &rematch, now).await)
+            }
+            _ => Response::error(405, "method-not-allowed"),
+        },
         "GET" => match is_game {
-            Some(id) => match if new_admission {
-                games.check_join(&id, now).await
-            } else {
-                games.lookup(&id, now).await
-            } {
-                Ok(join) => match serde_json::to_string(&join) {
-                    Ok(body) => Response { status: 200, body },
-                    Err(_) => operation_error(GameOperationError::Internal),
-                },
-                Err(error) => operation_error(error),
-            },
+            Some((id, resource)) => join_response(match resource {
+                Resource::Match => games.lookup(&id, now).await,
+                Resource::Join => games.check_join(&id, now).await,
+                Resource::Rematch => games.rematch_of(&id, now).await,
+            }),
             None => Response::error(405, "method-not-allowed"),
         },
-        "DELETE" if !new_admission => match is_game {
-            Some(id) => match games.retire(&id, now).await {
+        "DELETE" => match is_game {
+            Some((id, Resource::Match)) => match games.retire(&id, now).await {
                 Ok(()) => Response {
                     status: 204,
                     body: String::new(),
                 },
                 Err(error) => operation_error(error),
             },
-            None => Response::error(405, "method-not-allowed"),
+            _ => Response::error(405, "method-not-allowed"),
         },
         _ => Response::error(405, "method-not-allowed"),
     }
