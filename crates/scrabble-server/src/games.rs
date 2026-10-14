@@ -208,6 +208,7 @@ impl Games {
             .await
             .map_err(|_| GameOperationError::Internal)?
             .map_err(|_| GameOperationError::Internal)?;
+        let newly_initialized = existing.is_none();
         if let Some(existing) = existing {
             if existing.selection != request.selection
                 || crate::profiles::MatchRules::from(&existing.configuration.rules) != request.rules
@@ -225,6 +226,9 @@ impl Games {
             if self.host.is_draining().await {
                 return Err(GameOperationError::Draining.into());
             }
+            if self.host.statuses().await.len() >= self.host.max_matches() {
+                return Err(GameOperationError::AtCapacity.into());
+            }
             let factory = self.factory.clone();
             let initialize_id = id.clone();
             tokio::task::spawn_blocking(move || factory.initialize(&initialize_id, prepared))
@@ -232,9 +236,15 @@ impl Games {
                 .map_err(|_| GameOperationError::Internal)?
                 .map_err(|_| GameOperationError::Internal)?;
         }
-        self.place_created(&id, request.requested_at)
-            .await
-            .map_err(ConfiguredError::Game)
+        let result = self.place_created(&id, request.requested_at).await;
+        if result.is_err() && newly_initialized {
+            let factory = self.factory.clone();
+            tokio::task::spawn_blocking(move || factory.retire_initialization(&id))
+                .await
+                .map_err(|_| GameOperationError::Internal)?
+                .map_err(|_| GameOperationError::Internal)?;
+        }
+        result.map_err(ConfiguredError::Game)
     }
     /// Places a newly derived match, or confirms an earlier placement of the same ID.
     /// Callers hold the creation lock.
