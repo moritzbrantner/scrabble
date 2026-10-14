@@ -24,34 +24,54 @@ declare global {
     scrabbleObserved?: Observed;
   }
 }
-const publicPhoneParameters = new Set(["view", "match", "lang", "server", "api", "certificate"]);
+const publicPhoneParameters = ["api", "certificate", "match", "server", "view"];
 /**
- * List private values a phone URL exposes. Random public IDs are lowercase hex, so match whole
- * secret values and delimited words instead of substrings that hex can spell (for example "ada").
+ * List ways a phone URL departs from the public invite it opened. Comparing the whole URL with the
+ * canonical invite catches any added name, token, sequence or rack data (in any parameter, path
+ * segment or fragment, however encoded) without matching substrings that random hex IDs can spell.
  */
-function phoneUrlLeaks(href: string, secrets: { token: string; name: string }): string[] {
+function phoneUrlLeaks(href: string, invite: string, token: string): string[] {
   const url = new URL(href);
-  const parts = [
-    ...[...url.searchParams].flat(),
-    decodeURIComponent(url.pathname),
-    decodeURIComponent(url.hash),
-    decodeURIComponent(url.username),
-    decodeURIComponent(url.password),
-  ];
-  const word = (value: string) => new RegExp(`(?:^|[^A-Za-z0-9])${value}(?:[^A-Za-z0-9]|$)`, "i");
-  const leaks = [...url.searchParams.keys()]
-    .filter((key) => !publicPhoneParameters.has(key))
-    .map((key) => `parameter ${key}`);
-  if (/token|reconnect|sequence|rack|requestId/i.test(parts.join("\n"))) {
-    leaks.push("private field name");
+  const expected = new URL(invite, url);
+  const leaks: string[] = [];
+  const keys = [...expected.searchParams.keys()].sort();
+  if (keys.join() !== publicPhoneParameters.join()) {
+    leaks.push(`invite parameters ${keys.join()}`);
   }
-  if (secrets.token === "" || parts.some((part) => part.toLowerCase().includes(secrets.token))) {
+  if (expected.hash || expected.username || expected.password) {
+    leaks.push("invite carries a fragment or credentials");
+  }
+  if (url.href !== expected.href) {
+    leaks.push(`URL differs from invite: ${url.href}`);
+  }
+  let decoded = href;
+  for (let previous = ""; decoded !== previous;) {
+    previous = decoded;
+    try {
+      decoded = decodeURIComponent(decoded);
+    } catch {
+      break;
+    }
+  }
+  if (!/^[0-9a-f]{32}$/.test(token) || decoded.toLowerCase().includes(token)) {
     leaks.push("reconnect token");
   }
-  if (secrets.name === "" || parts.some((part) => word(secrets.name).test(part))) {
-    leaks.push("player name");
-  }
   return leaks;
+}
+/** Read a phone's URL and saved reconnect token, then require the canonical invite URL. */
+async function expectCanonicalPhoneUrl(phone: Page, invite: string) {
+  const { href, token } = await phone.evaluate(() => {
+    const keys = Object.keys(sessionStorage).filter((key) => key.startsWith("scrabble:player:"));
+    const saved: unknown = JSON.parse(sessionStorage.getItem(keys[0] ?? "") ?? "null");
+    return {
+      href: location.href,
+      token:
+        keys.length === 1 && saved !== null && typeof saved === "object" && "token" in saved
+          ? String(saved.token)
+          : "",
+    };
+  });
+  expect(phoneUrlLeaks(href, invite, token)).toEqual([]);
 }
 /** Observe the decoded wire seam without persisting payloads or exposing credentials. */
 async function observeProjection(page: Page) {
@@ -384,18 +404,11 @@ test("phone names preserve distinct identities across refresh and full-game fail
         local: Object.keys(localStorage),
         count: keys.length,
         fields: saved === null || typeof saved !== "object" ? [] : Object.keys(saved).sort(),
-        token:
-          saved !== null && typeof saved === "object" && "token" in saved
-            ? String(saved.token)
-            : "",
-        href: location.href,
         overflow: document.documentElement.scrollWidth > innerWidth,
       };
     });
-    const { token, href: phoneHref, ...visible } = privacy;
-    expect(token).toMatch(/^[0-9a-f]{32}$/);
-    expect(phoneUrlLeaks(phoneHref, { token, name: "Ada" })).toEqual([]);
-    expect(visible).toEqual({
+    await expectCanonicalPhoneUrl(first, href ?? "");
+    expect(privacy).toEqual({
       local: [],
       count: 1,
       fields: ["playerId", "route", "sequence", "token", "version"],
@@ -467,6 +480,7 @@ test("phone names preserve distinct identities across refresh and full-game fail
         expect(tileIds.has(id)).toBe(false);
         tileIds.add(id);
       }
+      await expectCanonicalPhoneUrl(phone, href ?? "");
     }
     expect(tileIds.size).toBe(28);
     const ownTiles = await first
