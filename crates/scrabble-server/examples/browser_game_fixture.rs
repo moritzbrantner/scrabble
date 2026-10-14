@@ -1,4 +1,7 @@
 //! Real Scrabble application for browser creation acceptance; no replacement game/session rules.
+#[path = "../tests/support/profile_catalog.rs"]
+mod profile_catalog;
+
 use game_server::GameSimulation;
 use scrabble_game::{
     identity::{PlayerId, ProtocolVersion, TurnId},
@@ -187,6 +190,29 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         );
         values.insert("SCRABBLE_DICTIONARY_REVISION".into(), "1".into());
     }
+    // Only the real browser fixture advertises these authored catalog sources. Its exact
+    // deployment word set, tiles, premiums and rule defaults remain legacy-equivalent.
+    let catalog = profile_catalog::write_catalog(
+        &directory,
+        if configured {
+            "TA\nCTA\n"
+        } else {
+            profile_catalog::LEGACY_WORDS
+        },
+    )?;
+    values.insert(
+        "SCRABBLE_PROFILE_CATALOG_FILE".into(),
+        catalog.to_str().ok_or("invalid catalog path")?.into(),
+    );
+    values.insert(
+        "SCRABBLE_MATCH_CONFIGURATION_DIR".into(),
+        directory
+            .join("configurations")
+            .to_str()
+            .ok_or("invalid configuration path")?
+            .into(),
+    );
+    retain_legacy_backend_if_catalog_is_unavailable(&mut values)?;
     // Test-only paths and configuration let later tests select fresh real creation inputs.
     // The persisted derivation key remains in its private seed file and never reaches metadata.
     std::fs::write(
@@ -214,4 +240,25 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     signal.abort();
     let _ = signal.await;
     result
+}
+
+/// Keep pre-feature executable fixtures runnable without pretending the new catalog works.
+/// The new acceptance still requires GET /profiles = 200 and the actual creation controls.
+/// Only the specifically absent #94 keys permit this baseline compatibility branch.
+fn retain_legacy_backend_if_catalog_is_unavailable(
+    values: &mut std::collections::BTreeMap<String, String>,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    if let Err(error) = scrabble_server::config::ServerConfig::from_values(values) {
+        let message = error.to_string();
+        if message == "unknown server configuration key SCRABBLE_PROFILE_CATALOG_FILE"
+            || message == "unknown server configuration key SCRABBLE_MATCH_CONFIGURATION_DIR"
+        {
+            values.remove("SCRABBLE_PROFILE_CATALOG_FILE");
+            values.remove("SCRABBLE_MATCH_CONFIGURATION_DIR");
+            scrabble_server::config::ServerConfig::from_values(values)?;
+        } else {
+            return Err(error.into());
+        }
+    }
+    Ok(())
 }

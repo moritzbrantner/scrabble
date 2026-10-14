@@ -20,6 +20,9 @@ use tokio::{
 };
 use wtransport::{ClientConfig, Connection, Endpoint, Identity, tls::Sha256Digest};
 
+#[path = "support/profile_catalog.rs"]
+mod profile_catalog;
+
 struct Server {
     directory: tempfile::TempDir,
     values: BTreeMap<String, String>,
@@ -532,7 +535,8 @@ impl Server {
             let request = format!("{method} {path} HTTP/1.1\r\nHost: localhost\r\nOrigin: {origin}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
             socket.write_all(request.as_bytes()).await.unwrap();
             let mut bytes = Vec::new();
-            socket.take(8192).read_to_end(&mut bytes).await.unwrap();
+            // Catalog metadata includes full tile/premium arrays; retain the status helper's bounded 128 KiB envelope.
+            socket.take(128 * 1024).read_to_end(&mut bytes).await.unwrap();
             let text = String::from_utf8(bytes).unwrap();
             let (headers, body) = text.split_once("\r\n\r\n").unwrap();
             assert!(headers.contains("Access-Control-Allow-Origin: http://localhost:5173"));
@@ -690,4 +694,640 @@ async fn creation_retries_capacity_origin_and_restart_keep_one_authoritative_gam
             .unwrap()
             .success()
     );
+}
+
+// Independent #94 acceptance: real executable, HTTP creation, authenticated WebTransport
+// and native recovery/replay. No catalog implementation or replacement simulation here.
+async fn profile_server(compact_default: bool, maximum_names: bool) -> Server {
+    let mut server = Server::new().await;
+    let catalog =
+        profile_catalog::write_catalog(server.directory.path(), profile_catalog::LEGACY_WORDS)
+            .unwrap();
+    if compact_default || maximum_names {
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&fs::read(&catalog).unwrap()).unwrap();
+        if compact_default {
+            value["defaultSelection"]["board"] = "acceptance-compact-board".into();
+        }
+        if maximum_names {
+            for (kind, field, letter) in [
+                ("wordLists", "wordList", "W"),
+                ("tileProfiles", "tile", "T"),
+                ("boardProfiles", "board", "B"),
+            ] {
+                value[kind][0]["identity"]["name"] = letter.repeat(64).into();
+                value["defaultSelection"][field] = letter.repeat(64).into();
+            }
+        }
+        fs::write(&catalog, serde_json::to_vec(&value).unwrap()).unwrap();
+    }
+    server
+        .values
+        .insert("SCRABBLE_MATCH_IDS".into(), String::new());
+    server
+        .values
+        .insert("SCRABBLE_MAX_MATCHES".into(), "16".into());
+    server.values.insert(
+        "SCRABBLE_PROFILE_CATALOG_FILE".into(),
+        catalog.to_str().unwrap().into(),
+    );
+    server.values.insert(
+        "SCRABBLE_MATCH_CONFIGURATION_DIR".into(),
+        server
+            .directory
+            .path()
+            .join("configurations")
+            .to_str()
+            .unwrap()
+            .into(),
+    );
+    server.start().await;
+    server
+}
+fn catalog_identity(catalog: &serde_json::Value, kind: &str, name: &str) -> serde_json::Value {
+    catalog[kind]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["identity"]["name"] == name)
+        .unwrap()["identity"]
+        .clone()
+}
+fn profile_request(catalog: &serde_json::Value, nonce: u8) -> serde_json::Value {
+    serde_json::json!({"version":3,"requestId":format!("{nonce:02x}").repeat(16),"requestedAt":scrabble_server::games::unix_seconds().unwrap(),
+        "selection":catalog["defaults"]["selection"], "rules":catalog["defaults"]["rules"]})
+}
+async fn hosted_profiles(server: &Server) -> u64 {
+    server.get("/status").await.unwrap().1["capacity"]["hostedMatches"]
+        .as_u64()
+        .unwrap()
+}
+
+#[tokio::test]
+async fn profiles_catalog_rejections_retry_conflicts_and_legacy_defaults_do_not_allocate_unwanted_games()
+ {
+    let mut server = profile_server(false, false).await;
+    let origin = "http://localhost:5173";
+    let (code, catalog) = server.api("GET", "/profiles", None, origin).await;
+    assert_eq!(
+        code, 200,
+        "the actual configured server must expose its catalog"
+    );
+    assert_eq!(catalog["version"], 1);
+    assert_eq!(catalog["defaults"]["legacyCompatible"], true);
+    assert_eq!(catalog["wordLists"].as_array().unwrap().len(), 3);
+    assert_eq!(catalog["tileProfiles"].as_array().unwrap().len(), 2);
+    assert_eq!(catalog["boardProfiles"].as_array().unwrap().len(), 2);
+    let operator: serde_json::Value = serde_json::from_slice(
+        &fs::read(server.directory.path().join("profile-catalog.json")).unwrap(),
+    )
+    .unwrap();
+    for index in 0..2 {
+        assert_eq!(
+            catalog["tileProfiles"][index]["tiles"],
+            operator["tileProfiles"][index]["tiles"]
+        );
+        assert_eq!(
+            catalog["boardProfiles"][index]["boardSize"],
+            operator["boardProfiles"][index]["boardSize"]
+        );
+        assert_eq!(
+            catalog["boardProfiles"][index]["premiums"],
+            operator["boardProfiles"][index]["premiums"]
+        );
+    }
+    let public = catalog.to_string();
+    for private in [
+        "profile-pairs.txt",
+        "profile-legacy-words.txt",
+        "requestId",
+        "reconnect",
+        "AA\\nAB",
+        "seed",
+    ] {
+        assert!(
+            !public.contains(private),
+            "catalog leaked private/operator content: {private}"
+        );
+    }
+    assert_eq!(hosted_profiles(&server).await, 0);
+    let valid = profile_request(&catalog, 0x41);
+    assert!(
+        serde_json::to_vec(&valid).unwrap().len() > 512,
+        "the actual full triple exceeds the old request limit"
+    );
+    let mut missing = valid.clone();
+    missing.as_object_mut().unwrap().remove("selection");
+    let mut unknown = valid.clone();
+    unknown["selection"]["tile"]["name"] = "absent-profile".into();
+    let mut stale = valid.clone();
+    stale["selection"]["board"]["revision"] = "stale-revision".into();
+    let mut incompatible = valid.clone();
+    incompatible["selection"]["wordList"] =
+        catalog_identity(&catalog, "wordLists", "acceptance-unicode");
+    let mut invalid_rack = valid.clone();
+    invalid_rack["rules"]["rack_size"] = 0.into();
+    let mut invalid_players = valid.clone();
+    invalid_players["rules"]["minimum_players"] = 1.into();
+    for (body, reason) in [
+        (&missing, "invalid-request"),
+        (&unknown, "unknown-profile"),
+        (&stale, "unknown-profile"),
+        (&incompatible, "incompatible-profiles"),
+        (&invalid_rack, "invalid-match-rules"),
+        (&invalid_players, "invalid-match-rules"),
+    ] {
+        let response = server.api("POST", "/games", Some(body), origin).await;
+        assert_eq!(response.0, 400, "{reason}: {}", response.1);
+        assert_eq!(response.1["error"], reason);
+        if reason == "incompatible-profiles" {
+            assert_eq!(response.1["letters"], serde_json::json!(["Ö"]));
+        }
+        assert_eq!(
+            hosted_profiles(&server).await,
+            0,
+            "a rejection must not allocate"
+        );
+    }
+    let mut oversized = valid.clone();
+    oversized["padding"] = "x".repeat(2048).into();
+    let too_large = server.api("POST", "/games", Some(&oversized), origin).await;
+    assert_eq!(too_large.0, 413);
+    assert_eq!(too_large.1["error"], "body-too-large");
+    assert_eq!(hosted_profiles(&server).await, 0);
+    let mut extra_field = valid.clone();
+    extra_field["padding"] = "not an allowed creation field".into();
+    let extra = server
+        .api("POST", "/games", Some(&extra_field), origin)
+        .await;
+    assert_eq!(extra.0, 400);
+    assert_eq!(extra.1["error"], "invalid-request");
+    assert_eq!(hosted_profiles(&server).await, 0);
+    let (first, retry) = tokio::join!(
+        server.api("POST", "/games", Some(&valid), origin),
+        server.api("POST", "/games", Some(&valid), origin)
+    );
+    assert_eq!(first.0, 200);
+    assert_eq!(retry, first);
+    assert_eq!(hosted_profiles(&server).await, 1);
+    for field in ["wordList", "tile", "board", "rules"] {
+        let mut conflict = valid.clone();
+        match field {
+            "wordList" => {
+                conflict["selection"][field] =
+                    catalog_identity(&catalog, "wordLists", "acceptance-pairs")
+            }
+            "tile" => {
+                conflict["selection"][field] =
+                    catalog_identity(&catalog, "tileProfiles", "acceptance-valued-tiles")
+            }
+            "board" => {
+                conflict["selection"][field] =
+                    catalog_identity(&catalog, "boardProfiles", "acceptance-compact-board")
+            }
+            _ => conflict["rules"]["bingo_bonus"] = 17.into(),
+        }
+        let response = server.api("POST", "/games", Some(&conflict), origin).await;
+        assert_eq!(response.0, 409);
+        assert_eq!(response.1["error"], "creation-conflict");
+        assert_eq!(hosted_profiles(&server).await, 1);
+    }
+    // Each source can vary on its own; the other two identities remain exactly selected.
+    for (index, (field, kind, name)) in [
+        ("wordList", "wordLists", "acceptance-pairs"),
+        ("tile", "tileProfiles", "acceptance-valued-tiles"),
+        ("board", "boardProfiles", "acceptance-compact-board"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut changed = profile_request(&catalog, 0x50 + u8::try_from(index).unwrap());
+        changed["selection"][field] = catalog_identity(&catalog, kind, name);
+        assert_eq!(
+            server.api("POST", "/games", Some(&changed), origin).await.0,
+            200
+        );
+    }
+    // Untouched v2 retains its actual original complete identity, not composed provenance.
+    let legacy = serde_json::json!({"version":2,"requestId":"61".repeat(16),"requestedAt":valid["requestedAt"]});
+    let legacy_join = server.api("POST", "/games", Some(&legacy), origin).await;
+    assert_eq!(legacy_join.0, 200);
+    let client = server.client();
+    let (connection, _) = server
+        .connect(&client, legacy_join.1["matchPath"].as_str().unwrap())
+        .await;
+    let legacy_view = snapshot(&connection, |_| true).await;
+    assert_eq!(
+        legacy_view.public.configuration,
+        scrabble_game::ruleset::english_fixture()
+    );
+    server.stop().await;
+}
+
+struct ConfiguredPlayers {
+    board: (Connection, Welcome),
+    phones: Vec<(Connection, Welcome)>,
+}
+async fn start_profile_match(
+    server: &Server,
+    client: &Endpoint<wtransport::endpoint::endpoint_side::Client>,
+    join: &serde_json::Value,
+    nonce: &str,
+) -> ConfiguredPlayers {
+    let route = join["matchPath"].as_str().unwrap();
+    let board = server.connect(client, route).await;
+    let view = snapshot(&board.0, |_| true).await;
+    send(
+        &board.0,
+        &view,
+        &board.1,
+        1,
+        0,
+        Command::ClaimBoard {
+            request_id: nonce.into(),
+        },
+    );
+    snapshot(&board.0, |s| {
+        s.public.host.as_ref().and_then(|h| h.id).is_some()
+    })
+    .await;
+    let mut phones = Vec::new();
+    for name in ["Ada", "Lin"] {
+        let phone = server.connect(client, route).await;
+        let view = snapshot(&phone.0, |_| true).await;
+        send(
+            &phone.0,
+            &view,
+            &phone.1,
+            1,
+            0,
+            Command::SetName {
+                display_name: name.into(),
+            },
+        );
+        phones.push(phone);
+    }
+    let named = snapshot(&board.0, |s| {
+        s.public.players.len() == 2 && s.public.players.iter().all(|p| !p.display_name.is_empty())
+    })
+    .await;
+    if named.public.configuration.maximum_players == 2 {
+        let extra = timeout(
+            Duration::from_secs(5),
+            client.connect(format!(
+                "https://127.0.0.1:{}{}",
+                server.port,
+                join["matchPath"].as_str().unwrap()
+            )),
+        )
+        .await
+        .unwrap();
+        if let Ok(extra) = extra {
+            assert!(
+                timeout(Duration::from_secs(2), extra.closed())
+                    .await
+                    .is_ok(),
+                "selected two-player maximum must reject a third playing seat"
+            );
+        }
+    }
+    send(&board.0, &named, &board.1, 2, 0, Command::Start {});
+    snapshot(&board.0, |s| {
+        matches!(s.public.phase, Phase::Playing { .. })
+    })
+    .await;
+    ConfiguredPlayers { board, phones }
+}
+
+fn nonlegacy_pair(snapshot: &PlayerSnapshot) -> Vec<scrabble_game::protocol::Placement> {
+    use scrabble_game::{identity::Coordinate, protocol::Placement, ruleset::TileFace};
+    let mut tiles: Vec<_> = snapshot.own_rack.tiles.iter().collect();
+    let spelling = |tiles: &[&scrabble_game::protocol::RackTile]| -> String {
+        tiles
+            .iter()
+            .map(|tile| match tile.face {
+                TileFace::Letter { letter } => letter,
+                TileFace::Blank {} => 'A',
+            })
+            .collect()
+    };
+    if spelling(&tiles) == "AT" {
+        tiles.reverse();
+    }
+    assert!(
+        !profile_catalog::LEGACY_WORDS
+            .lines()
+            .any(|word| word == spelling(&tiles)),
+        "the actual dictionary probe must distinguish the two word sets"
+    );
+    let center = snapshot.public.configuration.board_size / 2;
+    tiles
+        .into_iter()
+        .enumerate()
+        .map(|(index, tile)| Placement {
+            tile_id: tile.id,
+            coordinate: Coordinate::new(center, center + u8::try_from(index).unwrap()).unwrap(),
+            blank_as: matches!(tile.face, TileFace::Blank {}).then_some('A'),
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn profiles_simultaneous_native_rules_scoring_restart_and_canonical_replay_keep_original_sources()
+ {
+    let mut server = profile_server(false, false).await;
+    let origin = "http://localhost:5173";
+    let (code, catalog) = server.api("GET", "/profiles", None, origin).await;
+    assert_eq!(
+        code, 200,
+        "real catalog is required before lifecycle acceptance"
+    );
+    let mut first = profile_request(&catalog, 0x71);
+    first["selection"]["wordList"] = catalog_identity(&catalog, "wordLists", "acceptance-pairs");
+    first["selection"]["tile"] =
+        catalog_identity(&catalog, "tileProfiles", "acceptance-valued-tiles");
+    first["selection"]["board"] =
+        catalog_identity(&catalog, "boardProfiles", "acceptance-compact-board");
+    first["rules"] = serde_json::json!({"rack_size":2,"bingo_bonus":17,"exchange_minimum_bag":1000,"scoreless_turn_limit":2,"minimum_players":2,"maximum_players":2});
+    let mut second = profile_request(&catalog, 0x72);
+    second["selection"]["wordList"] = first["selection"]["wordList"].clone();
+    second["rules"]["rack_size"] = 3.into();
+    let (a, b) = tokio::join!(
+        server.api("POST", "/games", Some(&first), origin),
+        server.api("POST", "/games", Some(&second), origin)
+    );
+    assert_eq!((a.0, b.0), (200, 200));
+    assert_ne!(a.1["matchId"], b.1["matchId"]);
+    let client = server.client();
+    let mut dictionary_probe = first.clone();
+    dictionary_probe["requestId"] = "76".repeat(16).into();
+    dictionary_probe["selection"]["wordList"] =
+        catalog["defaults"]["selection"]["wordList"].clone();
+    let probe_join = server
+        .api("POST", "/games", Some(&dictionary_probe), origin)
+        .await;
+    assert_eq!(probe_join.0, 200);
+    let probe = start_profile_match(
+        &server,
+        &client,
+        &probe_join.1,
+        dictionary_probe["requestId"].as_str().unwrap(),
+    )
+    .await;
+    let probe_view = snapshot(&probe.phones[0].0, |s| {
+        matches!(s.public.phase, Phase::Playing { .. })
+    })
+    .await;
+    send(
+        &probe.phones[0].0,
+        &probe_view,
+        &probe.phones[0].1,
+        2,
+        0,
+        Command::Commit {
+            placements: nonlegacy_pair(&probe_view),
+        },
+    );
+    for _ in 0..3 {
+        let rejected = snapshot(&probe.phones[0].0, |_| true).await;
+        assert_eq!(
+            rejected.public.history.len(),
+            0,
+            "the selected legacy dictionary rejects a word accepted by the pairs dictionary"
+        );
+        assert_eq!(rejected.public.phase, probe_view.public.phase);
+        assert_eq!(rejected.own_rack, probe_view.own_rack);
+    }
+    let one =
+        start_profile_match(&server, &client, &a.1, first["requestId"].as_str().unwrap()).await;
+    let two = start_profile_match(
+        &server,
+        &client,
+        &b.1,
+        second["requestId"].as_str().unwrap(),
+    )
+    .await;
+    let initial = snapshot(&one.phones[0].0, |s| {
+        matches!(s.public.phase, Phase::Playing { .. })
+    })
+    .await;
+    let other = snapshot(&two.phones[0].0, |s| {
+        matches!(s.public.phase, Phase::Playing { .. })
+    })
+    .await;
+    assert_eq!(
+        serde_json::to_value(&initial.public.dictionary).unwrap(),
+        first["selection"]["wordList"]
+    );
+    assert_eq!(
+        serde_json::to_value(&initial.public.configuration.tiles).unwrap(),
+        catalog["tileProfiles"][1]["tiles"]
+    );
+    assert_eq!(initial.own_rack.tiles.len(), 2);
+    assert_eq!(other.own_rack.tiles.len(), 3);
+    assert_eq!(initial.public.configuration.board_size, 7);
+    assert_eq!(other.public.configuration.board_size, 15);
+    assert_eq!(
+        initial.public.configuration.premiums[24],
+        scrabble_game::ruleset::Premium::TripleWord
+    );
+    assert_eq!(initial.public.remaining_tiles, 98);
+    assert_eq!(other.public.remaining_tiles, 94);
+    assert_ne!(initial.public.ruleset, other.public.ruleset);
+    assert_eq!(initial.public.dictionary, other.public.dictionary);
+    assert_eq!(initial.public.configuration.bingo_bonus, 17);
+    assert_eq!(initial.public.configuration.maximum_players, 2);
+    // Selected exchange threshold actually rejects, without replacing rack or advancing turn.
+    send(
+        &one.phones[0].0,
+        &initial,
+        &one.phones[0].1,
+        2,
+        0,
+        Command::Exchange {
+            tile_ids: vec![initial.own_rack.tiles[0].id],
+        },
+    );
+    for _ in 0..3 {
+        let unchanged = snapshot(&one.phones[0].0, |_| true).await;
+        assert_eq!(unchanged.own_rack, initial.own_rack);
+        assert_eq!(unchanged.public.phase, initial.public.phase);
+    }
+    let points: i32 = initial
+        .own_rack
+        .tiles
+        .iter()
+        .map(|tile| {
+            i32::from(
+                initial
+                    .public
+                    .configuration
+                    .tiles
+                    .iter()
+                    .find(|definition| definition.face == tile.face)
+                    .unwrap()
+                    .value,
+            )
+        })
+        .sum();
+    let placements = nonlegacy_pair(&initial);
+    send(
+        &one.phones[0].0,
+        &initial,
+        &one.phones[0].1,
+        3,
+        0,
+        Command::Commit { placements },
+    );
+    let committed = snapshot(&one.phones[0].0, |s| s.public.history.len() == 1).await;
+    assert_eq!(
+        committed.public.players[0].score,
+        points * 3 + 17,
+        "selected premiums, tile values and bingo bonus must all reach native scoring"
+    );
+    assert_eq!(committed.public.board.len(), 2);
+    assert_eq!(
+        snapshot(&two.phones[0].0, |_| true).await,
+        other,
+        "another live match remains unchanged"
+    );
+    let next = snapshot(&one.phones[1].0, |s| s.public.history.len() == 1).await;
+    send(
+        &one.phones[1].0,
+        &next,
+        &one.phones[1].1,
+        2,
+        1,
+        Command::Pass {},
+    );
+    let last = snapshot(&one.phones[0].0, |s| s.public.history.len() == 2).await;
+    send(
+        &one.phones[0].0,
+        &last,
+        &one.phones[0].1,
+        4,
+        2,
+        Command::Pass {},
+    );
+    let finished = snapshot(&one.phones[0].0, |s| {
+        matches!(s.public.phase, Phase::Finished { .. })
+    })
+    .await;
+    assert_eq!(
+        finished.public.history.len(),
+        3,
+        "selected scoreless limit finishes after two passes"
+    );
+    server.stop().await;
+    // Operator edits after shutdown cannot silently replace immutable match dictionaries/layouts.
+    fs::write(server.directory.path().join("profile-pairs.txt"), "ÖL\n").unwrap();
+    let path = server.directory.path().join("profile-catalog.json");
+    let mut edited: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    edited["boardProfiles"][1]["boardSize"] = 9.into();
+    edited["boardProfiles"][1]["premiums"] = serde_json::json!(vec!["normal"; 81]);
+    fs::write(path, serde_json::to_vec(&edited).unwrap()).unwrap();
+    // Recovery's canonical replay is verified with the same public factory boundary used at startup.
+    let config = scrabble_server::config::ServerConfig::from_values(&server.values).unwrap();
+    let factory = scrabble_server::factory::MatchFactory::new(&config).unwrap();
+    for join in [&a.1, &b.1] {
+        let id = game_server::MatchId::new(join["matchId"].as_str().unwrap()).unwrap();
+        let image = game_server::RecoveryImage::read_file(
+            &server
+                .directory
+                .path()
+                .join("recovery")
+                .join(format!("{}.recovery", id.as_str())),
+        )
+        .unwrap();
+        game_server::verify_replay(factory.create(&id).unwrap(), &image.replay).unwrap();
+    }
+    server.start().await;
+    for (join, phone, expected) in [
+        (&a.1, &one.phones[0], &finished),
+        (&b.1, &two.phones[0], &other),
+    ] {
+        let token = game_server::ReconnectToken(phone.1.reconnect_token).encode_hex();
+        let (connection, _) = server
+            .connect(
+                &client,
+                &format!("{}/reconnect/{token}", join["matchPath"].as_str().unwrap()),
+            )
+            .await;
+        let restored = snapshot(&connection, |_| true).await;
+        assert_eq!(restored.public.configuration, expected.public.configuration);
+        assert_eq!(restored.public.dictionary, expected.public.dictionary);
+        assert_eq!(restored.public.ruleset, expected.public.ruleset);
+        assert_eq!(restored.public.phase, expected.public.phase);
+        assert_eq!(restored.public.history, expected.public.history);
+        assert_eq!(restored.public.board, expected.public.board);
+        assert_eq!(restored.own_rack, expected.own_rack);
+    }
+    // Keep both board transports owned until the actual process lifecycle completes.
+    drop((one.board, two.board));
+    server.stop().await;
+}
+
+#[tokio::test]
+async fn profiles_non_equivalent_catalog_defaults_are_declared_and_created_without_legacy_substitution()
+ {
+    let mut server = profile_server(true, false).await;
+    let origin = "http://localhost:5173";
+    let (code, catalog) = server.api("GET", "/profiles", None, origin).await;
+    assert_eq!(code, 200);
+    assert_eq!(
+        catalog["defaults"]["legacyCompatible"], false,
+        "a compact catalog default is not the deployment's original board"
+    );
+    let selected = profile_request(&catalog, 0x73);
+    let join = server.api("POST", "/games", Some(&selected), origin).await;
+    assert_eq!(join.0, 200);
+    let client = server.client();
+    let (connection, _) = server
+        .connect(&client, join.1["matchPath"].as_str().unwrap())
+        .await;
+    let view = snapshot(&connection, |_| true).await;
+    assert_eq!(view.public.configuration.board_size, 7);
+    assert_ne!(
+        view.public.configuration.identity,
+        scrabble_game::ruleset::english_fixture().identity
+    );
+    server.stop().await;
+}
+
+#[tokio::test]
+async fn profiles_full_identity_request_shape_fits_the_declared_bounded_http_envelope() {
+    let mut server = profile_server(false, true).await;
+    let origin = "http://localhost:5173";
+    let (status, catalog) = server.api("GET", "/profiles", None, origin).await;
+    assert_eq!(status, 200);
+    let valid = profile_request(&catalog, 0x74);
+    for field in ["wordList", "tile", "board"] {
+        assert_eq!(
+            valid["selection"][field]["name"].as_str().unwrap().len(),
+            64
+        );
+    }
+    let bytes = serde_json::to_vec(&valid).unwrap().len();
+    assert!(
+        bytes > 512 && bytes < 2048,
+        "actual full identity request {bytes} must fit the bounded 2KiB contract"
+    );
+    assert_eq!(
+        server.api("POST", "/games", Some(&valid), origin).await.0,
+        200
+    );
+    let mut maximum_shape = profile_request(&catalog, 0x75);
+    for field in ["wordList", "tile", "board"] {
+        maximum_shape["selection"][field]["revision"] = "R".repeat(192).into();
+    }
+    let response = server
+        .api("POST", "/games", Some(&maximum_shape), origin)
+        .await;
+    assert_eq!(
+        response.0, 400,
+        "bounded, syntactically valid identities must reach source validation instead of the obsolete 512-byte cap"
+    );
+    assert_eq!(response.1["error"], "unknown-profile");
+    assert_eq!(hosted_profiles(&server).await, 1);
+    server.stop().await;
 }
