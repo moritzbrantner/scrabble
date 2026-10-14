@@ -43,14 +43,15 @@ if ((await build.exited) !== 0) {
   throw new Error("Browser transport fixture build failed");
 }
 const fixtureDirectory = await mkdtemp(join(tmpdir(), "scrabble-browser-"));
-const fixture = Bun.spawn(["target/debug/examples/browser_transport_fixture", fixtureDirectory], {
-  stdout: "inherit",
-  stderr: "inherit",
-});
+const fixtureExecutables = join(process.env.CARGO_TARGET_DIR ?? "target", "debug", "examples");
+const fixture = Bun.spawn(
+  [join(fixtureExecutables, "browser_transport_fixture"), fixtureDirectory],
+  { stdout: "inherit", stderr: "inherit" },
+);
 const gameDirectory = join(fixtureDirectory, "games");
 const games = Bun.spawn(
   [
-    "target/debug/examples/browser_game_fixture",
+    join(fixtureExecutables, "browser_game_fixture"),
     gameDirectory,
     `http://127.0.0.1:${port}`,
     ...(pages ? ["playable"] : []),

@@ -9,7 +9,7 @@ use std::{collections::BTreeSet, error::Error, fs::File, io::Read, path::Path, s
 
 const MAX_WORD_LIST_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_RULESET_BYTES: u64 = 128 * 1024;
-fn hexadecimal(bytes: &[u8]) -> String {
+pub(crate) fn hexadecimal(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 pub fn load(
@@ -79,16 +79,7 @@ pub fn load(
     {
         return Err("dictionary contains letters outside the configured alphabet".into());
     }
-    let mut hash = digest::Context::new(&digest::SHA256);
-    for word in words.words() {
-        hash.update(word.as_bytes());
-        hash.update(b"\n");
-    }
-    let words = words.with_revision(format!(
-        "{}+sha256:{}",
-        config.revision,
-        hexadecimal(hash.finish().as_ref())
-    ))?;
+    let words = fingerprint_word_list(words)?;
     rules.dictionary = words.identity().clone();
     if ruleset_file.is_some() {
         // Serialization normalizes field order/whitespace while preserving semantic tile/premium order.
@@ -107,4 +98,21 @@ pub fn load(
     }
     rules.validate()?;
     Ok((rules, Arc::new(words)))
+}
+
+/// One normalized word-set fingerprint boundary for deployment and reusable profiles.
+pub(crate) fn fingerprint_word_list(
+    words: WordList,
+) -> Result<WordList, scrabble_game::dictionary::WordListError> {
+    let mut hash = digest::Context::new(&digest::SHA256);
+    for word in words.words() {
+        hash.update(word.as_bytes());
+        hash.update(b"\n");
+    }
+    let revision = format!(
+        "{}+sha256:{}",
+        words.identity().revision,
+        hexadecimal(hash.finish().as_ref())
+    );
+    words.with_revision(revision)
 }
