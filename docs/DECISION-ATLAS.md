@@ -237,6 +237,12 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
   Status: owner-approved 2026-10-13. Answers 3.10 (choice A).  
   Every newly opened match-creation flow **initially has clocks disabled**. The host must **explicitly enable time controls** before choosing a timed mode and its valid parameters; creating a match without enabling them keeps it untimed. Do not silently preselect a timed preset or automatically restore a previously used timed setup as the next match's selection. This is the **initial selection of the create-match form**, not a prohibition on configuring either cumulative or per-turn clocks under Decisions 3.1 and 3.4–3.9. Preserve the host's current explicit choice while they edit the same pending match form, and clearly indicate whether that match is timed. The user has not selected default durations, increments, a timed model, or a timeout consequence for newly enabled clocks.
 
+## 4. Current execution priority
+
+- **4.1 Prioritize approved hexagonal-board or match-clock journeys.**
+  Status: owner-approved 2026-10-14 in the interactive work-loop session.
+  Focus current implementation work on the approved **hexagonal-board or match-clock** journeys. This sets the current category priority; it does not change the behaviors approved in sections 1 and 3 or establish a preference between those two journeys. Follow their evidenced actionable prerequisites. Execution is tracked by [hexagonal gameplay #96](https://github.com/moritzbrantner/scrabble/issues/96) and [match clocks #99](https://github.com/moritzbrantner/scrabble/issues/99); independent match configuration [#94](https://github.com/moritzbrantner/scrabble/issues/94) is an existing prerequisite of the separately selectable hex board. Physical-device release acceptance remains required by #32/#34 and is not claimed complete by this scheduling choice.
+
 ## Existing baseline and boundaries
 
 The current application has an authoritative Rust ruleset with deployment-selected dictionary/tile/board configuration, a separate shared-board and phone-player role, persisted English/German/Spanish interface translations, and a directly visible Light/Dark/System appearance selector. See `docs/specs/configurable-rulesets.md`, `docs/specs/mobile-accessibility.md`, `docs/adr/0007-shared-board-authority.md`, and [merged PR #92](https://github.com/moritzbrantner/scrabble/pull/92). These may fulfill parts of the above intent; they do **not** establish that player-selectable profiles, a gear modal, hexagonal play, or clocks are available today.
