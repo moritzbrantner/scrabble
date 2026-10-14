@@ -833,7 +833,10 @@ async fn a_rematch_intent_reusing_the_finished_match_creation_request_is_rejecte
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn retirement_racing_a_rematch_never_leaves_a_link_for_a_retired_match() {
-    let stack = Stack::new(8, Duration::ZERO).await;
+    // Rematches created by winning rounds stay hosted; capacity covers the worst case (one
+    // deterministic rematch plus one per round plus the current finished match) so a
+    // correct implementation can never hit 429 here.
+    let stack = Stack::new(32, Duration::ZERO).await;
     let now = unix_seconds().unwrap();
 
     // Deterministic order: once retired, a rematch is refused and nothing is recorded.
