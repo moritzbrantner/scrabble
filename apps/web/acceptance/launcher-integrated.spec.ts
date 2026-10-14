@@ -128,7 +128,9 @@ test("actual moenarch launcher creates one authoritative board, two players comm
     const board = await boardEvent;
     expect(new URL(board.url()).searchParams.get("view")).toBe("board");
     await expect(board.getByRole("button", { name: "Create game", exact: true })).toBeVisible();
-    await selectOpening(board);
+    // Force the native refresh branch even in fast runs; the private target
+    // created by the disposable wrapper must supply the executable.
+    await selectOpening(board, { ...fixture.opening, requestedAt: 0 });
     await board.getByRole("button", { name: "Create game", exact: true }).click();
     await expect(board.getByRole("table", { name: "Scrabble board", exact: true })).toBeVisible();
     const bindingUrl = `${configuration.SCRABBLE_ACCEPTANCE_SETUP_API}/lobbies/${session}/game-reference`;
@@ -209,6 +211,12 @@ test("actual moenarch launcher creates one authoritative board, two players comm
     const boardParameters = new URL(board.url()).searchParams;
     expect(boardParameters.has("launch")).toBe(false);
     expect(boardParameters.has("session")).toBe(false);
+    await expect(second.getByRole("button", { name: "Join rematch", exact: true })).toBeVisible();
+    await second.getByRole("button", { name: "Join rematch", exact: true }).click();
+    await expect(second.getByRole("heading", { name: "Lin", exact: true })).toBeVisible();
+    const followed = new URL(second.url());
+    expect(followed.searchParams.get("match")).toBe(rematchUrl.searchParams.get("match"));
+    expect([...followed.searchParams.keys()].sort()).toEqual(["match", "view"]);
     expect(publicMatch.parse(await (await request.get(bindingUrl)).json())).toEqual(binding);
     // Let the actual short-lived setup lobby expire. The canonical Scrabble
     // invitation and saved player identity must survive independently of it.
@@ -235,5 +243,178 @@ test("actual moenarch launcher creates one authoritative board, two players comm
     }
   } finally {
     await Promise.all([hostContext.close(), firstContext.close(), secondContext.close()]);
+  }
+});
+
+for (const failure of ["unavailable transport", "unowned existing match"] as const) {
+  test(`launcher binding remains absent for ${failure}`, async ({ browser, request }) => {
+    const context = await browser.newContext();
+    await context.grantPermissions(["local-network-access"], {
+      origin: "https://moritzbrantner.github.io",
+    });
+    await gateway(context, () => {});
+    if (failure === "unavailable transport") {
+      await context.addInitScript(() => {
+        // Deliberately unavailable browser transport, while real HTTP game
+        // creation remains intact. No board-claim response is fabricated.
+        Object.defineProperty(window, "WebTransport", { value: undefined });
+      });
+    }
+    const host = await context.newPage();
+    try {
+      await host.goto("https://moenarch.com/scrabble.html");
+      await host.evaluate(() => {
+        document.documentElement.dataset.publicReports = "0";
+        window.addEventListener("message", (event: MessageEvent<unknown>) => {
+          if (
+            event.origin === "https://moritzbrantner.github.io" &&
+            event.data !== null &&
+            typeof event.data === "object" &&
+            "type" in event.data &&
+            event.data.type === "scrabble-match-created"
+          ) {
+            document.documentElement.dataset.publicReports = String(
+              Number(document.documentElement.dataset.publicReports) + 1,
+            );
+          }
+        });
+      });
+      await host.getByRole("button", { name: "Create Scrabble lobby", exact: true }).click();
+      const invite = new URL(
+        z
+          .string()
+          .parse(
+            await host.getByRole("link", { name: "Invite link", exact: true }).getAttribute("href"),
+          ),
+        host.url(),
+      );
+      const session = z.string().parse(invite.searchParams.get("session"));
+      const popup = host.waitForEvent("popup");
+      await host.getByRole("button", { name: "Open Scrabble board", exact: true }).click();
+      const board = await popup;
+      await expect(board.getByRole("button", { name: "Create game", exact: true })).toBeVisible();
+      if (failure === "unavailable transport") {
+        const creation = board.waitForResponse(
+          (response) =>
+            response.url() === "https://moenarch.com/scrabble-api/games" &&
+            response.request().method() === "POST",
+        );
+        await board.getByRole("button", { name: "Create game", exact: true }).click();
+        expect((await creation).status()).toBe(200);
+        await expect(board.getByRole("alert")).toBeVisible();
+      } else {
+        const bytes = crypto.getRandomValues(new Uint8Array(16));
+        const created = await request.post(`${fixture.api}/games`, {
+          data: {
+            version: 2,
+            requestId: Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(""),
+            requestedAt: Math.floor(Date.now() / 1000),
+          },
+        });
+        expect(created.status()).toBe(200);
+        const match = z.object({ matchId: z.string() }).parse(await created.json()).matchId;
+        const url = new URL(board.url());
+        url.searchParams.set("match", match);
+        expect(
+          await board.evaluate(
+            () =>
+              Object.keys(sessionStorage).filter((key) => key.startsWith("scrabble:board:")).length,
+          ),
+        ).toBe(0);
+        await board.goto(url.href);
+        await expect(board.getByRole("alert")).toContainText(
+          /ownership|recover this board session/i,
+        );
+      }
+      await host.evaluate(
+        () =>
+          new Promise<void>((resolve) => {
+            const listener = (event: MessageEvent<unknown>) => {
+              if (event.data === "review-acceptance-barrier") {
+                window.removeEventListener("message", listener);
+                resolve();
+              }
+            };
+            window.addEventListener("message", listener);
+            window.postMessage("review-acceptance-barrier", window.location.origin);
+          }),
+      );
+      // The error UI establishes that the admission/ownership decision has run.
+      // No pre-proof report may have irreversibly bound the host's lobby.
+      const response = await request.get(
+        `${configuration.SCRABBLE_ACCEPTANCE_SETUP_API}/lobbies/${session}/game-reference`,
+      );
+      expect(response.status()).toBe(409);
+      expect(await response.json()).toEqual({
+        error: { code: "game-not-bound", message: expect.any(String) },
+      });
+      expect(
+        await host.evaluate(() => Number(document.documentElement.dataset.publicReports)),
+      ).toBe(0);
+    } finally {
+      await context.close();
+    }
+  });
+}
+
+test("owned board reconnect re-reports its confirmed public binding", async ({
+  browser,
+  request,
+}) => {
+  const context = await browser.newContext();
+  await context.grantPermissions(["local-network-access"], {
+    origin: "https://moritzbrantner.github.io",
+  });
+  await gateway(context, () => {});
+  const host = await context.newPage();
+  try {
+    await host.goto("https://moenarch.com/scrabble.html");
+    await host.evaluate(() => {
+      document.documentElement.dataset.publicReports = "0";
+      window.addEventListener("message", (event: MessageEvent<unknown>) => {
+        if (
+          event.origin === "https://moritzbrantner.github.io" &&
+          event.data !== null &&
+          typeof event.data === "object" &&
+          "type" in event.data &&
+          event.data.type === "scrabble-match-created"
+        ) {
+          document.documentElement.dataset.publicReports = String(
+            Number(document.documentElement.dataset.publicReports) + 1,
+          );
+        }
+      });
+    });
+    await host.getByRole("button", { name: "Create Scrabble lobby", exact: true }).click();
+    const invite = new URL(
+      z
+        .string()
+        .parse(
+          await host.getByRole("link", { name: "Invite link", exact: true }).getAttribute("href"),
+        ),
+      host.url(),
+    );
+    const session = z.string().parse(invite.searchParams.get("session"));
+    const popup = host.waitForEvent("popup");
+    await host.getByRole("button", { name: "Open Scrabble board", exact: true }).click();
+    const board = await popup;
+    await board.getByRole("button", { name: "Create game", exact: true }).click();
+    await expect(board.getByRole("button", { name: "Start game", exact: true })).toBeVisible();
+    const bindingUrl = `${configuration.SCRABBLE_ACCEPTANCE_SETUP_API}/lobbies/${session}/game-reference`;
+    await expect.poll(async () => (await request.get(bindingUrl)).status()).toBe(200);
+    const binding = publicMatch.parse(await (await request.get(bindingUrl)).json());
+    const before = await host.evaluate(() =>
+      Number(document.documentElement.dataset.publicReports),
+    );
+    await board.reload();
+    await expect(board.getByRole("button", { name: "Start game", exact: true })).toBeVisible();
+    await expect
+      .poll(() => host.evaluate(() => Number(document.documentElement.dataset.publicReports)))
+      .toBeGreaterThan(before);
+    expect(publicMatch.parse(await (await request.get(bindingUrl)).json())).toEqual(binding);
+    // The reload deliberately loses the private creation nonce. Rematch remains
+    // the responsibility of the original creator document in the long journey.
+  } finally {
+    await context.close();
   }
 });

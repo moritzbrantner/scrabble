@@ -117,3 +117,37 @@ Final candidate verification uses Scrabble's pinned Bun 1.4.2; the optional
 launcher with that repository's separately pinned Bun 1.4.0. Record that final
 run and both source revisions on issue #80 rather than inferring public live
 acceptance from this local gateway result.
+
+## Independent regression handoff after targeted review
+
+Review comments 4274442202 and 4274442214 require confirmed board authority
+before a trusted popup publishes a binding. New native integrated negative
+cases prove an actual successful HTTP creation followed by unavailable browser
+WebTransport leaves the lobby unbound, and a trusted original popup navigating
+to an existing public match without its board capsule cannot bind it. Only the
+browser transport is deliberately unavailable in the former case; game creation
+and every server response remain real. Both cases require public-reference
+GET 409 and no published match message. A separate positive case confirms an
+owned board reconnect can re-report the same binding. That reloaded document
+is deliberately not asked to start a rematch: the private creation nonce must
+remain lost on reload under the existing rematch specification.
+
+Review comment 4274442222 adds actual player **Join rematch** to the long
+native journey: both new board and followed player URLs/invites must omit the
+original launch/session hints while the original binding stays unchanged.
+Review comment 4274442232 fixes the existing native-opening helper to resolve
+its executable from `CARGO_TARGET_DIR`; the long journey deliberately supplies
+a stale opening so the real native refresh branch runs even in fast tests.
+The disposable target, executable, fixture directory and native freshness
+validation remain real rather than a mocked helper result.
+
+The pre-fix source is `36a0399`. Independent red observations: phone follow
+retained `launch`/`session`; unavailable transport still published an immutable
+binding after actual HTTP 200 creation. Owned reconnect was green. The initial
+unowned-case selector was corrected to the established recover-board-session
+error copy before assessing its binding result. These tests/harness changes
+precede production fixes; no production code was edited by their author.
+The corrected filtered native negative run reached the binding assertions in
+both cases and failed with actual HTTP 200 instead of expected 409 (two tests,
+about 0.5 seconds each after builds). This confirms both ownership defects
+independently of error-message selectors.
