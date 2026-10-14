@@ -393,7 +393,14 @@ mod tests {
         }
         assert_eq!(rejection(b"POST /games HTTP/1.1\r\n\r\n").await, 411);
         assert_eq!(
-            rejection(b"POST /games HTTP/1.1\r\nContent-Length: 513\r\n\r\n").await,
+            rejection(
+                format!(
+                    "POST /games HTTP/1.1\r\nContent-Length: {}\r\n\r\n",
+                    MAX_BODY_BYTES + 1
+                )
+                .as_bytes()
+            )
+            .await,
             413
         );
         let oversized = format!(
