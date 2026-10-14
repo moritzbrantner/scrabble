@@ -3,6 +3,10 @@ export const en = {
   "profiles.wordList": "Word list",
   "profiles.tiles": "Tile profile",
   "profiles.board": "Board layout",
+  "profiles.selectedBoard": "Selected board",
+  "profiles.squareBoard": "Square {size} × {size}",
+  "profiles.premiumPolicy":
+    "Premiums apply to all new words using their square, only when a tile is first placed there.",
   "profiles.advanced": "Advanced match rules",
   "profiles.rack_size": "Rack size",
   "profiles.bingo_bonus": "Bingo bonus",
@@ -253,6 +257,10 @@ const de: Record<CopyKey, string> = {
   "profiles.wordList": "Wortliste",
   "profiles.tiles": "Buchstabenprofil",
   "profiles.board": "Brettlayout",
+  "profiles.selectedBoard": "Ausgewähltes Brett",
+  "profiles.squareBoard": "Quadratisch {size} × {size}",
+  "profiles.premiumPolicy":
+    "Bonusfelder zählen für alle neu gebildeten Wörter, die dieses Feld verwenden, nur beim erstmaligen Belegen.",
   "profiles.advanced": "Erweiterte Spielregeln",
   "profiles.rack_size": "Ablagegröße",
   "profiles.bingo_bonus": "Bingobonus",
@@ -520,6 +528,10 @@ const es: Record<CopyKey, string> = {
   "profiles.wordList": "Lista de palabras",
   "profiles.tiles": "Perfil de fichas",
   "profiles.board": "Diseño del tablero",
+  "profiles.selectedBoard": "Tablero seleccionado",
+  "profiles.squareBoard": "Cuadrado {size} × {size}",
+  "profiles.premiumPolicy":
+    "Las bonificaciones se aplican a todas las palabras nuevas que usan su casilla, solo al colocar una ficha allí por primera vez.",
   "profiles.advanced": "Reglas avanzadas",
   "profiles.rack_size": "Tamaño del atril",
   "profiles.bingo_bonus": "Bonificación por bingo",

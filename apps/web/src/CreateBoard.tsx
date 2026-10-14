@@ -48,7 +48,7 @@ export function CreateBoard({
   api: string;
   certificateHash?: string;
 }) {
-  const { t } = useCopy();
+  const { t, number } = useCopy();
   const [state, setState] = useState<State>({ kind: "idle" });
   const [catalog, setCatalog] = useState<ProfileCatalog>();
   const [catalogFailed, setCatalogFailed] = useState(false);
@@ -58,6 +58,7 @@ export function CreateBoard({
   const [touched, setTouched] = useState(false);
   const request = useRef<CreateRequest>(undefined);
   const operation = useRef<AbortController>(undefined);
+  const selectedBoard = catalog?.boardProfiles.find((row) => row.identity.name === choices.board);
   useEffect(() => () => operation.current?.abort(), []);
   useEffect(() => {
     const controller = new AbortController();
@@ -245,6 +246,30 @@ export function CreateBoard({
               </NativeSelect>
             </label>
           </div>
+          {selectedBoard && (
+            <section
+              className="selected-board"
+              role="group"
+              aria-label={t("profiles.selectedBoard")}
+            >
+              <p>
+                <strong>{selectedBoard.label}</strong>
+                {" · "}
+                {t("profiles.squareBoard", { size: number(selectedBoard.boardSize) })}
+              </p>
+              <p>{t("profiles.premiumPolicy")}</p>
+              <ul>
+                {(["double_letter", "triple_letter", "double_word", "triple_word"] as const).map(
+                  (premium) => (
+                    <li key={premium}>
+                      {t(`premium.${premium}`)}:{" "}
+                      {number(selectedBoard.premiums.filter((cell) => cell === premium).length)}
+                    </li>
+                  ),
+                )}
+              </ul>
+            </section>
+          )}
           <details>
             <summary>{t("profiles.distribution")}</summary>
             <p>

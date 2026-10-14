@@ -512,6 +512,16 @@ body {
 .match-setup details {
   margin-block: 1rem;
 }
+.selected-board {
+  margin-block: 1rem;
+}
+.selected-board ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  padding: 0;
+  list-style: none;
+}
 .match-setup input {
   min-height: 2.75rem;
   background: var(--background);
