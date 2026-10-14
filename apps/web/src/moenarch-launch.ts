@@ -7,7 +7,7 @@ export type MoenarchLaunch =
   | { kind: "hosting" | "linked"; sessionId: string };
 
 const sessionIdPattern = /^[0123456789ABCDEFGHJKMNPQRSTVWXYZ]{12}$/;
-const matchIdPattern = /^[gb]_[0-9a-f]{16}_[0-9a-f]{32}$/;
+const matchIdPattern = /^[gbp]_[0-9a-f]{16}_[0-9a-f]{32}$/;
 
 /** Reject missing/ambiguous mappings instead of accidentally creating a second match. */
 export function moenarchLaunch(params: URLSearchParams): MoenarchLaunch {

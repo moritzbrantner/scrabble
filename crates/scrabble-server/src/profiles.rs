@@ -8,7 +8,11 @@ use scrabble_game::{
     },
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeSet, fmt, sync::Arc};
+use std::{
+    collections::BTreeSet,
+    fmt,
+    sync::{Arc, OnceLock},
+};
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum ProfileError {
@@ -61,6 +65,8 @@ fn content_identity<T: Serialize>(
 
 /// Prepared once; composing a new match shares the validated dictionary and its alphabet.
 pub struct WordListProfile {
+    source: ContentIdentity,
+    content: OnceLock<(Arc<[u8]>, String)>,
     dictionary: Arc<WordList>,
     alphabet: BTreeSet<char>,
 }
@@ -79,15 +85,34 @@ impl WordListProfile {
         let alphabet = words.words().flat_map(str::chars).collect();
         Ok(Self {
             dictionary: Arc::new(words),
+            source,
+            content: OnceLock::new(),
             alphabet,
         })
     }
     pub fn identity(&self) -> &ContentIdentity {
         self.dictionary.identity()
     }
+    pub(crate) fn source(&self) -> &ContentIdentity {
+        &self.source
+    }
+    pub(crate) fn content(&self) -> (Arc<[u8]>, String) {
+        self.content
+            .get_or_init(|| {
+                let mut bytes = Vec::new();
+                for word in self.dictionary.words() {
+                    bytes.extend_from_slice(word.as_bytes());
+                    bytes.push(b'\n');
+                }
+                let hash = hexadecimal(digest::digest(&digest::SHA256, &bytes).as_ref());
+                (Arc::from(bytes), hash)
+            })
+            .clone()
+    }
 }
 
 pub struct TileProfile {
+    source: ContentIdentity,
     identity: ContentIdentity,
     tiles: Vec<TileDefinition>,
     alphabet: BTreeSet<char>,
@@ -98,7 +123,8 @@ impl TileProfile {
         tiles: Vec<TileDefinition>,
     ) -> Result<Self, ProfileError> {
         validate_tiles(&tiles).map_err(|error| ProfileError::InvalidTiles(error.to_string()))?;
-        let identity = content_identity(&identity, "tile-profile", &tiles)?;
+        let source = identity;
+        let identity = content_identity(&source, "tile-profile", &tiles)?;
         let alphabet = tiles
             .iter()
             .filter_map(|tile| match tile.face {
@@ -107,10 +133,17 @@ impl TileProfile {
             })
             .collect();
         Ok(Self {
+            source,
             identity,
             tiles,
             alphabet,
         })
+    }
+    pub(crate) fn source(&self) -> &ContentIdentity {
+        &self.source
+    }
+    pub(crate) fn tiles(&self) -> &[TileDefinition] {
+        &self.tiles
     }
     pub fn identity(&self) -> &ContentIdentity {
         &self.identity
@@ -119,6 +152,7 @@ impl TileProfile {
 
 /// The existing square-board contract. Hex geometry is a separate #96 capability.
 pub struct BoardProfile {
+    source: ContentIdentity,
     identity: ContentIdentity,
     board_size: u8,
     premiums: Vec<Premium>,
@@ -131,12 +165,23 @@ impl BoardProfile {
     ) -> Result<Self, ProfileError> {
         validate_board(board_size, &premiums)
             .map_err(|error| ProfileError::InvalidBoard(error.to_string()))?;
-        let identity = content_identity(&identity, "board-profile", &(board_size, &premiums))?;
+        let source = identity;
+        let identity = content_identity(&source, "board-profile", &(board_size, &premiums))?;
         Ok(Self {
+            source,
             identity,
             board_size,
             premiums,
         })
+    }
+    pub(crate) fn source(&self) -> &ContentIdentity {
+        &self.source
+    }
+    pub(crate) fn size(&self) -> u8 {
+        self.board_size
+    }
+    pub(crate) fn premiums(&self) -> &[Premium] {
+        &self.premiums
     }
     pub fn identity(&self) -> &ContentIdentity {
         &self.identity

@@ -113,6 +113,8 @@ fn seed(config: &ServerConfig) -> ErrorResult<[u8; 32]> {
 /// The factory retains a derivation key, never a copy of any authoritative game state.
 #[derive(Clone)]
 pub struct MatchFactory {
+    catalog: Arc<crate::profile_catalog::ProfileCatalog>,
+    store: Arc<crate::configuration_store::ConfigurationStore>,
     key: hmac::Key,
     rules: Ruleset,
     dictionary: Arc<dyn Dictionary>,
@@ -125,9 +127,20 @@ impl MatchFactory {
                 return Err("configured matches have colliding game identities".into());
             }
         }
-        let (rules, dictionary) =
-            crate::dictionary::load(config.ruleset_file.as_deref(), config.dictionary.as_ref())?;
+        let (rules, dictionary) = crate::dictionary::load_prepared(
+            config.ruleset_file.as_deref(),
+            config.dictionary.as_ref(),
+        )?;
+        let catalog = crate::profile_catalog::ProfileCatalog::load(
+            config.profile_catalog_file.as_deref(),
+            &rules,
+            &dictionary,
+        )?;
         Ok(Self {
+            catalog: Arc::new(catalog),
+            store: Arc::new(crate::configuration_store::ConfigurationStore::new(
+                config.match_configuration_directory.clone(),
+            )),
             key: hmac::Key::new(hmac::HMAC_SHA256, &seed(config)?),
             rules,
             dictionary,
@@ -141,7 +154,7 @@ impl MatchFactory {
     }
 
     pub fn board_authority(&self, id: &MatchId) -> ErrorResult<BoardAuthority> {
-        if !id.as_str().starts_with("b_") {
+        if !id.as_str().starts_with("b_") && !id.as_str().starts_with("p_") {
             return Err("match does not support a separate board".into());
         }
         let created_at = creation_time(id).ok_or("invalid board match identity")?;
@@ -178,18 +191,76 @@ impl MatchFactory {
         ))?)
     }
 
+    pub(crate) fn catalog(&self) -> serde_json::Value {
+        self.catalog.public()
+    }
+    pub(crate) fn configured_id(
+        &self,
+        request_id: &str,
+        requested_at: u64,
+    ) -> ErrorResult<MatchId> {
+        self.derive_creation_id(request_id, requested_at, b"scrabble/create/v3\0", "p")
+    }
+    fn board_id_for(
+        &self,
+        id: &MatchId,
+        request_id: &str,
+        requested_at: u64,
+    ) -> ErrorResult<MatchId> {
+        if id.as_str().starts_with("p_") {
+            self.configured_id(request_id, requested_at)
+        } else {
+            self.board_creation_id(request_id, requested_at)
+        }
+    }
+    pub(crate) fn initialized(
+        &self,
+        id: &MatchId,
+    ) -> ErrorResult<Option<Arc<crate::configuration_store::RegisteredConfiguration>>> {
+        self.store.get(id)
+    }
+    pub(crate) fn resolve(
+        &self,
+        selection: &crate::profile_catalog::Selection,
+        rules: crate::profiles::MatchRules,
+    ) -> Result<crate::profile_catalog::PreparedConfiguration, crate::profile_catalog::SelectionError>
+    {
+        self.catalog.resolve(selection, rules)
+    }
+    pub(crate) fn initialize(
+        &self,
+        id: &MatchId,
+        prepared: crate::profile_catalog::PreparedConfiguration,
+    ) -> ErrorResult<()> {
+        self.store.register(id, prepared)
+    }
+    pub(crate) fn retire_initialization(&self, id: &MatchId) -> ErrorResult<()> {
+        if id.as_str().starts_with("p_") {
+            self.store.retire(id)
+        } else {
+            Ok(())
+        }
+    }
+
     pub fn create(&self, id: &MatchId) -> ErrorResult<ScrabbleSimulation> {
         let mut derivation = hmac::Context::with_key(&self.key);
         derivation.update(b"scrabble/deal/v1\0");
         derivation.update(id.as_str().as_bytes());
         let seed: [u8; 32] = derivation.sign().as_ref().try_into()?;
-        let simulation = ScrabbleSimulation::with_dictionary(
-            game_id(id),
-            self.rules.clone(),
-            seed,
-            Arc::clone(&self.dictionary),
-        )?;
-        let simulation = if id.as_str().starts_with("b_") {
+        let (rules, dictionary): (Ruleset, Arc<dyn Dictionary>) = if id.as_str().starts_with("p_") {
+            let initialized = self
+                .store
+                .get(id)?
+                .ok_or("configured match initialization is missing")?;
+            (
+                initialized.configuration.rules.clone(),
+                initialized.configuration.dictionary.clone(),
+            )
+        } else {
+            (self.rules.clone(), Arc::clone(&self.dictionary))
+        };
+        let simulation = ScrabbleSimulation::with_dictionary(game_id(id), rules, seed, dictionary)?;
+        let simulation = if id.as_str().starts_with("b_") || id.as_str().starts_with("p_") {
             simulation.with_board_authority(self.board_authority(id)?)
         } else {
             simulation
@@ -205,7 +276,8 @@ pub fn creation_time(id: &MatchId) -> Option<u64> {
     let value = id
         .as_str()
         .strip_prefix("g_")
-        .or_else(|| id.as_str().strip_prefix("b_"))?;
+        .or_else(|| id.as_str().strip_prefix("b_"))
+        .or_else(|| id.as_str().strip_prefix("p_"))?;
     let (timestamp, tag) = value.split_once('_')?;
     if timestamp.len() != 16
         || tag.len() != 32
@@ -253,7 +325,7 @@ impl BoardAuthority {
                 .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
             && self
                 .factory
-                .board_creation_id(request_id, self.created_at)
+                .board_id_for(&self.id, request_id, self.created_at)
                 .is_ok_and(|id| id == self.id)
     }
 }

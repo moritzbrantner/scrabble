@@ -1,5 +1,8 @@
 //! Small, bounded HTTP request boundary. The upstream runtime owns placement and session fencing.
-use crate::games::{CreateGame, CreateRematch, GameOperationError, Games, unix_seconds};
+use crate::games::{
+    ConfiguredError, CreateConfiguredGame, CreateGame, CreateRematch, GameOperationError, Games,
+    unix_seconds,
+};
 use game_server::MatchId;
 use std::{io, sync::Arc, time::Duration};
 use tokio::{
@@ -10,7 +13,7 @@ use tokio::{
 };
 
 const MAX_HEADER_BYTES: usize = 4096;
-const MAX_BODY_BYTES: usize = 512;
+const MAX_BODY_BYTES: usize = 2048;
 const MAX_CONNECTIONS: usize = 32;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -191,13 +194,23 @@ async fn route(request: Request, games: &Games, board_origin: &str) -> Response 
         };
         Some((MatchId::new(id).ok()?, resource))
     });
-    if request.path != "/games" && is_game.is_none() {
+    if request.path != "/games" && request.path != "/profiles" && is_game.is_none() {
         return Response::error(404, "not-found");
     }
     if request.method == "OPTIONS" {
         return Response {
             status: 204,
             body: String::new(),
+        };
+    }
+    if request.path == "/profiles" {
+        return if request.method == "GET" {
+            match serde_json::to_string(&games.profiles()) {
+                Ok(body) => Response { status: 200, body },
+                Err(_) => operation_error(GameOperationError::Internal),
+            }
+        } else {
+            Response::error(405, "method-not-allowed")
         };
     }
     let now = match unix_seconds() {
@@ -208,6 +221,37 @@ async fn route(request: Request, games: &Games, board_origin: &str) -> Response 
         "POST" if request.path == "/games" => {
             if request.content_type.as_deref() != Some("application/json") {
                 return Response::error(415, "json-required");
+            }
+            let version = serde_json::from_slice::<serde_json::Value>(&request.body)
+                .ok()
+                .and_then(|v| v.get("version").and_then(serde_json::Value::as_u64));
+            if version == Some(3) {
+                let create: CreateConfiguredGame = match serde_json::from_slice(&request.body) {
+                    Ok(value) => value,
+                    Err(_) => return Response::error(400, "invalid-request"),
+                };
+                return match games.create_configured(&create, now).await {
+                    Ok(join) => join_response(Ok(join)),
+                    Err(ConfiguredError::Game(error)) => operation_error(error),
+                    Err(ConfiguredError::Conflict) => Response::error(409, "creation-conflict"),
+                    Err(ConfiguredError::Selection(error)) => {
+                        let body = match error {
+                            crate::profile_catalog::SelectionError::Unknown(profile) => {
+                                serde_json::json!({"error":"unknown-profile","profile":profile})
+                            }
+                            crate::profile_catalog::SelectionError::Incompatible(letters) => {
+                                serde_json::json!({"error":"incompatible-profiles","letters":letters})
+                            }
+                            crate::profile_catalog::SelectionError::InvalidRules => {
+                                serde_json::json!({"error":"invalid-match-rules"})
+                            }
+                        };
+                        Response {
+                            status: 400,
+                            body: body.to_string(),
+                        }
+                    }
+                };
             }
             let create: CreateGame = match serde_json::from_slice(&request.body) {
                 Ok(create) => create,

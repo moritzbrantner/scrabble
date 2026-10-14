@@ -11,3 +11,6 @@ pub mod simulation;
 pub mod replay;
 
 pub type ErrorResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
+
+mod configuration_store;
+mod profile_catalog;

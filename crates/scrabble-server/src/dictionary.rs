@@ -16,6 +16,14 @@ pub fn load(
     ruleset_file: Option<&Path>,
     config: Option<&DictionaryConfig>,
 ) -> Result<(Ruleset, Arc<dyn Dictionary>), Box<dyn Error + Send + Sync>> {
+    let (rules, words) = load_prepared(ruleset_file, config)?;
+    Ok((rules, words))
+}
+
+pub(crate) fn load_prepared(
+    ruleset_file: Option<&Path>,
+    config: Option<&DictionaryConfig>,
+) -> Result<(Ruleset, Arc<WordList>), Box<dyn Error + Send + Sync>> {
     let mut rules = match ruleset_file {
         None => english_fixture(),
         Some(path) => {

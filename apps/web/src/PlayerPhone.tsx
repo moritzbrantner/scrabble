@@ -8,6 +8,7 @@ import { fixtures } from "./fixtures";
 import {
   decodePlayerSnapshot,
   decodeWordRejection,
+  decodeExchangeRejection,
   encodeGameCommand,
   type WordRejection,
 } from "./game-protocol";
@@ -69,6 +70,8 @@ export function PlayerPhone({
   const [connection, setConnection] = useState<ConnectionState>({ kind: "idle" });
   const [snapshot, setSnapshot] = useState<PlayerSnapshot>();
   const [rules, setRules] = useState<Ruleset>(fixtures.ruleset);
+  const [exchangeRejection, setExchangeRejection] =
+    useState<ReturnType<typeof decodeExchangeRejection>>();
   const [wordRejection, setWordRejection] = useState<WordRejection>();
   const submittedMove = useRef<{ gameId: string; turn: string; sequence: number }>(undefined);
   const privateResume = useRef<ResumeCapability>(undefined);
@@ -184,6 +187,14 @@ export function PlayerPhone({
           },
           onCommandRejected: ({ sequence, payload }) => {
             if (!active) {
+              return;
+            }
+            const exchange = decodeExchangeRejection(payload);
+            if (exchange !== undefined) {
+              if (exchange.game_id !== join.gameId) {
+                throw new ProtocolError("Rejection belongs to a different match");
+              }
+              setExchangeRejection(exchange);
               return;
             }
             const feedback = decodeWordRejection(payload);
@@ -401,6 +412,13 @@ export function PlayerPhone({
         </form>
       )}
       {state.kind === "joining" && <p role="status">{t("join.joining")}</p>}
+      {state.kind === "joined" &&
+        exchangeRejection &&
+        snapshot?.public.phase.kind === "playing" &&
+        exchangeRejection.game_id === snapshot.public.game_id &&
+        exchangeRejection.expected_turn === snapshot.public.phase.turn && (
+          <p role="alert">{t("profiles.exchangeUnavailable")}</p>
+        )}
       {state.kind === "joined" && state.message !== undefined && (
         <p role="alert">{t(state.message)}</p>
       )}

@@ -1,0 +1,239 @@
+//! Immutable initialization, separate from upstream canonical runtime recovery ownership.
+use crate::{
+    ErrorResult,
+    profile_catalog::{PreparedConfiguration, Selection, read_bounded},
+    profiles::{
+        BoardProfile, ComposedRuleset, MatchRules, ProfileSelection, TileProfile, WordListProfile,
+        compose_profiles,
+    },
+};
+use game_server::MatchId;
+use ring::{
+    digest,
+    rand::{SecureRandom, SystemRandom},
+};
+use scrabble_game::{dictionary::WordList, ruleset::Ruleset};
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::{HashMap, HashSet},
+    fs::{self, OpenOptions},
+    io::{self, Write},
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex},
+};
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Manifest {
+    version: u8,
+    selection: Selection,
+    sources: ProfileSelection,
+    rules: Ruleset,
+    dictionary_hash: String,
+}
+pub(crate) struct RegisteredConfiguration {
+    pub selection: Selection,
+    pub configuration: ComposedRuleset,
+}
+pub(crate) struct ConfigurationStore {
+    directory: PathBuf,
+    cache: Mutex<HashMap<String, Arc<RegisteredConfiguration>>>,
+    dictionaries: Mutex<HashSet<String>>,
+    restored_words: Mutex<HashMap<String, Arc<WordListProfile>>>,
+}
+fn regular_bytes(path: &Path, limit: u64) -> ErrorResult<Vec<u8>> {
+    if !fs::symlink_metadata(path)?.file_type().is_file() {
+        return Err("initialization input must be a regular file, not a symlink".into());
+    }
+    read_bounded(path, limit)
+}
+fn publish(path: &Path, bytes: &[u8]) -> ErrorResult<()> {
+    let parent = path.parent().ok_or("initialization path needs a parent")?;
+    fs::create_dir_all(parent)?;
+    let mut random = [0; 16];
+    SystemRandom::new()
+        .fill(&mut random)
+        .map_err(|_| "temporary input identity failed")?;
+    let temporary = parent.join(format!(".{}.tmp", crate::dictionary::hexadecimal(&random)));
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(&temporary)?;
+    let result = (|| -> ErrorResult<()> {
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        match fs::hard_link(&temporary, path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+                if regular_bytes(path, bytes.len() as u64)? != bytes {
+                    return Err("immutable initialization input differs".into());
+                }
+            }
+            Err(error) => return Err(error.into()),
+        }
+        #[cfg(unix)]
+        {
+            fs::File::open(parent)?.sync_all()?;
+        }
+        Ok(())
+    })();
+    drop(file);
+    let cleanup = fs::remove_file(&temporary);
+    result?;
+    cleanup?;
+    Ok(())
+}
+impl ConfigurationStore {
+    pub fn new(directory: PathBuf) -> Self {
+        Self {
+            directory,
+            cache: Mutex::new(HashMap::new()),
+            dictionaries: Mutex::new(HashSet::new()),
+            restored_words: Mutex::new(HashMap::new()),
+        }
+    }
+    fn manifest(&self, id: &MatchId) -> PathBuf {
+        self.directory.join(format!("{}.json", id.as_str()))
+    }
+    pub fn get(&self, id: &MatchId) -> ErrorResult<Option<Arc<RegisteredConfiguration>>> {
+        if let Some(value) = self
+            .cache
+            .lock()
+            .map_err(|_| "initialization cache unavailable")?
+            .get(id.as_str())
+            .cloned()
+        {
+            return Ok(Some(value));
+        }
+        let path = self.manifest(id);
+        match fs::symlink_metadata(&path) {
+            Ok(_) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(error.into()),
+        }
+        let manifest: Manifest = serde_json::from_slice(&regular_bytes(&path, 128 * 1024)?)?;
+        if manifest.version != 1
+            || manifest.dictionary_hash.len() != 64
+            || !manifest
+                .dictionary_hash
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        {
+            return Err("invalid persisted initialization".into());
+        }
+        let key = serde_json::to_string(&(&manifest.sources.word_list, &manifest.dictionary_hash))?;
+        let cached = self
+            .restored_words
+            .lock()
+            .map_err(|_| "dictionary cache unavailable")?
+            .get(&key)
+            .cloned();
+        let words = match cached {
+            Some(value) => value,
+            None => {
+                let bytes = regular_bytes(
+                    &self
+                        .directory
+                        .join("words")
+                        .join(format!("{}.txt", manifest.dictionary_hash)),
+                    64 * 1024 * 1024,
+                )?;
+                if crate::dictionary::hexadecimal(digest::digest(&digest::SHA256, &bytes).as_ref())
+                    != manifest.dictionary_hash
+                {
+                    return Err("persisted dictionary content fingerprint mismatch".into());
+                }
+                let words = Arc::new(WordListProfile::new(WordList::from_text(
+                    manifest.sources.word_list.clone(),
+                    std::str::from_utf8(&bytes)?,
+                )?)?);
+                self.restored_words
+                    .lock()
+                    .map_err(|_| "dictionary cache unavailable")?
+                    .insert(key, Arc::clone(&words));
+                words
+            }
+        };
+        let tiles = TileProfile::new(manifest.sources.tile, manifest.rules.tiles.clone())?;
+        let board = BoardProfile::new(
+            manifest.sources.board,
+            manifest.rules.board_size,
+            manifest.rules.premiums.clone(),
+        )?;
+        let composed = compose_profiles(&words, &tiles, &board, MatchRules::from(&manifest.rules))?;
+        if composed.rules != manifest.rules
+            || Selection::from(&composed.selection) != manifest.selection
+        {
+            return Err("persisted match configuration fingerprint mismatch".into());
+        }
+        let result = Arc::new(RegisteredConfiguration {
+            selection: manifest.selection,
+            configuration: composed,
+        });
+        self.cache
+            .lock()
+            .map_err(|_| "initialization cache unavailable")?
+            .insert(id.as_str().into(), Arc::clone(&result));
+        Ok(Some(result))
+    }
+    pub fn register(&self, id: &MatchId, prepared: PreparedConfiguration) -> ErrorResult<()> {
+        let selection = Selection::from(&prepared.composed.selection);
+        if let Some(existing) = self.get(id)? {
+            if existing.selection != selection
+                || existing.configuration.rules != prepared.composed.rules
+            {
+                return Err("conflicting match initialization".into());
+            }
+            return Ok(());
+        }
+        let mut versions = self
+            .dictionaries
+            .lock()
+            .map_err(|_| "dictionary cache unavailable")?;
+        if !versions.contains(&prepared.word_hash) {
+            publish(
+                &self
+                    .directory
+                    .join("words")
+                    .join(format!("{}.txt", prepared.word_hash)),
+                &prepared.word_content,
+            )?;
+            versions.insert(prepared.word_hash.clone());
+        }
+        drop(versions);
+        let manifest = Manifest {
+            version: 1,
+            selection: selection.clone(),
+            sources: prepared.sources,
+            rules: prepared.composed.rules.clone(),
+            dictionary_hash: prepared.word_hash,
+        };
+        publish(&self.manifest(id), &serde_json::to_vec(&manifest)?)?;
+        self.cache
+            .lock()
+            .map_err(|_| "initialization cache unavailable")?
+            .insert(
+                id.as_str().into(),
+                Arc::new(RegisteredConfiguration {
+                    selection,
+                    configuration: prepared.composed,
+                }),
+            );
+        Ok(())
+    }
+    pub fn retire(&self, id: &MatchId) -> ErrorResult<()> {
+        self.cache
+            .lock()
+            .map_err(|_| "initialization cache unavailable")?
+            .remove(id.as_str());
+        match fs::remove_file(self.manifest(id)) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error.into()),
+        }
+    }
+}

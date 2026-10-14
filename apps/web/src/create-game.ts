@@ -1,18 +1,27 @@
 import { z } from "zod";
 
 import { copy, translate, type Copy, type CopyKey } from "./copy";
+import { matchSettings, profileSelection } from "./profile-model";
 import { id } from "./public-state";
 import { matchUrl } from "./transport/browser-match";
 
-const createRequest = z.strictObject({
+const creationIntent = z.strictObject({
   version: z.literal(2),
   requestId: z.string().regex(/^[0-9a-f]{32}$/),
   requestedAt: z.int().min(0).max(Number.MAX_SAFE_INTEGER),
 });
+const createRequest = z.discriminatedUnion("version", [
+  creationIntent,
+  creationIntent.extend({
+    version: z.literal(3),
+    selection: profileSelection,
+    rules: matchSettings,
+  }),
+]);
 export type CreateRequest = z.infer<typeof createRequest>;
 const joinInformation = z.strictObject({
   version: z.literal(1),
-  matchId: z.string().regex(/^[gb]_[0-9a-f]{16}_[0-9a-f]{32}$/),
+  matchId: z.string().regex(/^[gbp]_[0-9a-f]{16}_[0-9a-f]{32}$/),
   gameId: id,
   matchPath: z.string(),
   expiresAt: z.int().min(0).max(Number.MAX_SAFE_INTEGER),
@@ -62,7 +71,7 @@ export function gameApiUrl(endpoint: string): URL {
   url.pathname = `${url.pathname === "/" ? "" : url.pathname}/games`;
   return url;
 }
-async function readResponse(response: Response): Promise<unknown> {
+export async function readResponse(response: Response, limit = 4096): Promise<unknown> {
   if (response.body === null) {
     throw new CreationError("create.missingInformation", true);
   }
@@ -76,7 +85,7 @@ async function readResponse(response: Response): Promise<unknown> {
         break;
       }
       length += value.length;
-      if (length > 4096) {
+      if (length > limit) {
         throw new CreationError("create.invalidInformation", false);
       }
       chunks.push(value);
@@ -120,6 +129,20 @@ export async function createGame(
       signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
     });
     if (!response.ok) {
+      if (body.version === 3 && (response.status === 400 || response.status === 409)) {
+        const failure = z.object({ error: z.string() }).safeParse(await readResponse(response));
+        const code = failure.success ? failure.data.error : "invalid-request";
+        if (code === "unknown-profile") {
+          throw new CreationError("profiles.unknown", false);
+        }
+        if (code === "incompatible-profiles") {
+          throw new CreationError("profiles.incompatible", false);
+        }
+        if (code === "creation-conflict") {
+          throw new CreationError("profiles.conflict", false);
+        }
+        throw new CreationError("profiles.invalidRules", false);
+      }
       await response.body?.cancel();
       switch (response.status) {
         case 410:

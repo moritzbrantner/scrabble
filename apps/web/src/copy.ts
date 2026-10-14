@@ -1,5 +1,28 @@
 // Stable semantic keys; gameplay content and private authority are not translated.
 export const en = {
+  "profiles.wordList": "Word list",
+  "profiles.tiles": "Tile profile",
+  "profiles.board": "Board layout",
+  "profiles.advanced": "Advanced match rules",
+  "profiles.rack_size": "Rack size",
+  "profiles.bingo_bonus": "Bingo bonus",
+  "profiles.exchange_minimum_bag": "Exchange minimum",
+  "profiles.scoreless_turn_limit": "Scoreless-turn limit",
+  "profiles.minimum_players": "Minimum players",
+  "profiles.maximum_players": "Maximum players",
+  "profiles.loading": "Loading match profiles…",
+  "profiles.unavailable":
+    "Match profiles could not be loaded. Retry to choose your match settings.",
+  "profiles.retry": "Retry profiles",
+  "profiles.unknown":
+    "A selected profile is unavailable or has changed. Reload the page to choose an available version.",
+  "profiles.incompatible":
+    "This word list uses letters missing from the selected tile profile. Choose compatible profiles.",
+  "profiles.invalidRules": "These match settings are invalid. Check rack size and player limits.",
+  "profiles.conflict":
+    "This creation request already belongs to different settings. Start a new request.",
+  "profiles.exchangeUnavailable": "There are not enough tiles in the bag for this exchange.",
+  "profiles.distribution": "Tile distribution",
   "settings.title": "Settings",
   "settings.language": "Interface language",
   "settings.theme": "Appearance",
@@ -227,6 +250,30 @@ export const en = {
 } as const;
 export type CopyKey = keyof typeof en;
 const de: Record<CopyKey, string> = {
+  "profiles.wordList": "Wortliste",
+  "profiles.tiles": "Buchstabenprofil",
+  "profiles.board": "Brettlayout",
+  "profiles.advanced": "Erweiterte Spielregeln",
+  "profiles.rack_size": "Ablagegröße",
+  "profiles.bingo_bonus": "Bingobonus",
+  "profiles.exchange_minimum_bag": "Tauschminimum",
+  "profiles.scoreless_turn_limit": "Limit punktloser Züge",
+  "profiles.minimum_players": "Mindestspielerzahl",
+  "profiles.maximum_players": "Höchstspielerzahl",
+  "profiles.loading": "Spielprofile werden geladen…",
+  "profiles.unavailable":
+    "Spielprofile konnten nicht geladen werden. Erneut versuchen, um die Einstellungen zu wählen.",
+  "profiles.retry": "Profile erneut laden",
+  "profiles.unknown":
+    "Ein gewähltes Profil ist nicht mehr verfügbar oder wurde geändert. Seite neu laden und eine verfügbare Version wählen.",
+  "profiles.incompatible":
+    "Diese Wortliste verwendet Buchstaben, die im gewählten Buchstabenprofil fehlen. Kompatible Profile wählen.",
+  "profiles.invalidRules":
+    "Diese Spieleinstellungen sind ungültig. Ablagegröße und Spielergrenzen prüfen.",
+  "profiles.conflict":
+    "Diese Spielanfrage gehört bereits zu anderen Einstellungen. Eine neue Anfrage starten.",
+  "profiles.exchangeUnavailable": "Im Beutel sind nicht genügend Steine für diesen Tausch.",
+  "profiles.distribution": "Steinverteilung",
   "settings.title": "Einstellungen",
   "settings.language": "Sprache der Oberfläche",
   "settings.theme": "Darstellung",
@@ -470,6 +517,29 @@ const de: Record<CopyKey, string> = {
   "editor.exchangePending": "Warten auf Bestätigung: Tausch…",
 };
 const es: Record<CopyKey, string> = {
+  "profiles.wordList": "Lista de palabras",
+  "profiles.tiles": "Perfil de fichas",
+  "profiles.board": "Diseño del tablero",
+  "profiles.advanced": "Reglas avanzadas",
+  "profiles.rack_size": "Tamaño del atril",
+  "profiles.bingo_bonus": "Bonificación por bingo",
+  "profiles.exchange_minimum_bag": "Mínimo para cambiar",
+  "profiles.scoreless_turn_limit": "Límite de turnos sin puntos",
+  "profiles.minimum_players": "Mínimo de jugadores",
+  "profiles.maximum_players": "Máximo de jugadores",
+  "profiles.loading": "Cargando perfiles…",
+  "profiles.unavailable":
+    "No se pudieron cargar los perfiles. Reintenta para elegir la configuración.",
+  "profiles.retry": "Reintentar perfiles",
+  "profiles.unknown":
+    "Un perfil seleccionado ya no está disponible o ha cambiado. Recarga para elegir una versión disponible.",
+  "profiles.incompatible":
+    "Esta lista usa letras ausentes del perfil de fichas. Elige perfiles compatibles.",
+  "profiles.invalidRules":
+    "La configuración no es válida. Revisa el atril y los límites de jugadores.",
+  "profiles.conflict": "Esta solicitud ya corresponde a otra configuración. Inicia otra solicitud.",
+  "profiles.exchangeUnavailable": "No quedan suficientes fichas en la bolsa para este cambio.",
+  "profiles.distribution": "Distribución de fichas",
   "settings.title": "Ajustes",
   "settings.language": "Idioma de la interfaz",
   "settings.theme": "Apariencia",

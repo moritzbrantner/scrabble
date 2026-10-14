@@ -20,6 +20,8 @@ pub struct ServerConfig {
     pub mode: Mode,
     pub dictionary: Option<DictionaryConfig>,
     pub ruleset_file: Option<PathBuf>,
+    pub profile_catalog_file: Option<PathBuf>,
+    pub match_configuration_directory: PathBuf,
     pub port: u16,
     pub status_port: u16,
     pub api_port: u16,
@@ -48,6 +50,8 @@ fn fail(message: impl Into<String>) -> ConfigError {
     ConfigError(message.into())
 }
 const KEYS: &[&str] = &[
+    "SCRABBLE_PROFILE_CATALOG_FILE",
+    "SCRABBLE_MATCH_CONFIGURATION_DIR",
     "SCRABBLE_MODE",
     "SCRABBLE_RULESET_FILE",
     "SCRABBLE_DICTIONARY_FILE",
@@ -260,7 +264,26 @@ impl ServerConfig {
         } else {
             None
         };
+        let profile_catalog_file = values
+            .get("SCRABBLE_PROFILE_CATALOG_FILE")
+            .map(PathBuf::from);
+        if profile_catalog_file.as_ref().is_some_and(|path| {
+            path.as_os_str().is_empty() || (matches!(mode, Mode::Production) && !path.is_absolute())
+        }) {
+            return Err(fail(
+                "profile catalog requires an explicit valid path, absolute in production",
+            ));
+        }
+        let match_configuration_directory = match values.get("SCRABBLE_MATCH_CONFIGURATION_DIR") {
+            Some(_) => path(values, "SCRABBLE_MATCH_CONFIGURATION_DIR", "")?,
+            None => path(values, "SCRABBLE_SEED_FILE", ".local/server/seed")?
+                .parent()
+                .unwrap_or(std::path::Path::new("."))
+                .join("configurations"),
+        };
         let config = Self {
+            profile_catalog_file,
+            match_configuration_directory,
             mode,
             dictionary,
             ruleset_file,
@@ -298,6 +321,7 @@ impl ServerConfig {
                 &config.private_key,
                 &config.seed_file,
                 &config.recovery_directory,
+                &config.match_configuration_directory,
             ]
             .iter()
             .any(|path| !path.is_absolute())
@@ -312,6 +336,20 @@ impl ServerConfig {
         {
             return Err(fail(
                 "seed file must be separate from TLS files and the consumed recovery directory",
+            ));
+        }
+        if config.match_configuration_directory == config.seed_file
+            || config.match_configuration_directory == config.certificate
+            || config.match_configuration_directory == config.private_key
+            || config
+                .match_configuration_directory
+                .starts_with(&config.recovery_directory)
+            || config
+                .recovery_directory
+                .starts_with(&config.match_configuration_directory)
+        {
+            return Err(fail(
+                "match initialization must be separate from TLS, seed and runtime recovery",
             ));
         }
         if config.certificate == config.private_key {

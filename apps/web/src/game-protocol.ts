@@ -84,3 +84,20 @@ export function decodeWordRejection(bytes: Uint8Array): WordRejection {
   }
   return parsed.data;
 }
+
+const exchangeRejection = z.strictObject({
+  version: z.literal(1),
+  game_id: id,
+  expected_turn: id,
+  error: z.strictObject({ kind: z.literal("exchange_unavailable") }),
+});
+export function decodeExchangeRejection(bytes: Uint8Array) {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  } catch {
+    return undefined;
+  }
+  const parsed = exchangeRejection.safeParse(raw);
+  return parsed.success ? parsed.data : undefined;
+}

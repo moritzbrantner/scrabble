@@ -51,9 +51,10 @@ impl fmt::Display for WordListError {
 impl std::error::Error for WordListError {}
 
 /// Owns a validated word set; neither source order nor duplicate entries affect lookup.
+#[derive(Clone)]
 pub struct WordList {
     identity: ContentIdentity,
-    words: BTreeSet<String>,
+    words: Arc<BTreeSet<String>>,
 }
 impl WordList {
     pub fn from_text(identity: ContentIdentity, text: &str) -> Result<Self, WordListError> {
@@ -76,7 +77,10 @@ impl WordList {
         if words.is_empty() {
             return Err(WordListError::Empty);
         }
-        Ok(Self { identity, words })
+        Ok(Self {
+            identity,
+            words: Arc::new(words),
+        })
     }
     pub fn with_revision(mut self, revision: String) -> Result<Self, WordListError> {
         if revision.is_empty() {

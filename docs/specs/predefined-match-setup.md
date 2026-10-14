@@ -142,3 +142,24 @@ a match. Expected accessible English labels are **Word list**, **Tile profile**,
 **Board layout**, **Advanced match rules**, **Rack size**, **Bingo bonus**,
 **Exchange minimum**, **Scoreless-turn limit**, **Minimum players**, and
 **Maximum players**; localized equivalents cover the same controls.
+
+## Configured match identity and operational bounds
+
+Configured version-3 creations use opaque `p_` match IDs with a domain-separated
+creation MAC. Existing `g_` and `b_` identities and creation semantics remain
+unchanged. A `p_` ID requires its original initialization manifest; a missing or
+corrupt manifest must fail closed, never reconstruct the deployment default.
+The same private creation nonce proves board ownership. Only opaque public IDs
+enter invitations; selected settings, paths and credentials are not encoded.
+
+Operator catalog JSON is bounded to 1 MiB, at most 32 sources per kind and 64 MiB
+of total source word bytes. Public metadata is bounded to 128 KiB. These are
+resource bounds, not new game-rule defaults. The creation body bound is 2 KiB,
+including full versioned selection identities and the six rule values.
+
+The initialization directory defaults to `configurations` beside the seed and
+must remain outside the upstream consumed recovery directory. Preserve it along
+with the seed and recovery across upgrades; it stores immutable initialization
+manifests and one shared content-addressed word file per selected version.
+Configured source edits affect future choices only. Deleting required saved
+initialization is not a supported migration or recovery strategy.
