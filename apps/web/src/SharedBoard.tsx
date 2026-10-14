@@ -23,6 +23,11 @@ export function SharedBoard({ snapshot, rules }: { snapshot: PublicSnapshot; rul
   );
   const indices = Array.from({ length: rules.board_size }, (_, index) => index);
   const active = snapshot.phase.kind === "playing" ? snapshot.phase.active_player : null;
+  const finished = snapshot.phase.kind === "finished";
+  // Final standings rank by score, highest first; ties keep seat order (stable sort).
+  const standings = finished
+    ? [...snapshot.players].sort((left, right) => right.score - left.score)
+    : snapshot.players;
   let status: string;
   switch (snapshot.phase.kind) {
     case "lobby": {
@@ -127,8 +132,8 @@ export function SharedBoard({ snapshot, rules }: { snapshot: PublicSnapshot; rul
         {preview !== null && preview.tiles.length > 0 && <p>{t("board.tentative")}</p>}
         {snapshot.phase.kind === "finished" && <p>{t("board.finished")}</p>}
         {snapshot.players.length > 0 && (
-          <ul aria-label={t("board.players")}>
-            {snapshot.players.map((player) => (
+          <ul aria-label={t(finished ? "board.standings" : "board.players")}>
+            {standings.map((player) => (
               <li key={player.id} className={player.id === active ? "active-player" : ""}>
                 <span>
                   {player.display_name}

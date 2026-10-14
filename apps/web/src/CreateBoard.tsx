@@ -62,6 +62,15 @@ export function CreateBoard({
     return (
       <>
         <LiveBoard
+          key={state.join.matchId}
+          api={api}
+          onRematch={(join, rematchRequest) => {
+            request.current = rematchRequest;
+            const location = new URL(window.location.href);
+            location.searchParams.set("match", join.matchId);
+            window.history.replaceState(null, "", location);
+            setState({ kind: "created", join });
+          }}
           endpoint={endpoint}
           matchId={state.join.matchId}
           {...(request.current === undefined

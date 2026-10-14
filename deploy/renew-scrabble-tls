@@ -1,0 +1,5 @@
+#!/bin/bash
+set -euo pipefail
+if [[ "${RENEWED_LINEAGE:-}" == /etc/letsencrypt/live/moenarch.com ]]; then
+    systemctl restart scrabble-server.service
+fi
