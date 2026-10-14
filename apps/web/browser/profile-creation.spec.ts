@@ -438,3 +438,34 @@ test("a real correlated exchange rejection restores phone actions and cancels it
     }
   }
 });
+
+test("selected board geometry and premium rules are readable before creation", async ({
+  page,
+  request,
+}) => {
+  const sources = await catalog(request);
+  await page.goto(entry());
+  const summary = page.getByRole("group", { name: "Selected board", exact: true });
+  for (const label of ["Compact square 7", "Classic square 15"]) {
+    const selected = sources.boardProfiles.find((row) => row.label === label);
+    if (!selected) {
+      throw new Error("missing real authored board source");
+    }
+    await board(page).selectOption({ label });
+    await expect(summary).toContainText(label);
+    await expect(summary).toContainText(`${selected.boardSize} × ${selected.boardSize}`);
+    await expect(summary).toContainText(/square/i);
+    await expect(summary).toContainText(/all (?:new )?words|every (?:newly )?(?:formed )?word/i);
+    for (const [premium, text] of [
+      ["double_letter", "Double letter"],
+      ["triple_letter", "Triple letter"],
+      ["double_word", "Double word"],
+      ["triple_word", "Triple word"],
+    ] as const) {
+      const count = selected.premiums.filter((cell) => cell === premium).length;
+      await expect(summary.getByText(`${text}: ${count}`, { exact: true })).toBeVisible();
+    }
+    await expect(page.getByRole("button", { name: "Create game", exact: true })).toBeEnabled();
+    await expect(page.getByRole("link", { name: "Join this game", exact: true })).toHaveCount(0);
+  }
+});

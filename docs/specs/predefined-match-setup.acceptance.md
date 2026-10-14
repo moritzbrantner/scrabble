@@ -202,3 +202,33 @@ fails because Pass remains disabled after one second. Later unchanged-state,
 timeout and subsequent-pass assertions are unrun. Log:
 `/tmp/scrabble94-exchange-{dev,pages}-baseline.log`. These tests and documentation are
 independent acceptance changes; production repair starts only after their handoff.
+
+## Readable board choice before creation
+
+Original #94 explicitly requires readable selected board geometry and premium-rule
+identity. Labels in a selector, public catalog JSON, and post-creation snapshots
+do not alone satisfy that pre-creation requirement. Independent acceptance adds
+`selected board geometry and premium rules are readable before creation`: select
+both authored compact and classic sources, inspect their readable label, square
+dimensions, current all-word premium policy and the four premium-cell counts
+computed from the actual native catalog, without creating a match. This requires
+readable information, not a new graphical board editor or raw content hashes.
+Future hex policies remain #96's scope.
+
+The production baseline is `f574a39`. Both development and optimized Pages genuinely fail at the absent
+accessible Selected board summary; later dimension/policy/count assertions are
+unrun. Logs `/tmp/scrabble94-board-metadata-{dev,pages}-baseline.log`.
+
+Separately, the failed full run at `f574a39` recorded an address-in-use bind error
+before readiness in the compact-default native process case, with the other
+twelve cases passing (`/tmp/scrabble94-review-final.log`). The independent harness
+previously released each discovered socket before catalog/config preparation and
+could select the same temporarily unused port in parallel cases. It now retains
+all three reservations until child launch and excludes ports already chosen in
+this test process. Child-owned listeners, concurrency, all gameplay/recovery
+assertions and timeouts are unchanged. The exact competing socket in the old
+failure was not retained; this repairs the observed harness reservation gap,
+not a claim of product failure or a same-source retry waiver. All thirteen actual
+process cases pass after the harness change, in 2.44 seconds; log
+`/tmp/scrabble94-reserved-ports-verification.log`. Full candidate gates remain
+required after the UI repair.

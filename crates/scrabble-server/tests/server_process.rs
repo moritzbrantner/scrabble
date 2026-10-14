@@ -6,11 +6,12 @@ use scrabble_game::{
     protocol::{Command, CommandEnvelope, Phase, PlayerSnapshot},
 };
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashSet},
     fs,
     net::{TcpListener, UdpSocket},
     path::PathBuf,
     process::Stdio,
+    sync::{LazyLock, Mutex},
     time::Duration,
 };
 use tokio::{
@@ -23,6 +24,18 @@ use wtransport::{ClientConfig, Connection, Endpoint, Identity, tls::Sha256Digest
 #[path = "support/profile_catalog.rs"]
 mod profile_catalog;
 
+// Child processes bind after configuration is written. Never recycle a port
+// selected by another parallel case during that unavoidable handoff window.
+static PROCESS_PORTS: LazyLock<Mutex<HashSet<u16>>> = LazyLock::new(|| Mutex::new(HashSet::new()));
+fn process_port<T>(bind: impl Fn() -> (u16, T)) -> (u16, T) {
+    loop {
+        let (port, socket) = bind();
+        if PROCESS_PORTS.lock().unwrap().insert(port) {
+            return (port, socket);
+        }
+    }
+}
+
 struct Server {
     directory: tempfile::TempDir,
     values: BTreeMap<String, String>,
@@ -32,6 +45,7 @@ struct Server {
     api_port: u16,
     port: u16,
     log: PathBuf,
+    reservations: Option<(UdpSocket, TcpListener, TcpListener)>,
 }
 impl Server {
     async fn new() -> Self {
@@ -51,15 +65,16 @@ impl Server {
             .unwrap();
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&key, fs::Permissions::from_mode(0o600)).unwrap();
-        let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
-        let port = socket.local_addr().unwrap().port();
-        drop(socket);
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let status_port = listener.local_addr().unwrap().port();
-        drop(listener);
-        let api = TcpListener::bind("127.0.0.1:0").unwrap();
-        let api_port = api.local_addr().unwrap().port();
-        drop(api);
+        let (port, transport) = process_port(|| {
+            let socket = UdpSocket::bind("127.0.0.1:0").unwrap();
+            (socket.local_addr().unwrap().port(), socket)
+        });
+        let reserve_tcp = || {
+            let socket = TcpListener::bind("127.0.0.1:0").unwrap();
+            (socket.local_addr().unwrap().port(), socket)
+        };
+        let (status_port, status) = process_port(reserve_tcp);
+        let (api_port, api) = process_port(reserve_tcp);
         let values = BTreeMap::from([
             ("SCRABBLE_PORT".into(), port.to_string()),
             ("SCRABBLE_STATUS_PORT".into(), status_port.to_string()),
@@ -89,9 +104,12 @@ impl Server {
             api_port,
             port,
             log,
+            reservations: Some((transport, status, api)),
         }
     }
     async fn start(&mut self) {
+        // Reserve through catalog/configuration preparation, releasing only for child bind.
+        drop(self.reservations.take());
         self.child = Some(
             ProcessCommand::new(env!("CARGO_BIN_EXE_scrabble-server"))
                 .env_clear()
