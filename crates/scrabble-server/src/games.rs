@@ -279,9 +279,11 @@ impl Games {
             {
                 return Err(GameOperationError::Internal);
             }
-            let simulation = self
-                .factory
-                .create(id)
+            let factory = self.factory.clone();
+            let initialize_id = id.clone();
+            let simulation = tokio::task::spawn_blocking(move || factory.create(&initialize_id))
+                .await
+                .map_err(|_| GameOperationError::Internal)?
                 .map_err(|_| GameOperationError::Internal)?;
             self.host
                 .place(

@@ -10,7 +10,9 @@ import {
   decodeWordRejection,
   decodeExchangeRejection,
   encodeGameCommand,
-  type WordRejection,
+  matchesTurnRejection,
+  type TurnRejection,
+  type SubmittedTurnAction,
 } from "./game-protocol";
 import { matchRules, requireMatchRules } from "./match-rules";
 import { MoveEditor } from "./MoveEditor";
@@ -70,10 +72,8 @@ export function PlayerPhone({
   const [connection, setConnection] = useState<ConnectionState>({ kind: "idle" });
   const [snapshot, setSnapshot] = useState<PlayerSnapshot>();
   const [rules, setRules] = useState<Ruleset>(fixtures.ruleset);
-  const [exchangeRejection, setExchangeRejection] =
-    useState<ReturnType<typeof decodeExchangeRejection>>();
-  const [wordRejection, setWordRejection] = useState<WordRejection>();
-  const submittedMove = useRef<{ gameId: string; turn: string; sequence: number }>(undefined);
+  const [turnRejection, setTurnRejection] = useState<TurnRejection>();
+  const submittedAction = useRef<SubmittedTurnAction>(undefined);
   const privateResume = useRef<ResumeCapability>(undefined);
   const activeClient = useRef<BrowserMatch>(undefined);
   useEffect(() => {
@@ -173,6 +173,8 @@ export function PlayerPhone({
             if (next.kind === "synchronizing") {
               nameSent = false;
               clearTimeout(nameTimeout);
+              submittedAction.current = undefined;
+              setTurnRejection(undefined);
             }
             if (next.kind === "resume-failed") {
               resumeStopped = true;
@@ -189,27 +191,15 @@ export function PlayerPhone({
             if (!active) {
               return;
             }
-            const exchange = decodeExchangeRejection(payload);
-            if (exchange !== undefined) {
-              if (exchange.game_id !== join.gameId) {
-                throw new ProtocolError("Rejection belongs to a different match");
-              }
-              setExchangeRejection(exchange);
-              return;
-            }
-            const feedback = decodeWordRejection(payload);
+            const feedback = decodeExchangeRejection(payload) ?? decodeWordRejection(payload);
             if (feedback.game_id !== join.gameId) {
               throw new ProtocolError("Rejection belongs to a different match");
             }
-            const submitted = submittedMove.current;
-            if (
-              submitted?.sequence !== sequence ||
-              submitted.turn !== feedback.expected_turn ||
-              submitted.gameId !== feedback.game_id
-            ) {
+            if (!matchesTurnRejection(submittedAction.current, sequence, feedback)) {
               return;
             }
-            setWordRejection(feedback);
+            submittedAction.current = undefined;
+            setTurnRejection(feedback);
           },
           onSnapshot: (frame) => {
             if (!active || playerId === undefined) {
@@ -412,13 +402,6 @@ export function PlayerPhone({
         </form>
       )}
       {state.kind === "joining" && <p role="status">{t("join.joining")}</p>}
-      {state.kind === "joined" &&
-        exchangeRejection &&
-        snapshot?.public.phase.kind === "playing" &&
-        exchangeRejection.game_id === snapshot.public.game_id &&
-        exchangeRejection.expected_turn === snapshot.public.phase.turn && (
-          <p role="alert">{t("profiles.exchangeUnavailable")}</p>
-        )}
       {state.kind === "joined" && state.message !== undefined && (
         <p role="alert">{t(state.message)}</p>
       )}
@@ -471,7 +454,7 @@ export function PlayerPhone({
                   snapshot={snapshot}
                   rules={rules}
                   canAct={canAct}
-                  {...(wordRejection === undefined ? {} : { wordRejection })}
+                  {...(turnRejection === undefined ? {} : { turnRejection })}
                   onPreview={async (placements) => {
                     const client = activeClient.current;
                     if (
@@ -503,12 +486,14 @@ export function PlayerPhone({
                       throw new Error("Turn action cannot be sent");
                     }
                     const turn = snapshot.public.phase.turn;
-                    setWordRejection(undefined);
+                    setTurnRejection(undefined);
                     await client.sendCommand((sequence, authenticated) => {
-                      submittedMove.current =
-                        command.kind === "commit"
-                          ? { gameId: snapshot.public.game_id, turn, sequence }
-                          : undefined;
+                      submittedAction.current = {
+                        gameId: snapshot.public.game_id,
+                        turn,
+                        sequence,
+                        kind: command.kind,
+                      };
                       return encodeGameCommand({
                         version: 1,
                         game_id: snapshot.public.game_id,

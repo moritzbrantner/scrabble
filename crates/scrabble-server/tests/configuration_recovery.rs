@@ -250,6 +250,29 @@ async fn configured_initialization_corruption_never_falls_back_and_exact_restora
         let restored = MatchFactory::new(&ServerConfig::from_values(&values).unwrap()).unwrap();
         verify_replay(restored.create(&id).unwrap(), &image.replay).unwrap();
     }
+    // A reused factory must validate durable inputs even when it already holds the
+    // composed match or another match sharing the same parsed dictionary.
+    let reused = MatchFactory::new(&ServerConfig::from_values(&values).unwrap()).unwrap();
+    let other_id = MatchId::new(different_join["matchId"].as_str().unwrap()).unwrap();
+    assert!(reused.create(&id).is_ok());
+    fs::remove_file(&words).unwrap();
+    assert!(
+        reused.create(&id).is_err(),
+        "cached match must revalidate words"
+    );
+    assert!(
+        reused.create(&other_id).is_err(),
+        "shared parsed words must revalidate storage"
+    );
+    fs::write(&words, &word_bytes).unwrap();
+    assert!(reused.create(&other_id).is_ok());
+    fs::write(&manifest, b"{").unwrap();
+    assert!(
+        reused.create(&id).is_err(),
+        "cached match must revalidate its manifest"
+    );
+    fs::write(&manifest, &manifest_bytes).unwrap();
+    assert!(reused.create(&id).is_ok());
     let mut restored = spawn(&values, &log);
     ready(&mut restored, status_port).await;
     let token = game_server::ReconnectToken(credential.reconnect_token).encode_hex();

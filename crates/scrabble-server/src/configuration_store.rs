@@ -15,7 +15,7 @@ use ring::{
 use scrabble_game::{dictionary::WordList, ruleset::Ruleset};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fs::{self, OpenOptions},
     io::{self, Write},
     path::{Path, PathBuf},
@@ -40,7 +40,6 @@ pub(crate) struct ConfigurationStore {
     directory: PathBuf,
     key: hmac::Key,
     cache: Mutex<HashMap<String, Arc<RegisteredConfiguration>>>,
-    dictionaries: Mutex<HashSet<String>>,
     restored_words: Mutex<HashMap<String, Arc<WordListProfile>>>,
 }
 fn regular_bytes(path: &Path, limit: u64) -> ErrorResult<Vec<u8>> {
@@ -98,7 +97,6 @@ impl ConfigurationStore {
             directory,
             key,
             cache: Mutex::new(HashMap::new()),
-            dictionaries: Mutex::new(HashSet::new()),
             restored_words: Mutex::new(HashMap::new()),
         }
     }
@@ -116,16 +114,18 @@ impl ConfigurationStore {
     fn manifest(&self, id: &MatchId) -> PathBuf {
         self.directory.join(format!("{}.json", id.as_str()))
     }
-    pub fn get(&self, id: &MatchId) -> ErrorResult<Option<Arc<RegisteredConfiguration>>> {
-        if let Some(value) = self
-            .cache
-            .lock()
-            .map_err(|_| "initialization cache unavailable")?
-            .get(id.as_str())
-            .cloned()
+    fn word_path(&self, hash: &str) -> PathBuf {
+        self.directory.join("words").join(format!("{hash}.txt"))
+    }
+    fn word_bytes(&self, hash: &str) -> ErrorResult<Vec<u8>> {
+        let bytes = regular_bytes(&self.word_path(hash), 64 * 1024 * 1024)?;
+        if crate::dictionary::hexadecimal(digest::digest(&digest::SHA256, &bytes).as_ref()) != hash
         {
-            return Ok(Some(value));
+            return Err("persisted dictionary content fingerprint mismatch".into());
         }
+        Ok(bytes)
+    }
+    pub fn get(&self, id: &MatchId) -> ErrorResult<Option<Arc<RegisteredConfiguration>>> {
         let path = self.manifest(id);
         match fs::symlink_metadata(&path) {
             Ok(_) => {}
@@ -158,6 +158,18 @@ impl ConfigurationStore {
             &signature,
         )
         .map_err(|_| "initialization authentication failed")?;
+        // Caches share parsed immutable values, never evidence that files remain durable.
+        // Recheck both inputs before any successful retry or factory reconstruction.
+        let bytes = self.word_bytes(&manifest.dictionary_hash)?;
+        if let Some(value) = self
+            .cache
+            .lock()
+            .map_err(|_| "initialization cache unavailable")?
+            .get(id.as_str())
+            .cloned()
+        {
+            return Ok(Some(value));
+        }
         let key = serde_json::to_string(&(&manifest.sources.word_list, &manifest.dictionary_hash))?;
         let cached = self
             .restored_words
@@ -168,18 +180,6 @@ impl ConfigurationStore {
         let words = match cached {
             Some(value) => value,
             None => {
-                let bytes = regular_bytes(
-                    &self
-                        .directory
-                        .join("words")
-                        .join(format!("{}.txt", manifest.dictionary_hash)),
-                    64 * 1024 * 1024,
-                )?;
-                if crate::dictionary::hexadecimal(digest::digest(&digest::SHA256, &bytes).as_ref())
-                    != manifest.dictionary_hash
-                {
-                    return Err("persisted dictionary content fingerprint mismatch".into());
-                }
                 let words = Arc::new(WordListProfile::new(WordList::from_text(
                     manifest.sources.word_list.clone(),
                     std::str::from_utf8(&bytes)?,
@@ -223,21 +223,18 @@ impl ConfigurationStore {
             }
             return Ok(());
         }
-        let mut versions = self
-            .dictionaries
-            .lock()
-            .map_err(|_| "dictionary cache unavailable")?;
-        if !versions.contains(&prepared.word_hash) {
-            publish(
-                &self
-                    .directory
-                    .join("words")
-                    .join(format!("{}.txt", prepared.word_hash)),
-                &prepared.word_content,
-            )?;
-            versions.insert(prepared.word_hash.clone());
+        let words = self.word_path(&prepared.word_hash);
+        match fs::symlink_metadata(&words) {
+            // Publish a missing version from the prepared immutable catalog bytes. Existing
+            // versions must verify; never overwrite a conflicting or corrupt input.
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                publish(&words, &prepared.word_content)?;
+            }
+            Err(error) => return Err(error.into()),
+            Ok(_) => {
+                self.word_bytes(&prepared.word_hash)?;
+            }
         }
-        drop(versions);
         let mut manifest = Manifest {
             version: 1,
             selection: selection.clone(),
