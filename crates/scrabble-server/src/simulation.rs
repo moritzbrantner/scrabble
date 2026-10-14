@@ -66,6 +66,18 @@ pub fn retirement_due(payload: &[u8], now: u64, tick: u64) -> Result<bool, serde
 }
 
 fn command_error(error_value: CommandError, envelope: &CommandEnvelope) -> SimulationError {
+    if matches!(
+        error_value,
+        CommandError::State(StateError::ExchangeUnavailable)
+    ) {
+        let payload = serde_json::to_vec(
+            &serde_json::json!({"version":1,"game_id":envelope.game_id,"expected_turn":envelope.expected_turn,"error":{"kind":"exchange_unavailable"}}),
+        );
+        return match payload {
+            Ok(payload) => SimulationError::command_rejected(payload).unwrap_or_else(error),
+            Err(failure) => error(failure),
+        };
+    }
     if let CommandError::Commit(scrabble_game::commit::CommitError::Dictionary(
         dictionary_error @ DictionaryError::InvalidWords { .. },
     )) = &error_value

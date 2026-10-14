@@ -43,7 +43,7 @@ export function LiveBoard({
 }) {
   const { t } = useCopy();
   const [failure, setFailure] = useState<Copy>();
-  const separateBoard = matchId.startsWith("b_");
+  const separateBoard = matchId.startsWith("b_") || matchId.startsWith("p_");
   const [state, setState] = useState<ConnectionState>({ kind: "idle" });
   const [snapshot, setSnapshot] = useState<PublicSnapshot>();
   const [rules, setRules] = useState<Ruleset>(fixtures.ruleset);

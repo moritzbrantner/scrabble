@@ -40,6 +40,26 @@ impl CreateGame {
         Ok(())
     }
 }
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CreateConfiguredGame {
+    pub version: u8,
+    pub request_id: String,
+    pub requested_at: u64,
+    pub selection: crate::profile_catalog::Selection,
+    pub rules: crate::profiles::MatchRules,
+}
+#[derive(Debug)]
+pub enum ConfiguredError {
+    Game(GameOperationError),
+    Selection(crate::profile_catalog::SelectionError),
+    Conflict,
+}
+impl From<GameOperationError> for ConfiguredError {
+    fn from(value: GameOperationError) -> Self {
+        Self::Game(value)
+    }
+}
 /// A shared board's request to follow its finished match with a fresh one (#33).
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -160,6 +180,72 @@ impl Games {
         .map_err(|_| GameOperationError::Internal)?;
         self.place_created(&id, request.requested_at).await
     }
+    pub fn profiles(&self) -> serde_json::Value {
+        self.factory.catalog()
+    }
+    pub async fn create_configured(
+        &self,
+        request: &CreateConfiguredGame,
+        now: u64,
+    ) -> Result<JoinInformation, ConfiguredError> {
+        if request.version != 3 {
+            return Err(GameOperationError::InvalidRequest.into());
+        }
+        CreateGame {
+            version: 2,
+            request_id: request.request_id.clone(),
+            requested_at: request.requested_at,
+        }
+        .validate(now)?;
+        let _creation = self.creation.lock().await;
+        let id = self
+            .factory
+            .configured_id(&request.request_id, request.requested_at)
+            .map_err(|_| GameOperationError::Internal)?;
+        let factory = self.factory.clone();
+        let inspect_id = id.clone();
+        let existing = tokio::task::spawn_blocking(move || factory.initialized(&inspect_id))
+            .await
+            .map_err(|_| GameOperationError::Internal)?
+            .map_err(|_| GameOperationError::Internal)?;
+        let newly_initialized = existing.is_none();
+        if let Some(existing) = existing {
+            if existing.selection != request.selection
+                || crate::profiles::MatchRules::from(&existing.configuration.rules) != request.rules
+            {
+                return Err(ConfiguredError::Conflict);
+            }
+        } else {
+            let prepared = self
+                .factory
+                .resolve(&request.selection, request.rules)
+                .map_err(ConfiguredError::Selection)?;
+            if !self.host.is_serving() {
+                return Err(GameOperationError::NotServing.into());
+            }
+            if self.host.is_draining().await {
+                return Err(GameOperationError::Draining.into());
+            }
+            if self.host.statuses().await.len() >= self.host.max_matches() {
+                return Err(GameOperationError::AtCapacity.into());
+            }
+            let factory = self.factory.clone();
+            let initialize_id = id.clone();
+            tokio::task::spawn_blocking(move || factory.initialize(&initialize_id, prepared))
+                .await
+                .map_err(|_| GameOperationError::Internal)?
+                .map_err(|_| GameOperationError::Internal)?;
+        }
+        let result = self.place_created(&id, request.requested_at).await;
+        if result.is_err() && newly_initialized {
+            let factory = self.factory.clone();
+            tokio::task::spawn_blocking(move || factory.retire_initialization(&id))
+                .await
+                .map_err(|_| GameOperationError::Internal)?
+                .map_err(|_| GameOperationError::Internal)?;
+        }
+        result.map_err(ConfiguredError::Game)
+    }
     /// Places a newly derived match, or confirms an earlier placement of the same ID.
     /// Callers hold the creation lock.
     async fn place_created(
@@ -193,9 +279,11 @@ impl Games {
             {
                 return Err(GameOperationError::Internal);
             }
-            let simulation = self
-                .factory
-                .create(id)
+            let factory = self.factory.clone();
+            let initialize_id = id.clone();
+            let simulation = tokio::task::spawn_blocking(move || factory.create(&initialize_id))
+                .await
+                .map_err(|_| GameOperationError::Internal)?
                 .map_err(|_| GameOperationError::Internal)?;
             self.host
                 .place(
@@ -399,6 +487,9 @@ impl Games {
         }
         self.host.retire(id).await?;
         self.rematches.lock().await.remove(id.as_str());
+        self.factory
+            .retire_initialization(id)
+            .map_err(|_| GameOperationError::Internal)?;
         Ok(())
     }
     pub async fn sweep(&self, now: u64) {

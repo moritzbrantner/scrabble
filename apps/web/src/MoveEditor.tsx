@@ -3,7 +3,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 
 import { copy, type Copy, type CopyKey } from "./copy";
 import { boardCommands } from "./editor-commands";
-import { type CommandEnvelope, type WordRejection } from "./game-protocol";
+import { type CommandEnvelope, type TurnRejection } from "./game-protocol";
 import { useTouchInput } from "./input-capability";
 import {
   draftProblem,
@@ -32,7 +32,7 @@ export function MoveEditor({
   canAct,
   onTurnAction,
   onPreview,
-  wordRejection,
+  turnRejection,
 }: {
   snapshot: PlayerSnapshot;
   rules: Ruleset;
@@ -41,7 +41,7 @@ export function MoveEditor({
     command: Extract<CommandEnvelope["command"], { kind: "commit" | "pass" | "exchange" }>,
   ) => Promise<void>;
   onPreview?: (placements: MoveDraft["placements"]) => Promise<void>;
-  wordRejection?: WordRejection;
+  turnRejection?: TurnRejection;
 }) {
   const { t } = useCopy();
   const touch = useTouchInput();
@@ -60,7 +60,7 @@ export function MoveEditor({
   const exchanging = exchange !== undefined;
   const canExchange = snapshot.public.remaining_tiles >= rules.exchange_minimum_bag;
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const handledRejection = useRef<WordRejection>(undefined);
+  const handledRejection = useRef<TurnRejection>(undefined);
   useEffect(() => {
     if (!canAct && pending) {
       clearTimeout(timer.current);
@@ -71,25 +71,28 @@ export function MoveEditor({
     }
   }, [canAct, pending, current]);
   useEffect(() => {
-    if (wordRejection === handledRejection.current) {
+    if (turnRejection === handledRejection.current) {
       return;
     }
-    handledRejection.current = wordRejection;
+    handledRejection.current = turnRejection;
     if (
-      wordRejection !== undefined &&
+      turnRejection !== undefined &&
       !stale &&
-      state.pending === "move" &&
-      wordRejection.game_id === snapshot.public.game_id &&
+      state.pending === (turnRejection.error.kind === "invalid_words" ? "move" : "exchange") &&
+      turnRejection.game_id === snapshot.public.game_id &&
       snapshot.public.phase.kind === "playing" &&
-      wordRejection.expected_turn === snapshot.public.phase.turn
+      turnRejection.expected_turn === snapshot.public.phase.turn
     ) {
       clearTimeout(timer.current);
       setState({
         draft: current,
-        message: copy("editor.invalidWords", { words: wordRejection.error.words.join(", ") }),
+        message:
+          turnRejection.error.kind === "invalid_words"
+            ? copy("editor.invalidWords", { words: turnRejection.error.words.join(", ") })
+            : copy("profiles.exchangeUnavailable"),
       });
     }
-  }, [wordRejection, stale, state.pending, current, snapshot.public]);
+  }, [turnRejection, stale, state.pending, current, snapshot.public]);
   const board = useRef<HTMLDivElement>(null);
   const editor = useRef<HTMLElement>(null);
   useEffect(() => {

@@ -12,6 +12,7 @@ export default defineConfig({
     "**/production-configuration.spec.ts",
     "**/performance-budgets.spec.ts",
     "**/rematch.spec.ts",
+    "**/profile-creation.spec.ts",
   ],
   outputDir: "../../test-results/pages-browser",
   webServer: {

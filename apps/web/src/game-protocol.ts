@@ -84,3 +84,43 @@ export function decodeWordRejection(bytes: Uint8Array): WordRejection {
   }
   return parsed.data;
 }
+
+const exchangeRejection = z.strictObject({
+  version: z.literal(1),
+  game_id: id,
+  expected_turn: id,
+  error: z.strictObject({ kind: z.literal("exchange_unavailable") }),
+});
+export type ExchangeRejection = z.infer<typeof exchangeRejection>;
+export type TurnRejection = WordRejection | ExchangeRejection;
+export type SubmittedTurnAction = {
+  gameId: string;
+  turn: string;
+  sequence: number;
+  kind: "commit" | "pass" | "exchange";
+};
+
+/** A private response can only settle the exact outstanding turn action. */
+export function matchesTurnRejection(
+  submitted: SubmittedTurnAction | undefined,
+  sequence: number,
+  feedback: TurnRejection,
+): boolean {
+  return (
+    submitted !== undefined &&
+    submitted.sequence === sequence &&
+    submitted.gameId === feedback.game_id &&
+    submitted.turn === feedback.expected_turn &&
+    submitted.kind === (feedback.error.kind === "invalid_words" ? "commit" : "exchange")
+  );
+}
+export function decodeExchangeRejection(bytes: Uint8Array) {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  } catch {
+    return undefined;
+  }
+  const parsed = exchangeRejection.safeParse(raw);
+  return parsed.success ? parsed.data : undefined;
+}
