@@ -97,6 +97,24 @@ or command authority. Deleting/corrupting required inputs fails recovery closed.
 Source edits apply only to future selections. The existing v1 rematch API creates
 a new deployment-default v2 game; configured-profile carryover is not promised.
 
+For the supplied Docker Compose deployment, place an operator-authored catalog
+and its word files in the existing read-only content directory. An explicit
+operator Compose override can enable it without changing the default service:
+
+```yaml
+services:
+  server:
+    environment:
+      SCRABBLE_PROFILE_CATALOG_FILE: /content/profiles.json
+      SCRABBLE_MATCH_CONFIGURATION_DIR: /state/configurations
+```
+
+Pass that override after `compose.yaml` using Compose's `-f` option, including it
+on subsequent start and update commands. Both paths use the existing content
+and durable-state mounts. Host `SCRABBLE_*` environment variables alone do not
+override the service's explicit Compose environment. Validate the catalog before
+release; this repository's authored acceptance dictionaries are test data.
+
 Release the frontend and server together: the three-selector frontend needs the
 real public catalog API and configured-match routing. Public availability still
 requires the feature's recorded post-deployment owner journey, rather than a
