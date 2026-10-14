@@ -6,6 +6,7 @@ import { z } from "zod";
 import { ruleset } from "../src/public-state";
 import { gameFixture } from "./game-fixture";
 import { observeSnapshots } from "./pages-observer";
+import { exchangeTwoOwnedTilesOnce } from "./exchange-wire-fault";
 
 const identity = z.object({ name: z.string(), revision: z.string() });
 const selection = z.object({
@@ -361,6 +362,76 @@ test("untouched non-equivalent catalog defaults bind v3 and reach the real compa
     await expect.poll(() => group.readers[0]?.()?.public.configuration.board_size).toBe(7);
     expect(state()?.public.configuration.premiums[24]).toBe("triple_word");
     expect(state()?.public.configuration.rack_size).toBe(sources.defaults.rules.rack_size);
+  } finally {
+    for (const context of group.contexts) {
+      await context.close();
+    }
+  }
+});
+
+test("a real correlated exchange rejection restores phone actions and cancels its timeout", async ({
+  page,
+  browser,
+  request,
+}) => {
+  test.setTimeout(60_000);
+  test.skip(
+    process.env.SCRABBLE_BROWSER_EXCHANGE_REJECTION !== "1",
+    "separate low-bag native fixture invocation",
+  );
+  const sources = await catalog(request);
+  expect(sources.tileProfiles.some((row) => row.identity.name === "acceptance-low-bag-tiles")).toBe(
+    true,
+  );
+  const boardState = await observeSnapshots(page, "1", true);
+  await page.goto(entry());
+  await word(page).selectOption({ label: "Authored two-letter pairs" });
+  await tiles(page).selectOption({ label: "Low-bag test tiles" });
+  await advanced(page);
+  await page.getByLabel("Rack size", { exact: true }).fill("13");
+  await page.getByLabel("Maximum players", { exact: true }).fill("2");
+  await page.getByLabel("Exchange minimum", { exact: true }).fill("1");
+  await page.getByRole("button", { name: "Create game", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Join this game", exact: true })).toBeVisible();
+  const group = await guests(browser, page);
+  try {
+    await expect.poll(() => group.readers[0]?.()?.own_rack.tiles.length).toBe(13);
+    await expect.poll(() => group.readers[0]?.()?.public.remaining_tiles).toBe(1);
+    const before = group.readers[0]?.();
+    const phone = group.pages[0];
+    if (!before || !phone || !before.own_rack.tiles[0] || !before.own_rack.tiles[1]) {
+      throw new Error("missing actual low-bag native projection");
+    }
+    await exchangeTwoOwnedTilesOnce(phone, [
+      before.own_rack.tiles[0].id,
+      before.own_rack.tiles[1].id,
+    ]);
+    const editor = phone.getByRole("region", { name: "Move editor", exact: true });
+    await editor.getByRole("button", { name: "Exchange tiles", exact: true }).click();
+    await editor
+      .locator(`[data-tile-id="${before.own_rack.tiles[0].id}"]`)
+      .getByRole("button")
+      .click();
+    await editor.getByRole("button", { name: "Confirm exchange", exact: true }).click();
+    await expect(
+      phone.getByText("There are not enough tiles in the bag for this exchange.", { exact: true }),
+    ).toBeVisible();
+    const pass = editor.getByRole("button", { name: "Pass turn", exact: true });
+    await expect(pass).toBeEnabled({ timeout: 1_000 });
+    expect(group.readers[0]?.()?.own_rack).toEqual(before.own_rack);
+    expect(group.readers[0]?.()?.public.phase).toEqual(before.public.phase);
+    expect(boardState()?.public.history).toEqual([]);
+    // Keep the real five-second timer boundary: an uncleared timer must not
+    // overwrite already received authoritative feedback with a false timeout.
+    await phone.waitForTimeout(5_200);
+    await expect(editor.getByRole("status")).not.toContainText("Exchange was not confirmed");
+    await expect(pass).toBeEnabled();
+    await pass.click();
+    await editor
+      .getByRole("group", { name: "Confirm pass", exact: true })
+      .getByRole("button", { name: "Confirm pass", exact: true })
+      .click();
+    await expect.poll(() => boardState()?.public.history.length).toBe(1);
   } finally {
     for (const context of group.contexts) {
       await context.close();

@@ -1331,3 +1331,124 @@ async fn profiles_full_identity_request_shape_fits_the_declared_bounded_http_env
     assert_eq!(hosted_profiles(&server).await, 1);
     server.stop().await;
 }
+
+// Independent review regressions at 702ba34, before persistence-cache repair.
+async fn assert_live_profile_publication_is_durable(fault: &str, retry: bool) {
+    use game_server::MatchId;
+    use scrabble_server::{config::ServerConfig, factory::MatchFactory};
+    let mut server = profile_server(false, false).await;
+    let origin = "http://localhost:5173";
+    let catalog = server.api("GET", "/profiles", None, origin).await.1;
+    let initial_request = profile_request(&catalog, 0x81);
+    let first = server
+        .api("POST", "/games", Some(&initial_request), origin)
+        .await;
+    assert_eq!(first.0, 200);
+    let directory = server.directory.path().join("configurations");
+    let first_id = MatchId::new(first.1["matchId"].as_str().unwrap()).unwrap();
+    let manifest = directory.join(format!("{first_id}.json"));
+    let original_manifest = fs::read(&manifest).unwrap();
+    let initialization: serde_json::Value = serde_json::from_slice(&original_manifest).unwrap();
+    let words = directory.join("words").join(format!(
+        "{}.txt",
+        initialization["dictionary_hash"].as_str().unwrap()
+    ));
+    let original_words = fs::read(&words).unwrap();
+    match fault {
+        "missing words" => fs::remove_file(&words).unwrap(),
+        "corrupt words" => fs::write(&words, b"ZZ\n").unwrap(),
+        "missing manifest" => fs::remove_file(&manifest).unwrap(),
+        "corrupt manifest" => fs::write(&manifest, b"{").unwrap(),
+        _ => unreachable!(),
+    }
+    let request = if retry {
+        initial_request.clone()
+    } else {
+        profile_request(&catalog, 0x82)
+    };
+    let result = server.api("POST", "/games", Some(&request), origin).await;
+    if result.0 == 200 {
+        let factory =
+            MatchFactory::new(&ServerConfig::from_values(&server.values).unwrap()).unwrap();
+        let returned_id = MatchId::new(result.1["matchId"].as_str().unwrap()).unwrap();
+        assert!(
+            factory.create(&first_id).is_ok(),
+            "successful acknowledgment must retain durable original initialization: {fault}, retry={retry}"
+        );
+        assert!(
+            factory.create(&returned_id).is_ok(),
+            "successful acknowledgment must be reconstructible with a fresh factory: {fault}, retry={retry}"
+        );
+        assert_eq!(fs::read(&words).unwrap(), original_words);
+        assert_eq!(fs::read(&manifest).unwrap(), original_manifest);
+        assert_eq!(hosted_profiles(&server).await, if retry { 1 } else { 2 });
+    } else {
+        assert!((400..600).contains(&result.0));
+        assert!(
+            result.1["error"]
+                .as_str()
+                .is_some_and(|error| !error.is_empty()),
+            "useful typed rejection: {:?}",
+            result
+        );
+        assert_eq!(
+            hosted_profiles(&server).await,
+            1,
+            "failed creation must not allocate"
+        );
+        assert!(
+            fs::read_dir(&directory)
+                .unwrap()
+                .filter_map(Result::ok)
+                .filter(|entry| entry
+                    .path()
+                    .extension()
+                    .is_some_and(|extension| extension == "json"))
+                .count()
+                <= 1,
+            "failed creation must not publish another initialization"
+        );
+    }
+    fs::write(&manifest, &original_manifest).unwrap();
+    fs::write(&words, &original_words).unwrap();
+    let restored = server.api("POST", "/games", Some(&request), origin).await;
+    assert_eq!(
+        restored.0, 200,
+        "restored durable inputs permit the same request"
+    );
+    if result.0 == 200 {
+        assert_eq!(restored.1, result.1);
+    }
+    let factory = MatchFactory::new(&ServerConfig::from_values(&server.values).unwrap()).unwrap();
+    assert!(
+        factory
+            .create(&MatchId::new(restored.1["matchId"].as_str().unwrap()).unwrap())
+            .is_ok()
+    );
+    server.stop().await;
+}
+
+#[tokio::test]
+async fn profiles_new_creation_revalidates_missing_shared_words() {
+    assert_live_profile_publication_is_durable("missing words", false).await;
+}
+#[tokio::test]
+async fn profiles_new_creation_revalidates_corrupt_shared_words() {
+    assert_live_profile_publication_is_durable("corrupt words", false).await;
+}
+#[tokio::test]
+async fn profiles_retry_revalidates_missing_shared_words() {
+    assert_live_profile_publication_is_durable("missing words", true).await;
+}
+#[tokio::test]
+async fn profiles_retry_revalidates_corrupt_shared_words() {
+    assert_live_profile_publication_is_durable("corrupt words", true).await;
+}
+#[tokio::test]
+async fn profiles_retry_revalidates_missing_initialization() {
+    assert_live_profile_publication_is_durable("missing manifest", true).await;
+}
+#[tokio::test]
+async fn profiles_retry_revalidates_corrupt_initialization() {
+    assert_live_profile_publication_is_durable("corrupt manifest", true).await;
+}

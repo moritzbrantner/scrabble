@@ -207,6 +207,21 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         document["defaultSelection"]["board"] = serde_json::json!("acceptance-compact-board");
         std::fs::write(&catalog, serde_json::to_vec_pretty(&document)?)?;
     }
+    if std::env::var("SCRABBLE_BROWSER_EXCHANGE_REJECTION").as_deref() == Ok("1") {
+        let mut document: serde_json::Value = serde_json::from_slice(&std::fs::read(&catalog)?)?;
+        let mut tiles = document["tileProfiles"][0]["tiles"].clone();
+        for tile in tiles.as_array_mut().ok_or("missing authored tiles")? {
+            tile["count"] = serde_json::json!(1);
+        }
+        document["tileProfiles"]
+            .as_array_mut()
+            .ok_or("missing tile profiles")?
+            .push(serde_json::json!({
+                "identity":{"name":"acceptance-low-bag-tiles","revision":"1"},
+                "label":"Low-bag test tiles","tiles":tiles
+            }));
+        std::fs::write(&catalog, serde_json::to_vec_pretty(&document)?)?;
+    }
     values.insert(
         "SCRABBLE_PROFILE_CATALOG_FILE".into(),
         catalog.to_str().ok_or("invalid catalog path")?.into(),

@@ -159,3 +159,46 @@ Independently reverify any acceptance-fixture, harness
 or expectation change. Production edits begin only after this committed
 handoff. Shared convention source revision:
 `5ad0db36974c8b0e5f9812c90ee34a4f227852c3`.
+
+## Independent review regressions at `702ba34`
+
+Six additional real-process `server_process` contracts remove or corrupt durable
+shared words after the first successful publication, then request either a new
+configured match or the identical creation retry. The retry cases also remove or
+corrupt its initialization manifest. A successful acknowledgment must have durable,
+byte-identical inputs recoverable by a fresh factory; safe repair is permitted.
+Otherwise a typed rejection must allocate no match and publish no new manifest.
+Restoring the original inputs must allow the same request. Already-running games
+may continue using their immutable in-memory dictionaries.
+
+All six tests fail against unchanged production `702ba34`: HTTP success is returned
+but a fresh factory cannot reconstruct the original match. The later restoration
+assertions are unrun at baseline. Log:
+`/tmp/scrabble94-live-durability-baseline.log`. An initial missing-import harness
+compile error was fixed before this actual six-failure result.
+
+The additional browser journey uses `SCRABBLE_BROWSER_EXCHANGE_REJECTION=1` to
+append an operator tile profile containing one of each A–Z plus one blank. Two
+real players with rack size 13 leave one tile in the native bag. The UI submits an
+honest one-tile exchange; a test-only outgoing WebTransport fault changes that
+single command to two distinct actually owned tiles. It preserves protocol kind,
+sequence, game/turn identity and frame header, updating only payload length and
+tile IDs. All inbound feedback, snapshots and authority come from the real native
+server. This checks recovery from a correlated authoritative rejection, not a claim
+that an honest UI naturally submits an invalid exchange.
+
+After the native `ExchangeUnavailable` feedback, phone actions must recover within
+one second, the real five-second timer must never replace feedback with a false
+timeout, and an actual subsequent pass must advance native history. The ordinary
+fixture and default profiles are unchanged. Run separately in both builds:
+
+```sh
+SCRABBLE_BROWSER_EXCHANGE_REJECTION=1 bun scripts/test-browser.ts --grep 'a real correlated exchange rejection'
+SCRABBLE_BROWSER_EXCHANGE_REJECTION=1 bun scripts/test-browser.ts --pages --grep 'a real correlated exchange rejection'
+```
+
+Both development and optimized Pages baselines receive and display the actual native rejection, then
+fails because Pass remains disabled after one second. Later unchanged-state,
+timeout and subsequent-pass assertions are unrun. Log:
+`/tmp/scrabble94-exchange-{dev,pages}-baseline.log`. These tests and documentation are
+independent acceptance changes; production repair starts only after their handoff.
