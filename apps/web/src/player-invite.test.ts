@@ -57,3 +57,27 @@ test("invites include only a supported unambiguous interface language", () => {
     ).toBe(false);
   }
 });
+
+test("moenarch invitations retain only a validated public session reference and match", () => {
+  const sessionId = "0123ABCDEFGH";
+  const page = new URL(
+    `https://moritzbrantner.github.io/scrabble/?launch=moenarch&session=${sessionId}&match=${matchId}&requestId=private&token=secret#private`,
+  );
+  const invite = playerInviteUrl(page, matchId, false);
+  expect([...invite.searchParams.keys()]).toEqual(["view", "match", "launch", "session"]);
+  expect(invite.searchParams.get("match")).toBe(matchId);
+  expect(invite.searchParams.get("session")).toBe(sessionId);
+  expect(invite.href).not.toContain("secret");
+  expect(invite.href).not.toContain("private");
+  expect(invite.hash).toBe("");
+  for (const query of [
+    `launch=moenarch&session=${sessionId}`,
+    `launch=moenarch&session=${sessionId}&session=${sessionId}&match=${matchId}`,
+    `launch=moenarch&session=${sessionId}&match=${matchId}&match=${matchId}`,
+    `session=${sessionId}&match=${matchId}`,
+  ]) {
+    expect(() =>
+      playerInviteUrl(new URL(`https://example.test/scrabble/?${query}`), matchId, false),
+    ).toThrow();
+  }
+});

@@ -10,6 +10,7 @@ import {
   type JoinInformation,
 } from "./create-game";
 import { LiveBoard } from "./LiveBoard";
+import { reportMoenarchMatch } from "./moenarch-launch";
 import { useCopy } from "./preferences";
 
 type State =
@@ -63,10 +64,13 @@ export function CreateBoard({
       <>
         <LiveBoard
           key={state.join.matchId}
+          onBoardOwned={reportMoenarchMatch}
           api={api}
           onRematch={(join, rematchRequest) => {
             request.current = rematchRequest;
             const location = new URL(window.location.href);
+            location.searchParams.delete("launch");
+            location.searchParams.delete("session");
             location.searchParams.set("match", join.matchId);
             window.history.replaceState(null, "", location);
             setState({ kind: "created", join });

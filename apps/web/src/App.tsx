@@ -3,6 +3,7 @@ import { useState } from "react";
 import { connectionSettings, type ConnectionMode } from "./connection-settings";
 import { CreateBoard } from "./CreateBoard";
 import { fixtures } from "./fixtures";
+import { moenarchLaunch, reportMoenarchMatch } from "./moenarch-launch";
 import { JoinRoute } from "./JoinRoute";
 import { LiveBoard } from "./LiveBoard";
 import { useCopy } from "./preferences";
@@ -14,6 +15,15 @@ export function App() {
   const [connection] = useState(() =>
     typeof window === "undefined" ? null : new URLSearchParams(window.location.search),
   );
+  const launch = moenarchLaunch(connection ?? new URLSearchParams());
+  if (launch.kind === "invalid" || launch.kind === "unbound") {
+    return (
+      <main className="create-board">
+        <h1>Scrabble</h1>
+        <p role="alert">{t(launch.kind === "invalid" ? "launch.invalid" : "launch.unbound")}</p>
+      </main>
+    );
+  }
   const endpoint: string | undefined = import.meta.env.DEV
     ? (connection?.get("server") ?? undefined)
     : import.meta.env.VITE_SCRABBLE_ENDPOINT || undefined;
@@ -57,7 +67,14 @@ export function App() {
     );
   }
   if (endpoint && matchId) {
-    return <LiveBoard endpoint={endpoint} matchId={matchId} {...localTrust} />;
+    return (
+      <LiveBoard
+        endpoint={endpoint}
+        matchId={matchId}
+        onBoardOwned={reportMoenarchMatch}
+        {...localTrust}
+      />
+    );
   }
   if (endpoint && api) {
     return <CreateBoard endpoint={endpoint} api={api} {...localTrust} />;

@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 
 import { type Page } from "@playwright/test";
 import { z } from "zod";
@@ -32,7 +32,10 @@ export async function selectOpening(page: Page, candidate = gameFixture.opening)
       ? openingSchema.parse(
           JSON.parse(
             execFileSync(
-              "target/debug/examples/browser_game_fixture",
+              resolve(
+                process.env.CARGO_TARGET_DIR ?? "target",
+                "debug/examples/browser_game_fixture",
+              ),
               ["--fresh-opening", directory, candidate.requestId],
               { encoding: "utf8", timeout: 10_000 },
             ),

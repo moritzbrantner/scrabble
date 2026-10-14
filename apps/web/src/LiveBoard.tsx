@@ -29,6 +29,7 @@ export function LiveBoard({
   boardClaim,
   api,
   onRematch,
+  onBoardOwned,
 }: {
   endpoint: string;
   matchId: string;
@@ -37,6 +38,8 @@ export function LiveBoard({
   /** Present only in the tab holding this match's creation nonce (#33). */
   api?: string;
   onRematch?: (join: JoinInformation, request: CreateRequest) => void;
+  /** Called only after an authoritative snapshot confirms this connection owns the board. */
+  onBoardOwned?: (matchId: string) => void;
 }) {
   const { t } = useCopy();
   const [failure, setFailure] = useState<Copy>();
@@ -56,6 +59,7 @@ export function LiveBoard({
     let playerId: string | undefined;
     let match: BrowserMatch | undefined;
     let claimSent = false;
+    let ownershipReported = false;
     let selectedRules: Ruleset | undefined;
     try {
       let localTrust: WebTransportHash[] | undefined;
@@ -88,6 +92,7 @@ export function LiveBoard({
           }
           if (next.kind === "synchronizing") {
             claimSent = false;
+            ownershipReported = false;
           }
           setFailure(undefined);
           setState(next);
@@ -151,6 +156,10 @@ export function LiveBoard({
             }
             if (current.host.id === playerId) {
               clearTimeout(claimTimeout.current);
+              if (!ownershipReported) {
+                ownershipReported = true;
+                onBoardOwned?.(matchId);
+              }
             }
           }
           setSnapshot(current);
@@ -200,6 +209,7 @@ export function LiveBoard({
     separateBoard,
     boardClaim?.requestId,
     boardClaim?.gameId,
+    onBoardOwned,
   ]);
   const rematchRequest = useRef<CreateRequest>(undefined);
   const [rematch, setRematch] = useState<
