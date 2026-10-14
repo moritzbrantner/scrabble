@@ -24,6 +24,35 @@ declare global {
     scrabbleObserved?: Observed;
   }
 }
+const publicPhoneParameters = new Set(["view", "match", "lang", "server", "api", "certificate"]);
+/**
+ * List private values a phone URL exposes. Random public IDs are lowercase hex, so match whole
+ * secret values and delimited words instead of substrings that hex can spell (for example "ada").
+ */
+function phoneUrlLeaks(href: string, secrets: { token: string; name: string }): string[] {
+  const url = new URL(href);
+  const parts = [
+    ...[...url.searchParams].flat(),
+    decodeURIComponent(url.pathname),
+    decodeURIComponent(url.hash),
+    decodeURIComponent(url.username),
+    decodeURIComponent(url.password),
+  ];
+  const word = (value: string) => new RegExp(`(?:^|[^A-Za-z0-9])${value}(?:[^A-Za-z0-9]|$)`, "i");
+  const leaks = [...url.searchParams.keys()]
+    .filter((key) => !publicPhoneParameters.has(key))
+    .map((key) => `parameter ${key}`);
+  if (/token|reconnect|sequence|rack|requestId/i.test(parts.join("\n"))) {
+    leaks.push("private field name");
+  }
+  if (secrets.token === "" || parts.some((part) => part.toLowerCase().includes(secrets.token))) {
+    leaks.push("reconnect token");
+  }
+  if (secrets.name === "" || parts.some((part) => word(secrets.name).test(part))) {
+    leaks.push("player name");
+  }
+  return leaks;
+}
 /** Observe the decoded wire seam without persisting payloads or exposing credentials. */
 async function observeProjection(page: Page) {
   await page.evaluate(async () => {
@@ -355,15 +384,21 @@ test("phone names preserve distinct identities across refresh and full-game fail
         local: Object.keys(localStorage),
         count: keys.length,
         fields: saved === null || typeof saved !== "object" ? [] : Object.keys(saved).sort(),
-        privateUrl: /token|reconnect|sequence|rack|Ada/i.test(location.href),
+        token:
+          saved !== null && typeof saved === "object" && "token" in saved
+            ? String(saved.token)
+            : "",
+        href: location.href,
         overflow: document.documentElement.scrollWidth > innerWidth,
       };
     });
-    expect(privacy).toEqual({
+    const { token, href: phoneHref, ...visible } = privacy;
+    expect(token).toMatch(/^[0-9a-f]{32}$/);
+    expect(phoneUrlLeaks(phoneHref, { token, name: "Ada" })).toEqual([]);
+    expect(visible).toEqual({
       local: [],
       count: 1,
       fields: ["playerId", "route", "sequence", "token", "version"],
-      privateUrl: false,
       overflow: false,
     });
     const third = await thirdContext.newPage();
