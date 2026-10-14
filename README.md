@@ -25,7 +25,7 @@ For a playable local game, prepare the English dictionary once, then run `bun ru
 
 The GitHub Pages client connects to the authoritative Scrabble service on the Hetzner server at `moenarch.com`. `multiplayer-setup-service` is a signaling service and is not required by this transport. Local hosting remains available.
 
-The [moenarch.com launch link boundary](docs/specs/moenarch-launch.md) accepts explicit public session-to-match links and fails closed for session-only launches. The authoritative lobby mapping and launcher integration remain tracked in #80.
+The [moenarch.com launch link boundary](docs/specs/moenarch-launch.md) supports an explicit host-board popup and canonical player links. The setup service binds only public match references; private board/player capabilities remain in Scrabble. Publication and independent live launcher verification are tracked in #80.
 
 The browser uses `/scrabble/` as its Vite base, including in development. GitHub Actions validates and builds once, uploads `dist`, and deploys that artifact on main to GitHub Pages. Configure repository Pages to use GitHub Actions. No server credential belongs in this public static bundle. See [production deployment](docs/specs/production-deployment.md) for the deployed public topology and rollout procedure. Public endpoint settings live in `deploy/client.json`.
 

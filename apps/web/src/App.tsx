@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { connectionSettings, type ConnectionMode } from "./connection-settings";
 import { CreateBoard } from "./CreateBoard";
 import { fixtures } from "./fixtures";
-import { moenarchLaunch } from "./moenarch-launch";
+import { moenarchLaunch, reportMoenarchMatch } from "./moenarch-launch";
 import { JoinRoute } from "./JoinRoute";
 import { LiveBoard } from "./LiveBoard";
 import { useCopy } from "./preferences";
@@ -16,6 +16,12 @@ export function App() {
     typeof window === "undefined" ? null : new URLSearchParams(window.location.search),
   );
   const launch = moenarchLaunch(connection ?? new URLSearchParams());
+  useEffect(() => {
+    const match = connection?.get("match");
+    if (match) {
+      reportMoenarchMatch(match);
+    }
+  }, [connection]);
   if (launch.kind === "invalid" || launch.kind === "unbound") {
     return (
       <main className="create-board">

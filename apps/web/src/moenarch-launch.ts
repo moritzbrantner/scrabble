@@ -4,7 +4,7 @@
  */
 export type MoenarchLaunch =
   | { kind: "absent" | "invalid" | "unbound" }
-  | { kind: "linked"; sessionId: string };
+  | { kind: "hosting" | "linked"; sessionId: string };
 
 const sessionIdPattern = /^[0123456789ABCDEFGHJKMNPQRSTVWXYZ]{12}$/;
 const matchIdPattern = /^[gb]_[0-9a-f]{16}_[0-9a-f]{32}$/;
@@ -25,17 +25,37 @@ export function moenarchLaunch(params: URLSearchParams): MoenarchLaunch {
     return { kind: "invalid" };
   }
   const matches = params.getAll("match");
+  const views = params.getAll("view");
+  if (views.length > 1 || (views.length === 1 && !["player", "board"].includes(views[0] ?? ""))) {
+    return { kind: "invalid" };
+  }
   if (matches.length === 0) {
+    if (views[0] === "board") {
+      return { kind: "hosting", sessionId: sessions[0] ?? "" };
+    }
     return { kind: "unbound" };
   }
-  const views = params.getAll("view");
-  if (
-    matches.length !== 1 ||
-    !matchIdPattern.test(matches[0] ?? "") ||
-    views.length > 1 ||
-    (views.length === 1 && views[0] !== "player")
-  ) {
+  if (matches.length !== 1 || !matchIdPattern.test(matches[0] ?? "")) {
     return { kind: "invalid" };
   }
   return { kind: "linked", sessionId: sessions[0] ?? "" };
+}
+
+/** Only public routing crosses origins. The creating board retains its private proof. */
+export function reportMoenarchMatch(matchId: string): void {
+  const page = new URL(window.location.href);
+  const launch = moenarchLaunch(page.searchParams);
+  const opener: Window | null = window.opener;
+  if (
+    launch.kind === "linked" &&
+    page.searchParams.get("view") === "board" &&
+    page.searchParams.get("match") === matchId &&
+    opener !== null &&
+    !opener.closed
+  ) {
+    opener.postMessage(
+      { type: "scrabble-match-created", session: launch.sessionId, match: matchId },
+      "https://moenarch.com",
+    );
+  }
 }

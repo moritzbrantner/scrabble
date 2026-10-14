@@ -1,39 +1,78 @@
-# moenarch.com launch links (integration boundary)
+# moenarch.com launch links
 
-Status: local integration contract; **not evidence of a deployed moenarch.com launcher or public Scrabble host**. Public hosting remains #67; full launch integration remains #80.
+The launcher at `https://moenarch.com/scrabble.html` coordinates a public lobby
+reference with the authoritative Rust Scrabble service. Scrabble gameplay,
+private racks, board ownership and reconnect capabilities remain in Scrabble.
+The setup service stores only a short-lived public match reference. Public
+hosting is established by #67; integrated launcher publication and live
+acceptance remain #80 until independently verified after deployment.
 
-The Scrabble game authority is the Rust `scrabble-server` over WebTransport, not `multiplayer-setup-service`. The latter's lobby ID is short-lived public rendezvous metadata. It does **not** identify, create, authorize or restore a Scrabble match.
+## Host and player routes
 
-## Public URL contract
+The host creates a setup lobby, then opens a board popup at:
 
-For a launcher that has already selected one canonical Scrabble match for its lobby, open:
+```text
+https://moritzbrantner.github.io/scrabble/?launch=moenarch&session=0123ABCDEFGH&view=board
+```
+
+This explicit board route offers **Create game**. The popup creates its match
+through Scrabble's existing idempotent creation API and keeps the private
+creation proof and board reconnect capsule in their existing tab-owned
+boundaries. After creation it adds the canonical match ID to its own URL and
+reports only `{type:"scrabble-match-created",session,match}` to its opener,
+using the fixed target origin `https://moenarch.com`. Reloading a linked board
+can repeat that public report, allowing an identical binding retry. Rematches
+remove the original `launch` and `session` fields and never replace the original
+lobby's immutable reference.
+
+The launcher accepts reports only from the fixed Pages origin, the exact board
+window it opened and its own session. It registers the reference with the
+existing host participant capability; that capability remains in the launcher
+page's memory. See upstream [issue #44](https://github.com/moritzbrantner/multiplayer-setup-service/issues/44)
+and its repository-owned acceptance contract. Identical registrations succeed;
+conflicting registrations cannot overwrite the binding. Public GET does not
+create a game or disclose credentials.
+
+Guests open the public launcher invitation, resolve the reference and choose
+**Open Scrabble player**. The resulting destination is:
 
 ```text
 https://moritzbrantner.github.io/scrabble/?launch=moenarch&session=0123ABCDEFGH&match=b_<16 lowercase hex>_<32 lowercase hex>&view=player
 ```
 
-The 12-character `session` follows the setup service's canonical lobby alphabet, not its formatted display code. `match` must be the public ID returned by the Scrabble creation API. The ordinary Scrabble player invitation and QR use the same Pages base and retain only the validated public `launch` and `session` parameters, the match ID and optional interface language. No player/host capabilities, board creation request IDs, credentials, server addresses in production, URL fragments or arbitrary query parameters are forwarded.
+The 12-character session uses the setup service's canonical alphabet. It is
+public context, never a Scrabble match identity or seat credential. Canonical
+match IDs are checked through the existing Scrabble join API and private
+WebTransport admission. A bare session-only link fails closed; only the
+explicit `view=board` creation route permits host creation. Duplicate, malformed
+or incompatible routing identities fail before admission.
 
-A link with only `launch` and `session` fails closed: **the browser does not create a second Scrabble match or guess a mapping**. Repeated, malformed or incompatible launch fields also fail before any game admission. A linked match still undergoes the existing authoritative public `GET /games/<match-id>` check and private WebTransport admission. A lobby ID alone is never evidence of seat ownership.
+The player invitation and QR retain only supported public routing fields,
+match identity and optional language. They never forward creation proofs,
+participant tokens, reconnect capabilities, arbitrary query fields or URL
+fragments. A canonical Pages match invitation continues to work after setup
+lobby expiry; Pages does not require another setup lookup to reconnect to its
+independent, longer-lived Scrabble match. An expired launcher invitation itself
+cannot resolve a discarded binding and reports that failure. Reloading the
+launcher loses its in-memory host capability and resolves an existing binding
+without creating another match. A fresh tab cannot claim a board from a public
+URL alone.
 
-An existing board can attach public launch context to its **own tab's** canonical match URL, then share the derived player invitation. A fresh browser cannot claim the board from its public URL: the board's proof and reconnect capability remain private and tab-scoped. Player reconnect credentials and sequencing remain separately owned by each player browser. Shared context is informational, not a new authorization mechanism.
+## Verification and deployment
 
-## Required launcher-side authority (not implemented here)
+The ordinary browser suite checks malformed links and independent players
+joining/reconnecting to a real Rust match. The separately authored
+[integrated acceptance](moenarch-integrated-acceptance.md) exercises the actual
+built launcher, setup service, built Pages client and real WebTransport game,
+including a committed word, reconnect, rematch and setup expiry. Its controlled
+fixture establishes local behavior, not physical-device or public deployment
+acceptance. Upstream acceptance separately covers capability authorization,
+concurrent binding, conflicts and forged popup messages.
 
-The moenarch.com launcher must register or otherwise obtain exactly one immutable `lobbyId -> matchId` binding from an **authorized lobby host**, and use that binding for every participant and retry. The current setup service exposes no such binding API; its `GET /lobbies/<id>` only returns participant/expiry metadata. Scrabble cannot prove that two arbitrary links with the same public session ID refer to the same match, and it must not claim to do so.
-
-A future service-side binding contract must:
-
-- Authorize creation/confirmation using the **existing host participant capability**, never a public lobby ID; retain that credential only in the owning launcher process.
-- Store only a bounded, short-lived **public Scrabble match ID**, not game state, player racks, credentials, or simulation history. Reject a conflicting second binding, including concurrent submissions.
-- Return the same binding for duplicate retries; expose only the public match ID to guests; validate match identity against the Scrabble API before use.
-- Treat expiry, launcher restart and match retirement explicitly. Invitations containing the canonical Scrabble ID can continue to reconnect through the authoritative server even after the short-lived signaling lobby is gone.
-- Keep the launcher and Scrabble origins explicit; do not relay private WebTransport reconnect tokens via `postMessage`, lobby signaling, URLs or logs.
-
-The binding schema and the launcher page that creates/renders it must be verified against the **actual running moenarch.com implementation** before considering this contract complete. This is a proposed additive Pages link contract, not a claim that the launcher currently emits it.
-
-## Public server deployment remains independent
-
-Do not set `deploy/client.json` until a real host satisfies [production deployment](production-deployment.md): stable DNS, trusted TLS matching the gameplay domain (including the direct UDP WebTransport listener), inbound TCP **and UDP** 443, persistent private seed/recovery state, licensed dictionary content, secure Compose configuration, Pages origin allowlist, successful health/readiness and real cross-device browser validation.
-
-For local hermetic evidence, `apps/web/browser/moenarch-launch.spec.ts` creates a real Rust match, attaches public launch context in its already-authorized board tab, joins two independent browser contexts, submits a turn and reloads both a player and the board. Existing browser tests additionally cover lost creation acknowledgments, private snapshots, invalid reconnect capabilities and transport interruptions. The local test does not prove moenarch.com actually emits this link or that a public host is reachable.
+Publish the reviewed setup binary and generated browser assets on Hetzner and
+release the reviewed Scrabble Pages artifact. Keep nginx routing and the UDP
+Scrabble listener as documented in [production deployment](production-deployment.md).
+Verify the actual public launcher → board → two players → word → reconnect
+journey against both deployed revisions before closing #80. Preserve the
+operator-owned TLS keys, seed, recovery state and dictionary content; none
+belongs in static assets or cross-origin messages.

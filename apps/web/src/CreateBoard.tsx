@@ -10,6 +10,7 @@ import {
   type JoinInformation,
 } from "./create-game";
 import { LiveBoard } from "./LiveBoard";
+import { reportMoenarchMatch } from "./moenarch-launch";
 import { useCopy } from "./preferences";
 
 type State =
@@ -47,6 +48,7 @@ export function CreateBoard({
         location.searchParams.set("match", join.matchId);
         window.history.replaceState(null, "", location);
         setState({ kind: "created", join });
+        reportMoenarchMatch(join.matchId);
       }
     } catch (error) {
       if (!controller.signal.aborted) {
@@ -67,6 +69,8 @@ export function CreateBoard({
           onRematch={(join, rematchRequest) => {
             request.current = rematchRequest;
             const location = new URL(window.location.href);
+            location.searchParams.delete("launch");
+            location.searchParams.delete("session");
             location.searchParams.set("match", join.matchId);
             window.history.replaceState(null, "", location);
             setState({ kind: "created", join });
