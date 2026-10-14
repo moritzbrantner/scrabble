@@ -30,10 +30,10 @@ Server rules, in order:
 | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | Malformed body, wrong content type, unknown fields                                 | 400 `invalid-request` / 415 `json-required`                                                                 |
 | New request too old                                                                | 410 `expired-request`                                                                                       |
+| Service draining or not serving                                                    | 503 `draining` / `not-serving`                                                                              |
 | Finished match unknown or retired                                                  | 404 `unknown-match`                                                                                         |
 | Finished match ID is not `b_`, or `boardRequestId` does not verify against it      | 403 `board-rejected`                                                                                        |
 | Finished match has not finished (lobby or playing)                                 | 409 `not-finished`                                                                                          |
-| Service draining or not serving                                                    | 503 `draining` / `not-serving`                                                                              |
 | A rematch link already exists and was made from **this** `requestId`/`requestedAt` | 200 with the same join information (idempotent retry)                                                       |
 | A rematch link already exists from a different request                             | 409 `rematch-exists`                                                                                        |
 | No capacity for the new match                                                      | 429 `at-capacity`                                                                                           |
@@ -41,7 +41,7 @@ Server rules, in order:
 
 Creation and link recording are serialized with ordinary creation, so concurrent retries yield one rematch and one link. Starting a rematch never submits a command to, or changes the snapshot, replay log or recovery evidence of, the finished match.
 
-After success, the board replaces its URL's `match` with the rematch ID (as with creation) and shows the rematch lobby, which renders the new player invite and QR. The board connects with the rematch's own creation nonce, so it can start the rematch game and later its own rematch. On failure, it shows an alert and an explicit retry; retries reuse the same intent unless that intent expired.
+After success, the board replaces its URL's `match` with the rematch ID (as with creation) and shows the rematch lobby, which renders the new player invite and QR. The board connects with the rematch's own creation nonce, so it can start the rematch game and later its own rematch. On failure, it shows an alert and an explicit retry; retries reuse the same intent unless the server refused it or it expired.
 
 ## Following a rematch (phones)
 

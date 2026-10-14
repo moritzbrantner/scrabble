@@ -193,3 +193,70 @@ export async function lookupGame(
   }
   return join;
 }
+
+/** A finished board's one-tap rematch (#33). The finished match's nonce proves board ownership. */
+export async function startRematch(
+  api: string,
+  endpoint: string,
+  finishedId: string,
+  boardRequestId: string,
+  request: CreateRequest,
+  signal: AbortSignal,
+): Promise<JoinInformation> {
+  const url = gameApiUrl(api);
+  url.pathname += `/${finishedId}/rematch`;
+  const body = createRequest.parse(request);
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      credentials: "omit",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        version: 1,
+        boardRequestId,
+        requestId: body.requestId,
+        requestedAt: body.requestedAt,
+      }),
+      signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
+    });
+    if (!response.ok) {
+      await response.body?.cancel();
+      switch (response.status) {
+        case 410:
+          throw new CreationError("create.expired", false);
+        case 404:
+        case 403:
+        case 409:
+          throw new CreationError("rematch.unavailable", false);
+        default:
+          throw new CreationError("rematch.failed", true);
+      }
+    }
+    return decodeJoinInformation(await readResponse(response), endpoint);
+  } catch (error) {
+    if (error instanceof CreationError) {
+      throw error;
+    }
+    throw new CreationError("rematch.failed", true);
+  }
+}
+
+/** Public discovery of a finished match's rematch; `undefined` while none exists. */
+export async function lookupRematch(
+  api: string,
+  endpoint: string,
+  finishedId: string,
+  signal: AbortSignal,
+): Promise<JoinInformation | undefined> {
+  const url = gameApiUrl(api);
+  url.pathname += `/${finishedId}/rematch`;
+  const response = await fetch(url, {
+    credentials: "omit",
+    signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
+  });
+  if (!response.ok) {
+    await response.body?.cancel();
+    return undefined;
+  }
+  return decodeJoinInformation(await readResponse(response), endpoint);
+}

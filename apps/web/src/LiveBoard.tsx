@@ -3,6 +3,13 @@ import { useEffect, useRef, useState } from "react";
 
 import { ConnectionStatus } from "./ConnectionStatus";
 import { copy, type Copy } from "./copy";
+import {
+  CreationError,
+  newCreateRequest,
+  startRematch,
+  type CreateRequest,
+  type JoinInformation,
+} from "./create-game";
 import { fixtures } from "./fixtures";
 import { decodePlayerSnapshot, encodeGameCommand } from "./game-protocol";
 import { matchRules, requireMatchRules } from "./match-rules";
@@ -20,11 +27,16 @@ export function LiveBoard({
   matchId,
   certificateHash,
   boardClaim,
+  api,
+  onRematch,
 }: {
   endpoint: string;
   matchId: string;
   certificateHash?: string;
   boardClaim?: { requestId: string; gameId: string };
+  /** Present only in the tab holding this match's creation nonce (#33). */
+  api?: string;
+  onRematch?: (join: JoinInformation, request: CreateRequest) => void;
 }) {
   const { t } = useCopy();
   const [failure, setFailure] = useState<Copy>();
@@ -189,6 +201,38 @@ export function LiveBoard({
     boardClaim?.requestId,
     boardClaim?.gameId,
   ]);
+  const rematchRequest = useRef<CreateRequest>(undefined);
+  const [rematch, setRematch] = useState<
+    { kind: "idle" | "pending" } | { kind: "failed"; message: Copy }
+  >({ kind: "idle" });
+  const canRematch = boardClaim !== undefined && api !== undefined && onRematch !== undefined;
+  async function requestRematch() {
+    if (!canRematch || rematch.kind === "pending") {
+      return;
+    }
+    setRematch({ kind: "pending" });
+    rematchRequest.current ??= newCreateRequest();
+    const request = rematchRequest.current;
+    try {
+      const join = await startRematch(
+        api,
+        endpoint,
+        matchId,
+        boardClaim.requestId,
+        request,
+        new AbortController().signal,
+      );
+      onRematch(join, request);
+    } catch (error) {
+      const failure =
+        error instanceof CreationError ? error : new CreationError("rematch.failed", true);
+      if (!failure.retryable) {
+        // A new attempt must not reuse an intent the server refused or that has expired.
+        rematchRequest.current = undefined;
+      }
+      setRematch({ kind: "failed", message: failure.copy });
+    }
+  }
   async function reconnect() {
     const current = client.current;
     if (current === undefined) {
@@ -260,6 +304,18 @@ export function LiveBoard({
             {start.kind === "failed" && <p role="alert">{t(start.message)}</p>}
           </section>
         )}
+        {snapshot?.phase.kind === "finished" &&
+          separateBoard &&
+          (canRematch ? (
+            <section aria-label={t("rematch.start")}>
+              <Button disabled={rematch.kind === "pending"} onClick={() => void requestRematch()}>
+                {rematch.kind === "pending" ? t("rematch.starting") : t("rematch.start")}
+              </Button>
+              {rematch.kind === "failed" && <p role="alert">{t(rematch.message)}</p>}
+            </section>
+          ) : (
+            <p>{t("rematch.originalBoard")}</p>
+          ))}
       </header>
       {snapshot !== undefined && <SharedBoard snapshot={snapshot} rules={rules} />}
     </>

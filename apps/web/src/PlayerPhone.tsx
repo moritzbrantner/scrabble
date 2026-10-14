@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from "react";
 
 import { ConnectionStatus } from "./ConnectionStatus";
 import { copy, type Copy } from "./copy";
-import { JoinError, lookupGame } from "./create-game";
+import { JoinError, lookupGame, lookupRematch, type JoinInformation } from "./create-game";
 import { fixtures } from "./fixtures";
 import {
   decodePlayerSnapshot,
@@ -50,15 +50,20 @@ export function PlayerPhone({
   api,
   matchId,
   certificateHash,
+  initialName,
+  onFollowRematch,
 }: {
   endpoint: string;
   api: string;
   matchId: string;
   certificateHash?: string;
+  /** A rematch follow joins under the previous display name without retyping it (#33). */
+  initialName?: string;
+  onFollowRematch?: (join: JoinInformation, name: string) => void;
 }) {
   const { t, number } = useCopy();
   const route = matchUrl(endpoint, matchId).href;
-  const [name, setName] = useState("");
+  const [name, setName] = useState(initialName ?? "");
   const [state, setState] = useState<State>({ kind: "entry" });
   const [intent, setIntent] = useState<Intent>();
   const [connection, setConnection] = useState<ConnectionState>({ kind: "idle" });
@@ -74,6 +79,8 @@ export function PlayerPhone({
       if (saved !== undefined) {
         privateResume.current = saved;
         setIntent({ mode: "resume", resume: saved });
+      } else if (initialName !== undefined && validName(initialName)) {
+        setIntent({ mode: "new", name: initialName.trim() });
       }
     } catch {
       setState({
@@ -81,6 +88,7 @@ export function PlayerPhone({
         message: copy("phone.savedUnreadable"),
       });
     }
+    // The initial name applies once, on mount of this match's phone.
   }, [route]);
   useEffect(() => {
     if (intent === undefined) {
@@ -325,6 +333,44 @@ export function PlayerPhone({
   }
   const own = snapshot?.public.players.find((player) => player.id === snapshot.own_rack.player_id);
   const phase = snapshot?.public.phase;
+  const finished = phase?.kind === "finished";
+  const [rematch, setRematch] = useState<JoinInformation>();
+  useEffect(() => {
+    if (!finished || rematch !== undefined) {
+      return;
+    }
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const check = async () => {
+      try {
+        const found = await lookupRematch(api, endpoint, matchId, controller.signal);
+        if (found !== undefined) {
+          setRematch(found);
+          return;
+        }
+      } catch {
+        // Discovery is best effort; keep checking while this finished view is shown.
+      }
+      if (!controller.signal.aborted) {
+        timer = setTimeout(() => void check(), 2000);
+      }
+    };
+    void check();
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [finished, rematch, api, endpoint, matchId]);
+  const unplayed = (snapshot?.own_rack.tiles ?? []).reduce((sum, tile) => {
+    if (tile.face.kind !== "letter") {
+      return sum;
+    }
+    const letter = tile.face.letter;
+    const definition = rules.tiles.find(
+      (entry) => entry.face.kind === "letter" && entry.face.letter === letter,
+    );
+    return sum + (definition?.value ?? 0);
+  }, 0);
   const canAct =
     state.kind === "joined" &&
     connection.kind === "connected" &&
@@ -383,7 +429,23 @@ export function PlayerPhone({
                   })}
             </p>
           )}
-          {phase?.kind === "finished" && <p>{t("phone.finished")}</p>}
+          {phase?.kind === "finished" && (
+            <>
+              <p>{t("phone.finished")}</p>
+              <p>
+                {snapshot.own_rack.tiles.length === 0
+                  ? t("phone.wentOut")
+                  : t(unplayed === 1 ? "phone.unplayedOne" : "phone.unplayedOther", {
+                      count: unplayed,
+                    })}
+              </p>
+              {rematch !== undefined && onFollowRematch !== undefined && own !== undefined && (
+                <Button onClick={() => onFollowRematch(rematch, own.display_name)}>
+                  {t("rematch.join")}
+                </Button>
+              )}
+            </>
+          )}
           {own !== undefined && phase?.kind !== "lobby" && (
             <>
               {phase?.kind === "playing" ? (

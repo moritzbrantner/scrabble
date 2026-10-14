@@ -8,7 +8,7 @@ At either ending, each player's score loses the sum of the values of their remai
 
 All counter, revision, and score arithmetic is checked before final publication. Commits and exchanges run on a candidate state, so failure also preserves placement, replacement draws, exchange shuffle, and cumulative scoring. A failed pass preserves its counter and scores. Successful completion clears tentative previews and consumes the command sequence once. Finished sessions reject every gameplay command; duplicate commands cannot apply adjustments again.
 
-The public snapshot carries final scores, winner identities, board, bag count, rack counts, and bounded [public turn history](deterministic-history.md). Each phone retains its own private rack. The board displays the winner or tie; phones replace the move editor with their read-only rack and final scores. No rack history or bag order is published. Completed-game summaries and rematches remain issue #33.
+The public snapshot carries final scores, winner identities, board, bag count, rack counts, and bounded [public turn history](deterministic-history.md). Each phone retains its own private rack. The board displays the winner or tie; phones replace the move editor with their read-only rack and final scores. No rack history or bag order is published. The [completed-game summary and one-tap rematch](rematch.md) build on this finished state without changing it.
 
 ## Replay compatibility
 
