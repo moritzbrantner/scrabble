@@ -1,0 +1,79 @@
+name: Scrabble Provisioning Comparison
+
+# Non-required experiment for #81: identical `bun run check` on the same runner class with
+# conventional provisioning versus the locked Nix development shell. Every sample is cold:
+# a fresh runner with no restored Actions caches. It also runs on pull requests that change
+# the experiment itself, so its evidence is collected before merge.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - flake.nix
+      - flake.lock
+      - .github/workflows/provisioning-comparison.yml
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    name: "${{ matrix.variant }} cold sample ${{ matrix.sample }}"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [ubuntu, nix]
+        sample: [1, 2, 3, 4, 5]
+    steps:
+      - name: Check out the identical source revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Conventional Bun setup
+        if: matrix.variant == 'ubuntu'
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.2
+      - name: Conventional Rust setup from rust-toolchain.toml
+        if: matrix.variant == 'ubuntu'
+        run: rustup toolchain install
+      - name: Install Nix
+        if: matrix.variant == 'nix'
+        uses: NixOS/nix-installer-action@62c1943b776c509394b550f3f983adc14e9212d6 # v1.0.0
+        with:
+          installer-version: 2.35.2
+          enable-kvm: false
+      - name: Activate locked Nix development shell
+        if: matrix.variant == 'nix'
+        run: |
+          nix develop --command bash -c 'printf "%s\n" "$PATH" >> "$GITHUB_PATH"'
+      - name: Install Rust toolchain from rust-toolchain.toml
+        if: matrix.variant == 'nix'
+        run: rustup toolchain install
+      - name: Record toolchain identity
+        run: |
+          set -euo pipefail
+          echo "Commit: $(git rev-parse HEAD)"
+          echo "Runner image: ${ImageOS:-unknown} ${ImageVersion:-unknown}"
+          echo "Flake lock digest: $(sha256sum flake.lock)"
+          echo "Cargo lock digest: $(sha256sum Cargo.lock)"
+          echo "Bun lock digest: $(sha256sum bun.lock)"
+          command -v bun cargo rustc
+          rustc --version
+          cargo --version
+          bun --version
+      - name: Install identical package dependencies
+        run: |
+          bun install --frozen-lockfile
+          cargo fetch --locked
+          bunx playwright install --with-deps chromium
+      - name: Execute the identical repository gate
+        run: bun run check
+      - name: Record independent experimental sample
+        if: always()
+        env:
+          VARIANT: ${{ matrix.variant }}
+          SAMPLE: ${{ matrix.sample }}
+        run: |
+          echo "| Provisioner | Cache state | Sample | Source | Runner image |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| --- | --- | ---: | --- | --- |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| $VARIANT | cold; no restored Actions caches | $SAMPLE | $GITHUB_SHA | ${ImageOS:-unknown} ${ImageVersion:-unknown} |" >> "$GITHUB_STEP_SUMMARY"
