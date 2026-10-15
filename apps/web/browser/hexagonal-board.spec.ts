@@ -1,7 +1,8 @@
 // Independent #96 integration acceptance. Current native hex correctness is
 // reused; this file checks actual catalog/UI/server exposure, never a fake game.
 import { execFileSync } from "node:child_process";
-import { dirname, resolve } from "node:path";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { z } from "zod";
 import { faceText } from "../src/public-state";
@@ -81,11 +82,6 @@ const executable = resolve(
   "debug/examples/browser_game_fixture",
 );
 const opening = z.strictObject({ requestId: z.string(), requestedAt: z.number() });
-const replay = z.object({
-  records_verified: z.number(),
-  canonical_hash: z.string(),
-  game: z.object({ game_id: z.string(), phase: z.unknown(), history: z.array(z.unknown()) }),
-});
 const analysis = (page: Page) =>
   page
     .getByRole("region", { name: /preview|proposed|analysis|breakdown/i })
@@ -679,26 +675,23 @@ for (const policy of ["all_word", "main_word_only"] as const) {
         if (!match) {
           throw new Error("Missing retained match route");
         }
-        await expect
-          .poll(() => {
-            try {
-              const report = replay.parse(
-                JSON.parse(
-                  execFileSync(executable, ["--hex-replay", directory, match], {
-                    encoding: "utf8",
-                    timeout: 10_000,
-                    stdio: ["ignore", "pipe", "pipe"],
-                  }),
-                ),
-              );
-              expect(report.game.game_id).toBe(boardState()!.public.game_id);
-              expect(report.records_verified).toBeGreaterThan(0);
-              return report.game.history;
-            } catch {
-              return undefined;
-            }
-          })
-          .toEqual(boardState()!.public.history);
+        // Native recovery bundles are materialized only at graceful shutdown.
+        // The source-owned runner verifies these SAME completed matches after all
+        // browser cases and fixture shutdown, before removing the private fixture.
+        const expectations = join(directory, "hex-replay-expectations");
+        mkdirSync(expectations, { recursive: true, mode: 0o700 });
+        writeFileSync(
+          join(expectations, `${policy}-${metric}.json`),
+          JSON.stringify({
+            match,
+            game: {
+              game_id: boardState()!.public.game_id,
+              phase: boardState()!.public.phase,
+              history: boardState()!.public.history,
+            },
+          }),
+          { mode: 0o600 },
+        );
         for (const client of [page, ada, lin]) {
           expect((await new AxeBuilder({ page: client }).analyze()).violations).toEqual([]);
         }

@@ -1,4 +1,7 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -143,6 +146,53 @@ const run = async () => {
   );
   process.exitCode = await child.exited;
 };
+// A live host has not yet persisted recovery images. Compare real native replay
+// only after its existing graceful shutdown, while retaining the completed match
+// identities and browser-observed expected results through private fixture files.
+const replayGame = z.strictObject({
+  game_id: z.string(),
+  phase: z.unknown(),
+  history: z.array(z.unknown()),
+});
+const replayExpectation = z.strictObject({ match: z.string(), game: replayGame });
+const replayReport = z.object({
+  records_verified: z.int().positive(),
+  checkpoints_verified: z.int().positive(),
+  canonical_hash: z.string().min(1),
+  game: replayGame,
+});
+async function verifyCompletedHexReplays() {
+  const directory = join(gameDirectory, "hex-replay-expectations");
+  if (!existsSync(directory)) {
+    return;
+  }
+  let verified = 0;
+  for (const entry of (await readdir(directory)).sort()) {
+    assert.match(entry, /^(?:all_word|main_word_only)-(?:tiles|letters)\.json$/);
+    const expected = replayExpectation.parse(
+      JSON.parse(await readFile(join(directory, entry), "utf8")),
+    );
+    const actual = replayReport.parse(
+      JSON.parse(
+        execFileSync(
+          join(fixtureExecutables, "browser_game_fixture"),
+          ["--hex-replay", gameDirectory, expected.match],
+          { encoding: "utf8", timeout: 10_000, stdio: ["ignore", "pipe", "inherit"] },
+        ),
+      ),
+    );
+    assert.deepEqual(
+      actual.game,
+      expected.game,
+      "native replay must retain the SAME completed match, phase and full history",
+    );
+    verified += 1;
+  }
+  assert.ok(verified > 0, "a completed hex expectation directory must not be empty");
+  console.log(
+    `Verified ${verified} completed hex match(es) through native canonical replay after graceful shutdown.`,
+  );
+}
 const stop = () => {
   child?.kill("SIGTERM");
   fixture.kill("SIGINT");
@@ -155,8 +205,19 @@ try {
 } finally {
   fixture.kill("SIGINT");
   games.kill("SIGINT");
-  await Promise.all([fixture.exited, games.exited]);
-  await rm(fixtureDirectory, { recursive: true });
-  process.removeListener("SIGINT", stop);
-  process.removeListener("SIGTERM", stop);
+  try {
+    await Promise.all([fixture.exited, games.exited]);
+    assert.equal(
+      games.exitCode,
+      0,
+      "native game fixture must finish graceful recovery persistence",
+    );
+    await verifyCompletedHexReplays();
+  } finally {
+    // Preserve an already nonzero browser result; replay errors also fail the
+    // command, and cleanup runs even when verification or shutdown fails.
+    await rm(fixtureDirectory, { recursive: true });
+    process.removeListener("SIGINT", stop);
+    process.removeListener("SIGTERM", stop);
+  }
 }
