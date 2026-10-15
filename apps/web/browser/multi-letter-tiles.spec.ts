@@ -65,8 +65,7 @@ async function sampleCatalog(request: APIRequestContext) {
   const tiles = catalog.tileProfiles.find((row) => row.identity.name === SAMPLE_TILES);
   expect(
     tiles,
-    "the real catalog must offer the multi-letter sample tile profile (#98). Until the " +
-      "implementation enables it by default, run with SCRABBLE_BROWSER_MULTI_LETTER=1",
+    "the real fixture catalog must offer the multi-letter sample tile profile (#98)",
   ).toBeDefined();
   expect(catalog.wordLists.some((row) => row.identity.name === SAMPLE_WORDS)).toBe(true);
   return tiles!.tiles;
@@ -263,13 +262,15 @@ test("a real match plays CH, A, T as CHAT and SCH, A through CH as SCHACH on who
     expect(linFaces, "native opening gives Lin SCH and A").toEqual(
       expect.arrayContaining(["SCH", "A"]),
     );
+    // The board's observed projection may trail the phones; wait for its started state.
+    const total = tiles.reduce((sum, tile) => sum + tile.count, 0);
+    await expect.poll(() => boardState()?.public.phase.kind).toBe("playing");
+    await expect.poll(() => boardState()?.public.remaining_tiles).toBe(total - 14);
     const configuration = boardState()?.public.configuration;
     expect(configuration?.tiles).toEqual(tiles);
     if (configuration === undefined) {
       throw new Error("missing real configuration");
     }
-    const total = tiles.reduce((sum, tile) => sum + tile.count, 0);
-    expect(boardState()?.public.remaining_tiles).toBe(total - 14);
     const ch = valueOf(tiles, "CH");
     const sch = valueOf(tiles, "SCH");
 

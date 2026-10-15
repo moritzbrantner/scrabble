@@ -87,14 +87,13 @@ The tiles are 29 in total, which meets the default 4 players × 7 rack minimum:
 
 The board stays `Classic square 15`, and the rules stay the catalog defaults.
 
-The new sources are added only when `SCRABBLE_BROWSER_MULTI_LETTER=1` is set.
-Without that gate, every existing browser suite would fail on `a60d72e`,
-because the current client rejects the whole catalog. **The #98 implementation
-must make `multi_letter::enabled()` unconditionally true** (and may then remove
-the variable), so that the default `bun run test:browser` runs
-`multi-letter-tiles.spec.ts`. Without the sources, the spec fails with an
-explicit "catalog must offer the multi-letter sample" message. It is never
-skipped.
+The fixture always offers these sources, so the default `bun run test:browser`
+runs `multi-letter-tiles.spec.ts`. When the contract was written on `a60d72e`,
+they were gated by `SCRABBLE_BROWSER_MULTI_LETTER=1`, because the client of that
+time rejected the whole catalog and every existing browser suite would have
+failed. The #98 implementation removes that gate. Without the sources, the spec
+fails with an explicit "catalog must offer the multi-letter sample" message. It
+is never skipped.
 
 `browser_game_fixture --multi-letter-opening <dir>` finds a real version-3
 creation input (`requestId`, `requestedAt`) whose native deal gives:
@@ -241,8 +240,6 @@ Commands (low-memory settings as used for this contract):
 NODE_OPTIONS=--max-old-space-size=3072 bun test apps/web/src/multi-letter-tiles.test.tsx
 NODE_OPTIONS=--max-old-space-size=3072 CARGO_BUILD_JOBS=2 \
   bun scripts/test-browser.ts multi-letter-tiles --workers=1
-# until the implementation enables the fixture sources by default:
-SCRABBLE_BROWSER_MULTI_LETTER=1 bun scripts/test-browser.ts multi-letter-tiles --workers=1
 ```
 
 The completion gate stays `bun run check`.
