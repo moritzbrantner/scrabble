@@ -367,8 +367,7 @@ mod board_size_tests {
     #[test]
     fn builtin_resized_boards_are_authoritative_and_preserve_the_legacy_default() {
         let original = english_fixture();
-        let dictionary =
-            WordList::from_text(original.dictionary.clone(), "CAT\nAT\n").unwrap();
+        let dictionary = WordList::from_text(original.dictionary.clone(), "CAT\nAT\n").unwrap();
         let catalog = ProfileCatalog::load(None, &original, &dictionary).unwrap();
         let public = catalog.public();
         assert_eq!(public["defaults"]["legacyCompatible"], true);
