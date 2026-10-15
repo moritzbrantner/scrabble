@@ -4,7 +4,8 @@ use crate::identity::{GameId, PlayerId, TurnId};
 use crate::protocol::{
     Command, CommandEnvelope, Phase, PlayerSnapshot, PublicPreview, PublicSnapshot, TurnAction,
 };
-use crate::state::{GameState, StateError};
+use crate::ruleset::ExpiryConsequence;
+use crate::state::{ClockError, GameState, StateError};
 use std::{collections::BTreeMap, fmt, sync::Arc};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -80,6 +81,60 @@ impl GameSession {
         sequence: u32,
         envelope: &CommandEnvelope,
     ) -> Result<(), CommandError> {
+        self.apply_inner(player, sequence, envelope, None)
+    }
+    /// Like `apply`, at an authoritative instant. Untimed matches ignore the instant.
+    pub fn apply_at(
+        &mut self,
+        player: PlayerId,
+        sequence: u32,
+        envelope: &CommandEnvelope,
+        now_ms: u64,
+    ) -> Result<(), CommandError> {
+        self.apply_inner(player, sequence, envelope, Some(now_ms))
+    }
+    /// Server-issued expiry transition for the active turn. Consumes no sequence.
+    pub fn timeout_at(&mut self, expected_turn: TurnId, now_ms: u64) -> Result<(), CommandError> {
+        let Some(control) = self.state.ruleset().time_control else {
+            return Err(StateError::Clock(ClockError::Untimed).into());
+        };
+        let Phase::Playing { turn, .. } = self.state.phase() else {
+            return Err(StateError::WrongPhase.into());
+        };
+        if expected_turn != *turn {
+            return Err(CommandError::StaleTurn);
+        }
+        match self.state.check_clock(now_ms) {
+            Err(StateError::Clock(ClockError::Expired)) => {}
+            Err(error) => return Err(error.into()),
+            Ok(()) => return Err(StateError::Clock(ClockError::NotExpired).into()),
+        }
+        if control.on_expiry == ExpiryConsequence::Forfeit {
+            return Err(StateError::Clock(ClockError::ForfeitUnavailable).into());
+        }
+        let mut candidate = self.state.clone();
+        candidate.settle_clock_turn(now_ms, true)?;
+        candidate.finish_turn(&self.state, 0, TurnAction::Pass {})?;
+        candidate.begin_clock_turn(now_ms)?;
+        self.state = candidate;
+        self.preview = None;
+        Ok(())
+    }
+    fn apply_inner(
+        &mut self,
+        player: PlayerId,
+        sequence: u32,
+        envelope: &CommandEnvelope,
+        now_ms: Option<u64>,
+    ) -> Result<(), CommandError> {
+        let timed_now = |state: &GameState| -> Result<Option<u64>, CommandError> {
+            if !state.is_timed() {
+                return Ok(None);
+            }
+            now_ms
+                .map(Some)
+                .ok_or(StateError::Clock(ClockError::InstantRequired).into())
+        };
         self.validate_actor(player, sequence, envelope)?;
         if self.state.rack(player).is_none() {
             return Err(StateError::UnknownPlayer.into());
@@ -97,7 +152,10 @@ impl GameSession {
                         if self.state.host() != Some(player) {
                             return Err(CommandError::NotHost);
                         }
-                        self.state.deal_initial_racks()?;
+                        match timed_now(&self.state)? {
+                            Some(now) => self.state.deal_initial_racks_at(now)?,
+                            None => self.state.deal_initial_racks()?,
+                        }
                     }
                     _ => return Err(StateError::WrongPhase.into()),
                 }
@@ -112,6 +170,29 @@ impl GameSession {
                 if player != *active_player {
                     return Err(CommandError::NotActive);
                 }
+                let clock_now = match &envelope.command {
+                    Command::Start {} | Command::SetName { .. } | Command::ClaimBoard { .. } => {
+                        None
+                    }
+                    _ => timed_now(&self.state)?,
+                };
+                if let Some(now) = clock_now {
+                    self.state.check_clock(now)?;
+                }
+                // Settles the ending turn's clock and starts the next, on the candidate.
+                let finish = |candidate: &mut GameState,
+                              previous: &GameState,
+                              action: TurnAction|
+                 -> Result<(), StateError> {
+                    if let Some(now) = clock_now {
+                        candidate.settle_clock_turn(now, false)?;
+                    }
+                    candidate.finish_turn(previous, 0, action)?;
+                    if let Some(now) = clock_now {
+                        candidate.begin_clock_turn(now)?;
+                    }
+                    Ok(())
+                };
                 match &envelope.command {
                     Command::Preview { placements } => {
                         if placements.len() > usize::from(self.state.ruleset().rack_size) {
@@ -130,7 +211,7 @@ impl GameSession {
                     }
                     Command::Pass {} => {
                         let mut candidate = self.state.clone();
-                        candidate.finish_turn(&self.state, 0, TurnAction::Pass {})?;
+                        finish(&mut candidate, &self.state, TurnAction::Pass {})?;
                         self.state = candidate;
                         self.preview = None;
                     }
@@ -138,11 +219,12 @@ impl GameSession {
                         return Err(StateError::WrongPhase.into());
                     }
                     Command::Commit { placements } => {
-                        crate::commit::apply_with_dictionary(
+                        crate::commit::apply_with_dictionary_at(
                             &mut self.state,
                             player,
                             placements,
                             self.dictionary.as_ref(),
+                            clock_now,
                         )
                         .map_err(CommandError::Commit)?;
                         self.preview = None;
@@ -150,9 +232,9 @@ impl GameSession {
                     Command::Exchange { tile_ids } => {
                         let mut candidate = self.state.clone();
                         candidate.exchange_tiles(player, tile_ids)?;
-                        candidate.finish_turn(
+                        finish(
+                            &mut candidate,
                             &self.state,
-                            0,
                             TurnAction::Exchange {
                                 tile_count: tile_ids.len() as u8,
                             },
@@ -221,6 +303,23 @@ impl GameSession {
             return Err(CommandError::UnsupportedCommand);
         }
         self.state.deal_initial_racks()?;
+        self.last_sequences.insert(player, sequence);
+        Ok(())
+    }
+
+    /// `start_by_authorized_board` at an authoritative instant; starts a timed clock.
+    pub fn start_by_authorized_board_at(
+        &mut self,
+        player: PlayerId,
+        sequence: u32,
+        envelope: &CommandEnvelope,
+        now_ms: u64,
+    ) -> Result<(), CommandError> {
+        self.validate_lobby_actor(player, sequence, envelope)?;
+        if !matches!(envelope.command, Command::Start {}) {
+            return Err(CommandError::UnsupportedCommand);
+        }
+        self.state.deal_initial_racks_at(now_ms)?;
         self.last_sequences.insert(player, sequence);
         Ok(())
     }

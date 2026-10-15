@@ -43,9 +43,28 @@ pub fn apply_with_dictionary(
     placements: &[Placement],
     dictionary: &dyn Dictionary,
 ) -> Result<MoveScore, CommitError> {
+    apply_with_dictionary_at(state, player, placements, dictionary, None)
+}
+
+/// Timed matches require the authoritative instant; the session has already checked
+/// the clock window. Untimed matches ignore `now_ms`.
+pub(crate) fn apply_with_dictionary_at(
+    state: &mut GameState,
+    player: PlayerId,
+    placements: &[Placement],
+    dictionary: &dyn Dictionary,
+    now_ms: Option<u64>,
+) -> Result<MoveScore, CommitError> {
     if !matches!(state.phase(), Phase::Playing { active_player, .. } if *active_player == player) {
         return Err(CommitError::NotActive);
     }
+    let now_ms = if state.is_timed() {
+        Some(now_ms.ok_or(CommitError::State(StateError::Clock(
+            crate::state::ClockError::InstantRequired,
+        )))?)
+    } else {
+        None
+    };
     let validated =
         placement::validate(state, player, placements).map_err(CommitError::Placement)?;
     dictionary::validate(&validated, dictionary).map_err(CommitError::Dictionary)?;
@@ -60,6 +79,11 @@ pub fn apply_with_dictionary(
         .len() as u8;
     // Publish only after every mutation succeeds, including turn/revision overflow checks.
     let mut candidate = state.clone();
+    if let Some(now) = now_ms {
+        candidate
+            .settle_clock_turn(now, false)
+            .map_err(CommitError::State)?;
+    }
     let score = scoring::commit_placement(&mut candidate, player, placements)
         .map_err(CommitError::Score)?;
     candidate.refill_rack(player).map_err(CommitError::State)?;
@@ -74,6 +98,11 @@ pub fn apply_with_dictionary(
             },
         )
         .map_err(CommitError::State)?;
+    if let Some(now) = now_ms {
+        candidate
+            .begin_clock_turn(now)
+            .map_err(CommitError::State)?;
+    }
     *state = candidate;
     Ok(score)
 }
