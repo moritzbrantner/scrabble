@@ -1,4 +1,6 @@
 //! Real Scrabble application for browser creation acceptance; no replacement game/session rules.
+#[path = "browser_game_fixture/hexagonal.rs"]
+mod hexagonal;
 #[path = "../tests/support/profile_catalog.rs"]
 mod profile_catalog;
 
@@ -117,6 +119,23 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         let excluded = std::env::args().nth(3);
         let opening = opening(&factory, config.dictionary.is_some(), excluded.as_deref())?;
         println!("{}", serde_json::to_string(&opening)?);
+        return Ok(());
+    }
+    if std::env::args().nth(1).as_deref() == Some("--hex-replay") {
+        let directory = PathBuf::from(std::env::args().nth(2).ok_or("missing fixture directory")?);
+        let id = std::env::args().nth(3).ok_or("missing match identity")?;
+        println!(
+            "{}",
+            serde_json::to_string(&hexagonal::replay(&directory, &id)?)?
+        );
+        return Ok(());
+    }
+    if std::env::args().nth(1).as_deref() == Some("--hex-opening") {
+        let directory = PathBuf::from(std::env::args().nth(2).ok_or("missing fixture directory")?);
+        println!(
+            "{}",
+            serde_json::to_string(&hexagonal::opening(&directory)?)?
+        );
         return Ok(());
     }
     if std::env::args().nth(1).as_deref() == Some("--multi-letter-opening") {
@@ -238,6 +257,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     }
     // The browser understands multi-letter faces (#98), so every fixture run offers them.
     multi_letter::add_sources(&directory, &catalog)?;
+    hexagonal::add_sources(&directory, &catalog)?;
     values.insert(
         "SCRABBLE_PROFILE_CATALOG_FILE".into(),
         catalog.to_str().ok_or("invalid catalog path")?.into(),
@@ -331,7 +351,7 @@ mod multi_letter {
     const BOARD: &str = "acceptance-classic-board";
 
     /// 29 tiles: single letters that share letters with CH and SCH, two blanks.
-    fn tiles() -> serde_json::Value {
+    pub(super) fn tiles() -> serde_json::Value {
         let mut tiles: Vec<_> = [
             ("A", 6, 1),
             ("E", 4, 1),
@@ -394,7 +414,7 @@ mod multi_letter {
     }
 
     /// Deal racks for seats 2 and 3 exactly as the board-started native match does.
-    fn deal(
+    pub(super) fn deal(
         id: &MatchId,
         rules: &scrabble_game::ruleset::Ruleset,
         key: &hmac::Key,
@@ -410,7 +430,7 @@ mod multi_letter {
         Ok(state)
     }
 
-    fn creation_id(
+    pub(super) fn creation_id(
         key: &hmac::Key,
         domain: &[u8],
         prefix: &str,

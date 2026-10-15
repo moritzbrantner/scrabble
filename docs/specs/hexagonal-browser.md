@@ -84,6 +84,107 @@ Complete output: `/tmp/scrabble96-browser-catalog-baseline.log`; first-failure
 screenshots and traces remain under `test-results/hexagonal-board-*`.
 
 These first cases establish an actionable missing integration boundary. They do
-not yet author or demonstrate every integrated obligation above. The draft remains
-an acceptance work in progress; production implementation must wait for the complete
-independent handoff and any necessary fixture/combined-profile dependency decisions.
+not prove assertions that execution did not reach.
+
+## Authored integrated continuation and remaining verification
+
+The same `hexagonal-board.spec.ts` now additionally defines four native-server
+journeys, one per policy/metric combination. The two players use independent
+browser contexts: Ada is a genuine desktop keyboard client, Lin a touch phone
+that changes from portrait to landscape. Real creation inputs select a real native
+deal; actual received racks must contain the required faces. No board, rack,
+server response or authoritative snapshot is injected.
+
+`multi_letter_tiles.rs::hex_browser_trace_is_legal_with_combined_faces_under_both_policies_and_metrics`
+independently proves all six connected commits, dictionary, scores and words for
+all four combinations. The browser trace uses the existing 29-tile #98 profile;
+the native proof uses a richer distribution with the same relevant face values,
+not a claim that their random deals match. The deterministic browser helper must
+therefore be reverified against actual server rules and received racks.
+
+| Turn   | Physical placement (zero-based row, column) | Expected formed words and score                                                                                      |
+| ------ | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| 1, Ada | SCH (3,3), A (3,4)                          | SCHA 9                                                                                                               |
+| 2, Lin | A (2,4), A (2,5)                            | AA 2, AA 2, ASCH 9, AA 2; total 15                                                                                   |
+| 3, Ada | A (2,3), new double-word cell               | Tile metric selects AAA; letter metric selects ASCH. All-word totals 24; main-only totals 15 (tiles) or 21 (letters) |
+| 4, Lin | A (2,6)                                     | AAAA 4; spent premium is not reused                                                                                  |
+| 5, Ada | CH (4,3)                                    | ASCHCH 14 and AACH 7, total 21; equal three-cell tie selects vertical before diagonal                                |
+| 6, Lin | blank-as-A (4,2)                            | ASCHA 9 and ACH 5, total 14                                                                                          |
+
+In particular the existing A at (2,5) makes turn 5's diagonal **AACH**, not ACH.
+This expectation was corrected through independent scenario review and native
+proof before any production implementation. The authored dictionary includes AACH;
+it does not make arbitrary words valid.
+
+Before accepting each move the browser requires main word, selected metric,
+every formed word's score (including three separate AA entries on turn 2), and
+total on both actual shared board and actor. It checks no committed board,
+player scores or phase change. A valid score preview is canceled, must disappear,
+and is recreated before turn 1. An off-center opening and an invalid crossing
+(A plus blank-as-T before turn 2) leave authority/rack/history intact and expose
+feedback, then cancel. The source review must additionally confirm edited draft
+correlation: an old result cannot describe a newer placement. Neither this
+contract nor the harness prescribes the endpoint or transport mechanism.
+
+The trace checks actual touch-center hit targets, legal keyboard routes via the
+hex centre, 37 on-board editor cells, landscape CH/SCH fit at the existing 9 px
+legibility floor, no horizontal document overflow, screenshots and axe. After
+reload it checks rack/session identity with monotonic transport counters and
+retained history/main-word/metric/per-word explanations. Exchange plus pass ends
+the match; expected final scores are independently `(30 + turn3Total) - AdaRackValue`
+and `33 - LinRackValue`, counting each actual remaining physical tile once, with
+matching winners. All clients converge and native recovery replay must reproduce
+the same match ID and complete history.
+
+The two native low-level/schema boundary additions are:
+
+- `hexagonal.rs::fifteen_tile_hex_placement_can_form_thirty_one_words`: a real
+  accepted 15-tile placement/history has 31 words. Its native storage fixture is
+  boundary evidence, not an injected browser journey.
+- `hexagonal-public-state.acceptance.test.ts`: accept that 31-word history and
+  complete unique invalid-word feedback, still reject 32 words and duplicate
+  rejection entries. This supplements existing face/word-length contracts.
+
+Focused authoring evidence (raw originals retained):
+
+- `/tmp/scrabble96-trace-native-baseline2.log`: legal six-turn native trace **1
+  passed, 11 filtered**, with all four combinations inside that case. The earlier
+  `/tmp/scrabble96-trace-native-baseline.log` retains its authoring compile error;
+  it is not product evidence.
+- `/tmp/scrabble96-native-word-bound.log`: native 31-word proof **1 passed, 12
+  filtered**. Disposable compilation targets were cleaned by the maintenance
+  wrapper after the native runs.
+- `/tmp/scrabble96-wire-bound-declared-bun.log`: declared Bun 1.4.2, focused new
+  schema suite **1 passed, 2 failed**. The old 16-word bounds reject the required
+  31-word history and rejection; 32-word history rejection remains green. Earlier
+  system-Bun logs remain separately preserved.
+- `/tmp/scrabble96-browser-integrated-declared-bun.log`: declared Bun 1.4.2,
+  `bun scripts/test-browser.ts hexagonal-board.spec.ts` exits 1 **before any
+  browser case**, because the real server rejects the authored hex profile's
+  `boardShape` as an unknown field. The earlier two executed zero-option failures
+  remain the independent UI baseline; this later fixture admission failure does
+  not demonstrate that any of the four integrated journeys ran.
+- Fixture `cargo check -p scrabble-server --example browser_game_fixture --locked`
+  passes (`/tmp/scrabble96-fixture-check.log`); focused TypeScript typecheck and
+  type-aware lint pass (`/tmp/scrabble96-acceptance-typecheck-final.log`,
+  `/tmp/scrabble96-acceptance-lint-final.log`). Formatting and `git diff --check`
+  pass. These static checks do not validate still-unreached browser mechanics.
+
+Before merge, the independent context must reverify any fixture/helper correction
+and the complete journeys on the implemented head. The review-only obligations in
+the map stay explicit: real hex visual arrangement and practical hit regions
+(cell count alone cannot prove them), server-owned scoring, stale draft-result
+correlation, old-client catalog compatibility, exact existing square profile
+fingerprints, and reconstruction of effective hex rules after restart. Existing
+native/privacy/retry/recovery/performance/square tests remain required rather than
+being rewritten to fit new expectations. Final `bun run check` and production-like
+browser results are required; none are claimed here.
+
+After exact deployment, public independent two-player journeys must confirm the
+actual sample catalog under both policies and combined-face metrics. The public
+combined CH/SCH source sample is the existing necessary #121 dependency; this
+fixture is not delivery of that public sample. Do not close #96 or change its
+meaning to bypass #121, physical-device limitations, or the public acceptance.
+
+Policy reproducibility: resolved convention `sourceRevision`
+`5ad0db36974c8b0e5f9812c90ee34a4f227852c3`.

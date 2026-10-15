@@ -1007,3 +1007,102 @@ fn single_letter_rulesets_states_and_snapshots_stay_byte_identical() {
         (5693, 0x6707_de97_4555_b482)
     );
 }
+
+/// #96's browser trace is proved through accepted commands, not a pre-seeded board.
+/// The fifth move also pins the Vertical-before-Diagonal equal-cell tie-break.
+#[test]
+fn hex_browser_trace_is_legal_with_combined_faces_under_both_policies_and_metrics() {
+    let words = dictionary(&[
+        "SCHA", "AA", "ASCH", "AAA", "AAAA", "ASCHCH", "AACH", "ACH", "ASCHA",
+    ]);
+    for policy in [PremiumPolicy::AllWord, PremiumPolicy::MainWordOnly] {
+        for metric in [WordLengthMetric::Tiles, WordLengthMetric::Letters] {
+            let mut rules = english_fixture();
+            rules.identity.name = "hex-browser-trace".into();
+            rules.dictionary = words_identity();
+            rules.board_shape = BoardShape::Hexagon;
+            rules.board_size = 7;
+            rules.premiums = hex_premiums(&[(2, 3, Premium::DoubleWord)]);
+            rules.premium_policy = policy;
+            rules.main_word_length = metric;
+            rules.tiles = vec![
+                definition("A", 60, 1),
+                definition("CH", 20, CH_VALUE),
+                definition("SCH", 20, SCH_VALUE),
+                definition("?", 10, 0),
+                definition("T", 10, 1),
+            ];
+            let mut state = game(
+                &rules,
+                &[("A", 2), ("CH", 1), ("SCH", 1)],
+                &[("A", 3), ("?", 1)],
+            );
+            let off_center = tiles(&state, P1, &[(0, 3, "SCH"), (0, 4, "A")]);
+            let untouched = state.canonical_bytes().unwrap();
+            assert!(matches!(
+                validate(&state, P1, &off_center),
+                Err(PlacementError::CenterRequired)
+            ));
+            assert_eq!(state.canonical_bytes().unwrap(), untouched);
+
+            let opening = tiles(&state, P1, &[(3, 3, "SCH"), (3, 4, "A")]);
+            let first = commit::apply_with_dictionary(&mut state, P1, &opening, &words).unwrap();
+            assert_eq!(texts(&first), ["SCHA"]);
+            assert_eq!(first.total(), 9);
+
+            let mut invalid = tiles(&state, P2, &[(2, 4, "A"), (2, 5, "?")]);
+            invalid[1].blank_as = Some('T');
+            let untouched = state.canonical_bytes().unwrap();
+            assert!(matches!(
+                commit::apply_with_dictionary(&mut state, P2, &invalid, &words),
+                Err(CommitError::Dictionary(_))
+            ));
+            assert_eq!(state.canonical_bytes().unwrap(), untouched);
+
+            let crossing = tiles(&state, P2, &[(2, 4, "A"), (2, 5, "A")]);
+            let second = commit::apply_with_dictionary(&mut state, P2, &crossing, &words).unwrap();
+            assert_eq!(texts(&second), ["AA", "AA", "ASCH", "AA"]);
+            assert_eq!(second.word_scores(), [2, 2, 9, 2]);
+            assert_eq!(second.total(), 15);
+
+            let intersection = tiles(&state, P1, &[(2, 3, "A")]);
+            let preview = calculate(&validate(&state, P1, &intersection).unwrap()).unwrap();
+            let (main, scores, total) = match (policy, metric) {
+                (PremiumPolicy::AllWord, WordLengthMetric::Tiles) => ("AAA", [6, 18], 24),
+                (PremiumPolicy::AllWord, WordLengthMetric::Letters) => ("ASCH", [18, 6], 24),
+                (PremiumPolicy::MainWordOnly, WordLengthMetric::Tiles) => ("AAA", [6, 9], 15),
+                (PremiumPolicy::MainWordOnly, WordLengthMetric::Letters) => ("ASCH", [18, 3], 21),
+            };
+            assert_eq!(preview.main_word().text(), main);
+            assert_eq!(preview.word_scores(), scores);
+            assert_eq!(preview.total(), total);
+            assert_eq!(
+                commit::apply_with_dictionary(&mut state, P1, &intersection, &words).unwrap(),
+                preview
+            );
+
+            let extension = tiles(&state, P2, &[(2, 6, "A")]);
+            let fourth = commit::apply_with_dictionary(&mut state, P2, &extension, &words).unwrap();
+            assert_eq!(texts(&fourth), ["AAAA"]);
+            assert_eq!(fourth.total(), 4); // spent double-word is not reused
+
+            let ch = tiles(&state, P1, &[(4, 3, "CH")]);
+            let fifth = commit::apply_with_dictionary(&mut state, P1, &ch, &words).unwrap();
+            assert_eq!(texts(&fifth), ["ASCHCH", "AACH"]);
+            assert_eq!(
+                directions(&fifth),
+                [Direction::Vertical, Direction::Diagonal]
+            );
+            assert_eq!(fifth.word_scores(), [14, 7]);
+            assert_eq!(fifth.total(), 21);
+
+            let mut blank = tiles(&state, P2, &[(4, 2, "?")]);
+            blank[0].blank_as = Some('A');
+            let sixth = commit::apply_with_dictionary(&mut state, P2, &blank, &words).unwrap();
+            assert_eq!(texts(&sixth), ["ASCHA", "ACH"]);
+            assert_eq!(sixth.word_scores(), [9, 5]);
+            assert_eq!(sixth.total(), 14);
+            state.verify_tile_conservation().unwrap();
+        }
+    }
+}
