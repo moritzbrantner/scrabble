@@ -11,7 +11,11 @@ export function BoardLayoutPreview({ board }: { board: BoardProfile }) {
   const center = Math.floor(board.boardSize / 2);
 
   return (
-    <section className="board-layout-preview" aria-label={t("profiles.preview")}>
+    <section
+      className="board-layout-preview"
+      role="group"
+      aria-label={t("profiles.selectedBoard")}
+    >
       <header className="board-layout-preview-header">
         <h2>{t("profiles.preview")}</h2>
         <p>
@@ -55,14 +59,19 @@ export function BoardLayoutPreview({ board }: { board: BoardProfile }) {
         </tbody>
       </table>
       <ul className="board-preview-legend" aria-label={t("profiles.bonusLegend")}>
-        {bonusKinds.map((kind) => (
-          <li key={kind}>
-            <span className={`board-preview-swatch premium-${kind.replaceAll("_", "-")}`}>
-              {t(`premiumShort.${kind}`)}
-            </span>
-            {t(`premium.${kind}`)}
-          </li>
-        ))}
+        {bonusKinds.map((kind) => {
+          const count = board.premiums.filter((cell) => cell === kind).length;
+          return (
+            <li key={kind}>
+              <span className={`board-preview-swatch premium-${kind.replaceAll("_", "-")}`}>
+                {t(`premiumShort.${kind}`)}
+              </span>
+              <span>
+                {t(`premium.${kind}`)}: {number(count)}
+              </span>
+            </li>
+          );
+        })}
       </ul>
       <p className="setting-note">{t("profiles.premiumPolicy")}</p>
     </section>
