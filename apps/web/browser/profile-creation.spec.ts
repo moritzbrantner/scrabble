@@ -130,10 +130,13 @@ test("three independent selectors and exact advanced values drive two simultaneo
       await tiles(page).inputValue(),
       await board(page).inputValue(),
     ];
-    await page.getByText("Settings", { exact: true }).click();
-    await page.getByLabel("Interface language", { exact: true }).selectOption("de");
+    await page
+      .getByRole("combobox", { name: "Interface language", exact: true })
+      .selectOption("de");
     await expect(page.locator("html")).toHaveAttribute("lang", "de");
-    await page.getByLabel("Sprache der Oberfläche", { exact: true }).selectOption("en");
+    await page
+      .getByRole("combobox", { name: "Sprache der Oberfläche", exact: true })
+      .selectOption("en");
     expect([
       await word(page).inputValue(),
       await tiles(page).inputValue(),

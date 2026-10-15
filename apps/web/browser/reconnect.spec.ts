@@ -76,10 +76,13 @@ test("real board and phone resume interrupted connections without changing autho
     }
     await expect(page.locator(".tentative-tile")).toHaveCount(2);
     for (const client of [page, first]) {
-      await client.getByText("Settings", { exact: true }).click();
-      await client.getByLabel("Interface language", { exact: true }).selectOption("de");
+      await client
+        .getByRole("combobox", { name: "Interface language", exact: true })
+        .selectOption("de");
       await expect(client.locator("html")).toHaveAttribute("lang", "de");
-      await client.getByLabel("Sprache der Oberfläche", { exact: true }).selectOption("en");
+      await client
+        .getByRole("combobox", { name: "Sprache der Oberfläche", exact: true })
+        .selectOption("en");
       await expect(client.locator("html")).toHaveAttribute("lang", "en");
       expect(await client.evaluate(() => document.documentElement.dataset.connections)).toBe("1");
     }
