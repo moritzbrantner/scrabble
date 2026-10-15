@@ -199,15 +199,48 @@ impl ProfileCatalog {
         } else {
             let words = WordListProfile::new(dictionary.clone())?;
             let tiles = TileProfile::new(legacy.identity.clone(), legacy.tiles.clone())?;
-            let boards = BoardProfile::new(
-                legacy.identity.clone(),
-                legacy.board_size,
-                legacy.premiums.clone(),
-            )?;
+            // Offer centered, smaller square boards without inventing a second rules engine.
+            // Keep the original profile as the untouched default for v2 creation/recovery.
+            let mut boards = Vec::new();
+            for size in (5..legacy.board_size).step_by(2) {
+                let name = format!("builtin-square-{size}");
+                if name == legacy.identity.name {
+                    continue;
+                }
+                let offset = usize::from((legacy.board_size - size) / 2);
+                let original_size = usize::from(legacy.board_size);
+                let side = usize::from(size);
+                let premiums = (0..side)
+                    .flat_map(|row| {
+                        (0..side).map(move |column| {
+                            legacy.premiums[(row + offset) * original_size + column + offset]
+                        })
+                    })
+                    .collect();
+                boards.push(Named {
+                    label: format!("Square {size} × {size}"),
+                    profile: BoardProfile::new(
+                        ContentIdentity {
+                            name,
+                            revision: "1".into(),
+                        },
+                        size,
+                        premiums,
+                    )?,
+                });
+            }
+            boards.push(Named {
+                label: "Default board".into(),
+                profile: BoardProfile::new(
+                    legacy.identity.clone(),
+                    legacy.board_size,
+                    legacy.premiums.clone(),
+                )?,
+            });
             let names = DefaultNames {
                 word_list: words.identity().name.clone(),
                 tile: tiles.identity().name.clone(),
-                board: boards.identity().name.clone(),
+                board: legacy.identity.name.clone(),
             };
             (
                 vec![Named {
@@ -218,10 +251,7 @@ impl ProfileCatalog {
                     label: "Default tiles".into(),
                     profile: tiles,
                 }],
-                vec![Named {
-                    label: "Default board".into(),
-                    profile: boards,
-                }],
+                boards,
                 names,
             )
         };
@@ -328,3 +358,47 @@ impl ProfileCatalog {
     }
 }
 use scrabble_game::dictionary::Dictionary;
+
+#[cfg(test)]
+mod board_size_tests {
+    use super::*;
+    use scrabble_game::ruleset::english_fixture;
+
+    #[test]
+    fn builtin_resized_boards_are_authoritative_and_preserve_the_legacy_default() {
+        let original = english_fixture();
+        let dictionary = WordList::from_text(original.dictionary.clone(), "CAT\nAT\n").unwrap();
+        let catalog = ProfileCatalog::load(None, &original, &dictionary).unwrap();
+        let public = catalog.public();
+        assert_eq!(public["defaults"]["legacyCompatible"], true);
+        let boards = public["boardProfiles"].as_array().unwrap();
+        let sizes: Vec<u64> = boards
+            .iter()
+            .map(|row| row["boardSize"].as_u64().unwrap())
+            .collect();
+        assert_eq!(sizes, [5, 7, 9, 11, 13, 15]);
+
+        let defaults: Selection =
+            serde_json::from_value(public["defaults"]["selection"].clone()).unwrap();
+        for profile in boards {
+            let size = profile["boardSize"].as_u64().unwrap() as usize;
+            let mut selection = defaults.clone();
+            selection.board = serde_json::from_value(profile["identity"].clone()).unwrap();
+            let prepared = catalog
+                .resolve(&selection, MatchRules::from(&original))
+                .unwrap();
+            let rules = prepared.composed.rules;
+            assert_eq!(rules.board_size as usize, size);
+            let offset = (original.board_size as usize - size) / 2;
+            for row in 0..size {
+                for column in 0..size {
+                    assert_eq!(
+                        rules.premiums[row * size + column],
+                        original.premiums
+                            [(row + offset) * original.board_size as usize + column + offset]
+                    );
+                }
+            }
+        }
+    }
+}

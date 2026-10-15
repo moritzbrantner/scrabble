@@ -116,14 +116,27 @@ test("three independent selectors and exact advanced values drive two simultaneo
     await expect(board(page)).toBeVisible();
     const sources = await catalog(request);
     expect(sources.defaults.legacyCompatible).toBe(true);
+    const preview = page.getByRole("table", { name: "Board preview", exact: true });
+    await expect(preview.locator("td")).toHaveCount(225);
     const originalTile = await tiles(page).inputValue();
     const originalBoard = await board(page).inputValue();
+    const size = page.getByRole("combobox", { name: "Board size", exact: true });
+    for (const side of [7, 15]) {
+      await size.selectOption(String(side));
+      await expect(preview.locator("td")).toHaveCount(side * side);
+      await expect(preview).toHaveAttribute("data-board-size", String(side));
+      expect(await tiles(page).inputValue()).toBe(originalTile);
+      expect(await word(page).inputValue()).toBe(sources.defaults.selection.wordList.name);
+    }
+    expect(await board(page).inputValue()).toBe(originalBoard);
     await word(page).selectOption({ label: "Authored two-letter pairs" });
     expect(await tiles(page).inputValue()).toBe(originalTile);
     expect(await board(page).inputValue()).toBe(originalBoard);
     await tiles(page).selectOption({ label: "Double-value test tiles" });
     const selectedWord = await word(page).inputValue();
     await board(page).selectOption({ label: "Compact square 7" });
+    await expect(preview.locator("td")).toHaveCount(49);
+    await expect(preview).toHaveAttribute("data-board-size", "7");
     expect(await word(page).inputValue()).toBe(selectedWord);
     const chosen = [
       await word(page).inputValue(),
@@ -471,4 +484,23 @@ test("selected board geometry and premium rules are readable before creation", a
     await expect(page.getByRole("button", { name: "Create game", exact: true })).toBeEnabled();
     await expect(page.getByRole("link", { name: "Join this game", exact: true })).toHaveCount(0);
   }
+});
+
+test("the match setup previews the board on narrow screens without horizontal overflow", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(entry());
+  const preview = page.getByRole("table", { name: "Board preview", exact: true });
+  await expect(preview).toBeVisible();
+  await expect(preview.locator("td")).toHaveCount(225);
+  await page.getByRole("combobox", { name: "Board size", exact: true }).selectOption("7");
+  await expect(preview.locator("td")).toHaveCount(49);
+  await expect(preview).toHaveAttribute("data-board-size", "7");
+  await page.getByText("Advanced match rules", { exact: true }).click();
+  await expect(
+    page.getByText("Each player can hold this many tiles on their rack.", { exact: true }),
+  ).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await page.screenshot({ path: test.info().outputPath("board-setup-mobile.png"), fullPage: true });
 });

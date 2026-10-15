@@ -9,12 +9,14 @@ import {
   type CreateRequest,
   type JoinInformation,
 } from "./create-game";
+import { BoardLayoutPreview } from "./BoardLayoutPreview";
 import { ConnectedBoard } from "./ConnectedBoard";
 import { reportMoenarchMatch } from "./moenarch-launch";
 import { useCopy } from "./preferences";
 import { fetchProfiles } from "./profile-catalog";
 import { matchSettings, type MatchSettings, type ProfileCatalog } from "./profile-model";
 import { faceText } from "./public-state";
+import { faceClass } from "./tile-face";
 
 const numericFields = [
   "rack_size",
@@ -60,6 +62,10 @@ export function CreateBoard({
   const request = useRef<CreateRequest>(undefined);
   const operation = useRef<AbortController>(undefined);
   const selectedBoard = catalog?.boardProfiles.find((row) => row.identity.name === choices.board);
+  const selectedTiles = catalog?.tileProfiles.find((row) => row.identity.name === choices.tile);
+  const boardSizes = catalog
+    ? [...new Set(catalog.boardProfiles.map((row) => row.boardSize))].sort((a, b) => a - b)
+    : [];
   useEffect(() => () => operation.current?.abort(), []);
   useEffect(() => {
     const controller = new AbortController();
@@ -194,113 +200,132 @@ export function CreateBoard({
       )}
       {catalog && edits && (
         <fieldset className="match-setup" disabled={state.kind === "creating"}>
-          <div className="match-profile-fields">
-            <label>
-              {t("profiles.wordList")}
-              <NativeSelect
-                aria-label={t("profiles.wordList")}
-                value={choices.wordList}
-                onChange={(event: ChangeEvent<HTMLSelectElement>) => {
-                  change();
-                  setChoices({ ...choices, wordList: event.currentTarget.value });
-                }}
-              >
-                {catalog.wordLists.map((row) => (
-                  <NativeSelectOption key={row.identity.name} value={row.identity.name}>
-                    {row.label}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </label>
-            <label>
-              {t("profiles.tiles")}
-              <NativeSelect
-                aria-label={t("profiles.tiles")}
-                value={choices.tile}
-                onChange={(event: ChangeEvent<HTMLSelectElement>) => {
-                  change();
-                  setChoices({ ...choices, tile: event.currentTarget.value });
-                }}
-              >
-                {catalog.tileProfiles.map((row) => (
-                  <NativeSelectOption key={row.identity.name} value={row.identity.name}>
-                    {row.label}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </label>
-            <label>
-              {t("profiles.board")}
-              <NativeSelect
-                aria-label={t("profiles.board")}
-                value={choices.board}
-                onChange={(event: ChangeEvent<HTMLSelectElement>) => {
-                  change();
-                  setChoices({ ...choices, board: event.currentTarget.value });
-                }}
-              >
-                {catalog.boardProfiles.map((row) => (
-                  <NativeSelectOption key={row.identity.name} value={row.identity.name}>
-                    {row.label}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </label>
-          </div>
-          {selectedBoard && (
-            <section
-              className="selected-board"
-              role="group"
-              aria-label={t("profiles.selectedBoard")}
-            >
-              <p>
-                <strong>{selectedBoard.label}</strong>
-                {" · "}
-                {t("profiles.squareBoard", { size: number(selectedBoard.boardSize) })}
-              </p>
-              <p>{t("profiles.premiumPolicy")}</p>
-              <ul>
-                {(["double_letter", "triple_letter", "double_word", "triple_word"] as const).map(
-                  (premium) => (
-                    <li key={premium}>
-                      {t(`premium.${premium}`)}:{" "}
-                      {number(selectedBoard.premiums.filter((cell) => cell === premium).length)}
-                    </li>
-                  ),
-                )}
-              </ul>
-            </section>
-          )}
-          <details>
-            <summary>{t("profiles.distribution")}</summary>
-            <p>
-              {catalog.tileProfiles
-                .find((row) => row.identity.name === choices.tile)
-                ?.tiles.map(
-                  (tile) => `${faceText(tile.face) ?? "□"}: ${tile.value} × ${tile.count}`,
-                )
-                .join(" · ")}
-            </p>
-          </details>
-          <details>
-            <summary>{t("profiles.advanced")}</summary>
-            <div className="advanced-match-rules">
-              {numericFields.map((key) => (
-                <label key={key}>
-                  {t(`profiles.${key}`)}
-                  <input
-                    type="number"
-                    step="1"
-                    value={edits[key]}
-                    onChange={(event: ChangeEvent<HTMLInputElement>) => {
+          <div className="match-setup-columns">
+            <div className="match-setup-controls">
+              <div className="match-profile-fields">
+                <label>
+                  {t("profiles.wordList")}
+                  <NativeSelect
+                    aria-label={t("profiles.wordList")}
+                    value={choices.wordList}
+                    onChange={(event: ChangeEvent<HTMLSelectElement>) => {
                       change();
-                      setEdits({ ...edits, [key]: event.currentTarget.value });
+                      setChoices({ ...choices, wordList: event.currentTarget.value });
                     }}
-                  />
+                  >
+                    {catalog.wordLists.map((row) => (
+                      <NativeSelectOption key={row.identity.name} value={row.identity.name}>
+                        {row.label}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                  <small className="setting-note">{t("profiles.wordListExplanation")}</small>
                 </label>
-              ))}
+                <label>
+                  {t("profiles.tiles")}
+                  <NativeSelect
+                    aria-label={t("profiles.tiles")}
+                    value={choices.tile}
+                    onChange={(event: ChangeEvent<HTMLSelectElement>) => {
+                      change();
+                      setChoices({ ...choices, tile: event.currentTarget.value });
+                    }}
+                  >
+                    {catalog.tileProfiles.map((row) => (
+                      <NativeSelectOption key={row.identity.name} value={row.identity.name}>
+                        {row.label}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                  <small className="setting-note">{t("profiles.tilesExplanation")}</small>
+                </label>
+                {boardSizes.length > 1 && (
+                  <label>
+                    {t("profiles.boardSize")}
+                    <NativeSelect
+                      aria-label={t("profiles.boardSize")}
+                      value={String(selectedBoard?.boardSize ?? "")}
+                      onChange={(event: ChangeEvent<HTMLSelectElement>) => {
+                        const size = Number(event.currentTarget.value);
+                        const board = catalog.boardProfiles.find((row) => row.boardSize === size);
+                        if (board) {
+                          change();
+                          setChoices({ ...choices, board: board.identity.name });
+                        }
+                      }}
+                    >
+                      {boardSizes.map((size) => (
+                        <NativeSelectOption key={size} value={String(size)}>
+                          {t("profiles.squareBoard", { size: number(size) })}
+                        </NativeSelectOption>
+                      ))}
+                    </NativeSelect>
+                    <small className="setting-note">{t("profiles.boardSizeExplanation")}</small>
+                  </label>
+                )}
+                <label>
+                  {t("profiles.board")}
+                  <NativeSelect
+                    aria-label={t("profiles.board")}
+                    value={choices.board}
+                    onChange={(event: ChangeEvent<HTMLSelectElement>) => {
+                      change();
+                      setChoices({ ...choices, board: event.currentTarget.value });
+                    }}
+                  >
+                    {catalog.boardProfiles.map((row) => (
+                      <NativeSelectOption key={row.identity.name} value={row.identity.name}>
+                        {row.label}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                  <small className="setting-note">{t("profiles.boardExplanation")}</small>
+                </label>
+              </div>
+              {selectedTiles && (
+                <details className="tile-profile-summary">
+                  <summary>{t("profiles.distribution")}</summary>
+                  <p className="setting-note">{t("profiles.distributionExplanation")}</p>
+                  <ul className="tile-preview-list">
+                    {selectedTiles.tiles.map((tile) => {
+                      const face = faceText(tile.face) ?? "□";
+                      return (
+                        <li key={face}>
+                          <span className="tile-preview-square">
+                            <strong className={faceClass(face)}>{face}</strong>
+                            <small>{number(tile.value)}</small>
+                          </span>
+                          <span className="tile-preview-count">×{number(tile.count)}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </details>
+              )}
+              <details className="advanced-rules">
+                <summary>{t("profiles.advanced")}</summary>
+                <div className="advanced-match-rules">
+                  {numericFields.map((key) => (
+                    <label key={key}>
+                      {t(`profiles.${key}`)}
+                      <input
+                        type="number"
+                        aria-label={t(`profiles.${key}`)}
+                        step="1"
+                        value={edits[key]}
+                        onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                          change();
+                          setEdits({ ...edits, [key]: event.currentTarget.value });
+                        }}
+                      />
+                      <small className="setting-note">{t(`profiles.${key}Explanation`)}</small>
+                    </label>
+                  ))}
+                </div>
+              </details>
             </div>
-          </details>
+            {selectedBoard && <BoardLayoutPreview board={selectedBoard} />}
+          </div>
         </fieldset>
       )}
 
