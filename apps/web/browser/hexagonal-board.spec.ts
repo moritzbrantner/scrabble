@@ -381,6 +381,20 @@ for (const policy of ["all_word", "main_word_only"] as const) {
         await expect(ada.getByRole("region", { name: "Move editor", exact: true })).toContainText(
           /cent(?:er|re)/i,
         );
+        // Observe the actual rejected draft before checking unchanged authority.
+        // A disabled commit is expected here: the native preview itself rejects it.
+        const rejectedOpening = {
+          player_id: "2",
+          turn: "0",
+          tiles: [
+            { coordinate: { row: 0, column: 3 }, letter: "SCH", is_blank: false },
+            { coordinate: { row: 0, column: 4 }, letter: "A", is_blank: false },
+          ],
+          evaluation: expect.objectContaining({ status: "invalid", problem: "center" }),
+        };
+        for (const observed of [boardState, adaState]) {
+          await expect.poll(() => observed()?.public.preview).toEqual(rejectedOpening);
+        }
         expect(boardState()!.public.board).toEqual(before.board);
         await activate(ada, ada.getByRole("button", { name: "Cancel move", exact: true }), false);
         await expect.poll(() => boardState()?.public.preview).toBeNull();
@@ -487,6 +501,18 @@ for (const policy of ["all_word", "main_word_only"] as const) {
             await expect(
               lin.getByRole("region", { name: "Move editor", exact: true }),
             ).toContainText(/not[\s\S]*(?:dictionary|valid)|invalid[\s\S]*word/i);
+            const rejectedCrossing = {
+              player_id: "3",
+              turn: "1",
+              tiles: [
+                { coordinate: { row: 2, column: 4 }, letter: "A", is_blank: false },
+                { coordinate: { row: 2, column: 5 }, letter: "T", is_blank: true },
+              ],
+              evaluation: expect.objectContaining({ status: "invalid", problem: "invalid_words" }),
+            };
+            for (const observed of [boardState, linState]) {
+              await expect.poll(() => observed()?.public.preview).toEqual(rejectedCrossing);
+            }
             expect(boardState()!.public.board).toEqual(unchanged.board);
             expect(boardState()!.public.players).toEqual(unchanged.players);
             expect(boardState()!.public.phase).toEqual(unchanged.phase);
@@ -580,6 +606,9 @@ for (const policy of ["all_word", "main_word_only"] as const) {
           expect(boardState()?.own_rack.tiles).toEqual([]);
         }
         const savedPublic = structuredClone(boardState()!.public);
+        // Capture a rack from the same authoritative history, not a retained
+        // pre-turn observer value that could become a stale reload baseline.
+        await expect.poll(() => adaState()?.public.history).toEqual(savedPublic.history);
         const savedRack = structuredClone(adaState()!.own_rack);
         const identity = await sessionIdentity(ada);
         await ada.reload();
