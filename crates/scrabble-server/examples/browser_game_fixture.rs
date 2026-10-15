@@ -236,9 +236,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             }));
         std::fs::write(&catalog, serde_json::to_vec_pretty(&document)?)?;
     }
-    if multi_letter::enabled() {
-        multi_letter::add_sources(&directory, &catalog)?;
-    }
+    // The browser understands multi-letter faces (#98), so every fixture run offers them.
+    multi_letter::add_sources(&directory, &catalog)?;
     values.insert(
         "SCRABBLE_PROFILE_CATALOG_FILE".into(),
         catalog.to_str().ok_or("invalid catalog path")?.into(),
@@ -305,11 +304,8 @@ fn retain_legacy_backend_if_catalog_is_unavailable(
 /// #98 acceptance harness: an authored multi-letter tile profile and a compatible word list,
 /// selected through the real catalog, plus a native search for a v3 opening deal.
 ///
-/// The catalog entries are gated by `SCRABBLE_BROWSER_MULTI_LETTER=1` only while the browser
-/// still rejects multi-letter faces (a pre-#98 client cannot parse such a catalog at all).
-/// The #98 implementation must make `enabled` unconditionally true so that the default
-/// `bun run test:browser` covers `multi-letter-tiles.spec.ts`; see
-/// docs/specs/multi-letter-browser.md.
+/// Every fixture run offers these catalog entries, so the default `bun run test:browser`
+/// covers `multi-letter-tiles.spec.ts`; see docs/specs/multi-letter-browser.md.
 mod multi_letter {
     use super::{
         Command, CommandEnvelope, Error, GameSimulation, Opening, Path, ProtocolVersion, TurnId,
@@ -333,10 +329,6 @@ mod multi_letter {
     pub const TILES: &str = "acceptance-multi-letter-tiles";
     pub const WORDS: &str = "acceptance-multi-letter-words";
     const BOARD: &str = "acceptance-classic-board";
-
-    pub fn enabled() -> bool {
-        std::env::var("SCRABBLE_BROWSER_MULTI_LETTER").as_deref() == Ok("1")
-    }
 
     /// 29 tiles: single letters that share letters with CH and SCH, two blanks.
     fn tiles() -> serde_json::Value {
@@ -394,9 +386,7 @@ mod multi_letter {
         document[kind]
             .as_array()
             .and_then(|rows| rows.iter().find(|row| row["identity"]["name"] == name))
-            .ok_or_else(|| {
-                format!("catalog lacks {kind} {name}; set SCRABBLE_BROWSER_MULTI_LETTER=1").into()
-            })
+            .ok_or_else(|| format!("catalog lacks {kind} {name}").into())
     }
 
     fn has(rack: &[scrabble_game::state::Tile], face: &TileFace) -> bool {

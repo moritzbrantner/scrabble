@@ -69,6 +69,17 @@ body {
   font-weight: 700;
   font-size: clamp(0.8rem, 2vw, 1.75rem);
 }
+/* Multi-letter faces (#98): one tile shows the whole face, scaled to fit its tile. */
+.face-multi {
+  font-size: max(9px, 0.7em);
+  letter-spacing: -0.04em;
+  line-height: 1;
+  white-space: nowrap;
+}
+.face-long {
+  font-size: max(9px, 0.55em);
+  letter-spacing: -0.06em;
+}
 .letter-tile small {
   position: absolute;
   bottom: 0;

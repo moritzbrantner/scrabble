@@ -1,5 +1,6 @@
 import { useCopy } from "./preferences";
-import { type PublicSnapshot, type Ruleset } from "./public-state";
+import { faceValues, type PublicSnapshot, type Ruleset } from "./public-state";
+import { faceClass } from "./tile-face";
 import { TurnHistory } from "./TurnHistory";
 
 export function SharedBoard({ snapshot, rules }: { snapshot: PublicSnapshot; rules: Ruleset }) {
@@ -16,11 +17,7 @@ export function SharedBoard({ snapshot, rules }: { snapshot: PublicSnapshot; rul
   const tentative = new Map(
     preview?.tiles.map((tile) => [`${tile.coordinate.row},${tile.coordinate.column}`, tile]) ?? [],
   );
-  const values = new Map(
-    rules.tiles.flatMap((tile) =>
-      tile.face.kind === "letter" ? [[tile.face.letter, tile.value] as const] : [],
-    ),
-  );
+  const values = faceValues(rules);
   const indices = Array.from({ length: rules.board_size }, (_, index) => index);
   const active = snapshot.phase.kind === "playing" ? snapshot.phase.active_player : null;
   const finished = snapshot.phase.kind === "finished";
@@ -110,7 +107,7 @@ export function SharedBoard({ snapshot, rules }: { snapshot: PublicSnapshot; rul
                           className={`letter-tile${tile.is_blank ? " blank-tile" : ""}${pending === undefined ? "" : " tentative-tile"}`}
                           aria-hidden="true"
                         >
-                          <span>{tile.letter}</span>
+                          <span className={faceClass(tile.letter)}>{tile.letter}</span>
                           <small>{value === undefined ? "?" : number(value)}</small>
                         </span>
                       )}
