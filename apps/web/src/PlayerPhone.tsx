@@ -532,7 +532,7 @@ export function PlayerPhone({
                   </li>
                 ))}
               </ol>
-              <TurnHistory snapshot={snapshot.public} />
+              {rules.board_shape === "hexagon" && <TurnHistory snapshot={snapshot.public} />}
             </>
           )}
         </>
