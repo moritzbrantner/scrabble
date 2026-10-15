@@ -467,4 +467,79 @@ mod board_size_tests {
             }
         }
     }
+    /// Retrospective #96 sample acceptance: policy choices must have a usable
+    /// crossing-word premium after the mandatory centre-covering opening.
+    /// Existing native tests prove the scoring rules; this checks REAL fallback
+    /// catalog profiles rather than acceptance-only authored board layouts.
+    #[test]
+    fn builtin_hex_samples_keep_classic_defaults_and_have_reusable_policy_demonstrations() {
+        let original = english_fixture();
+        let dictionary = WordList::from_text(original.dictionary.clone(), "CAT\nAT\n").unwrap();
+        let catalog = ProfileCatalog::load(None, &original, &dictionary).unwrap();
+        let legacy = catalog.public();
+        let extended = catalog.public_hex();
+        assert_eq!(extended["defaults"], legacy["defaults"]);
+        assert_eq!(legacy["defaults"]["legacyCompatible"], true);
+        let defaults: Selection =
+            serde_json::from_value(legacy["defaults"]["selection"].clone()).unwrap();
+        let classic = catalog
+            .resolve(&defaults, MatchRules::from(&original))
+            .unwrap()
+            .composed
+            .rules;
+        assert_eq!(classic.board_shape, BoardShape::Square);
+        assert_eq!(classic.board_size, original.board_size);
+        assert_eq!(classic.premiums, original.premiums);
+
+        let hex: Vec<_> = extended["boardProfiles"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|row| row["boardShape"] == "hexagon")
+            .collect();
+        assert_eq!(hex.len(), 4);
+        let mut selected = Vec::new();
+        for profile in hex {
+            let mut selection = defaults.clone();
+            selection.board = serde_json::from_value(profile["identity"].clone()).unwrap();
+            let rules = catalog
+                .resolve(&selection, MatchRules::from(&original))
+                .unwrap()
+                .composed
+                .rules;
+            assert_eq!(rules.board_shape, BoardShape::Hexagon);
+            selected.push(rules);
+        }
+        for policy in [PremiumPolicy::AllWord, PremiumPolicy::MainWordOnly] {
+            for metric in [WordLengthMetric::Tiles, WordLengthMetric::Letters] {
+                assert_eq!(
+                    selected
+                        .iter()
+                        .filter(|rules| rules.premium_policy == policy
+                            && rules.main_word_length == metric)
+                        .count(),
+                    1
+                );
+            }
+        }
+        for rules in &selected {
+            assert_eq!(rules.board_size, selected[0].board_size);
+            assert_eq!(rules.premiums, selected[0].premiums);
+            let center = rules.board_size / 2;
+            assert_eq!(rules.premium_at(center, center), Some(Premium::DoubleWord));
+            let usable = (1..rules.board_size-1).any(|row| (1..rules.board_size-1).any(|column| {
+                (row, column) != (center, center)
+                    && matches!(rules.premium_at(row, column), Some(Premium::DoubleWord | Premium::TripleWord))
+                    // A complete interior neighbourhood supports genuine
+                    // intersecting words along all three native Hex axes.
+                    && [(0_i16,1_i16),(0,-1),(1,0),(-1,0),(1,-1),(-1,1)].iter().all(|&(dr,dc)|
+                        rules.contains((i16::from(row)+dr) as u8, (i16::from(column)+dc) as u8))
+            }));
+            assert!(
+                usable,
+                "{} has only opening-consumed word premiums; its policy cannot change a later crossing-word score",
+                rules.identity.name
+            );
+        }
+    }
 }
