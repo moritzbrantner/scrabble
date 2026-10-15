@@ -32,7 +32,9 @@ export function BoardLayoutPreview({ board }: { board: BoardProfile }) {
               {indices.map((column) => {
                 const kind = board.premiums[row * board.boardSize + column] ?? "normal";
                 const isCenter = row === center && column === center;
-                const description = `${isCenter ? `${t("profiles.center")} · ` : ""}${t(`premium.${kind}`)}`;
+                const description = isCenter
+                  ? `${t("profiles.center")} · ${t(`premium.${kind}`)}`
+                  : t(`premium.${kind}`);
                 return (
                   <td
                     key={column}
@@ -43,9 +45,7 @@ export function BoardLayoutPreview({ board }: { board: BoardProfile }) {
                     })}
                   >
                     <span className={`board-preview-cell premium-${kind.replaceAll("_", "-")}`}>
-                      <span aria-hidden="true">
-                        {isCenter ? "★" : t(`premiumShort.${kind}`)}
-                      </span>
+                      <span aria-hidden="true">{isCenter ? "★" : t(`premiumShort.${kind}`)}</span>
                     </span>
                   </td>
                 );
