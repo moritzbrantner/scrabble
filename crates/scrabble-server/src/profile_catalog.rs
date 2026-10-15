@@ -265,23 +265,28 @@ impl ProfileCatalog {
                     PremiumPolicy::MainWordOnly,
                 ),
             ] {
-                let mut premiums = vec![Premium::Normal; 37];
-                // Row-major on-board cells of the radius-three board.
-                premiums[18] = Premium::DoubleWord;
-                boards.push(Named {
-                    label: label.into(),
-                    profile: BoardProfile::with_geometry(
-                        ContentIdentity {
-                            name: name.into(),
-                            revision: "1".into(),
-                        },
-                        7,
-                        premiums,
-                        BoardShape::Hexagon,
-                        policy,
-                        WordLengthMetric::Tiles,
-                    )?,
-                });
+                for (suffix, metric_label, metric) in [
+                    ("", "tiles", WordLengthMetric::Tiles),
+                    ("-letters", "letters", WordLengthMetric::Letters),
+                ] {
+                    let mut premiums = vec![Premium::Normal; 37];
+                    // Row-major on-board cells of the radius-three board.
+                    premiums[18] = Premium::DoubleWord;
+                    boards.push(Named {
+                        label: format!("{label} ({metric_label})"),
+                        profile: BoardProfile::with_geometry(
+                            ContentIdentity {
+                                name: format!("{name}{suffix}"),
+                                revision: "1".into(),
+                            },
+                            7,
+                            premiums,
+                            BoardShape::Hexagon,
+                            policy,
+                            metric,
+                        )?,
+                    });
+                }
             }
             let names = DefaultNames {
                 word_list: words.identity().name.clone(),
