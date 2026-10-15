@@ -11,11 +11,7 @@ export function BoardLayoutPreview({ board }: { board: BoardProfile }) {
   const center = Math.floor(board.boardSize / 2);
 
   return (
-    <section
-      className="board-layout-preview"
-      role="group"
-      aria-label={t("profiles.selectedBoard")}
-    >
+    <section className="board-layout-preview" role="group" aria-label={t("profiles.selectedBoard")}>
       <header className="board-layout-preview-header">
         <h2>{t("profiles.preview")}</h2>
         <p>
@@ -66,7 +62,9 @@ export function BoardLayoutPreview({ board }: { board: BoardProfile }) {
               <span className={`board-preview-swatch premium-${kind.replaceAll("_", "-")}`}>
                 {t(`premiumShort.${kind}`)}
               </span>
-              <span>{t(`premium.${kind}`)}: {number(count)}</span>
+              <span>
+                {t(`premium.${kind}`)}: {number(count)}
+              </span>
             </li>
           );
         })}
