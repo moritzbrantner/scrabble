@@ -308,6 +308,7 @@ export function CreateBoard({
                       {t(`profiles.${key}`)}
                       <input
                         type="number"
+                        aria-label={t(`profiles.${key}`)}
                         step="1"
                         value={edits[key]}
                         onChange={(event: ChangeEvent<HTMLInputElement>) => {
