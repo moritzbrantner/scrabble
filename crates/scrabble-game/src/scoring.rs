@@ -1,8 +1,8 @@
 //! Pure scoring of structurally validated words, plus the storage-level scored commit.
 use crate::identity::PlayerId;
-use crate::placement::{self, PlacementError, ValidatedMove};
+use crate::placement::{self, Direction, PlacementError, ValidatedMove};
 use crate::protocol::{Phase, Placement};
-use crate::ruleset::Premium;
+use crate::ruleset::{Premium, PremiumPolicy};
 use crate::state::{GameState, StateError};
 use std::fmt;
 
@@ -16,8 +16,27 @@ impl fmt::Display for ScoreError {
     }
 }
 impl std::error::Error for ScoreError {}
+/// One formed word's authoritative score; the main word comes first.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WordScore {
+    text: String,
+    direction: Direction,
+    score: u32,
+}
+impl WordScore {
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+    pub const fn direction(&self) -> Direction {
+        self.direction
+    }
+    pub const fn score(&self) -> u32 {
+        self.score
+    }
+}
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MoveScore {
+    words: Vec<WordScore>,
     word_scores: Vec<u32>,
     bingo_bonus: u32,
     total: u32,
@@ -25,6 +44,18 @@ pub struct MoveScore {
 impl MoveScore {
     pub fn word_scores(&self) -> &[u32] {
         &self.word_scores
+    }
+    /// Per-word breakdown in the same order as `word_scores()`.
+    pub fn words(&self) -> &[WordScore] {
+        &self.words
+    }
+    /// The main word, always `words()[0]`.
+    #[expect(
+        clippy::indexing_slicing,
+        reason = "a validated move always forms at least one word"
+    )]
+    pub fn main_word(&self) -> &WordScore {
+        &self.words[0]
     }
     pub const fn bingo_bonus(&self) -> u32 {
         self.bingo_bonus
@@ -37,15 +68,18 @@ impl MoveScore {
 pub fn calculate(validated: &ValidatedMove<'_>) -> Result<MoveScore, ScoreError> {
     let rules = validated.ruleset();
     let mut word_scores = Vec::with_capacity(validated.words().len());
+    let mut words = Vec::with_capacity(validated.words().len());
     let mut total = 0_u32;
-    for word in validated.words() {
+    for (index, word) in validated.words().iter().enumerate() {
+        let premiums_apply = index == 0 || rules.premium_policy == PremiumPolicy::AllWord;
         let mut sum = 0_u32;
         let mut multiplier = 1_u32;
         for tile in word.tiles() {
             let coordinate = tile.coordinate();
-            let premium = if tile.is_new() {
-                rules.premiums[usize::from(coordinate.row()) * usize::from(rules.board_size)
-                    + usize::from(coordinate.column())]
+            let premium = if tile.is_new() && premiums_apply {
+                rules
+                    .premium_at(coordinate.row(), coordinate.column())
+                    .unwrap_or(Premium::Normal)
             } else {
                 Premium::Normal
             };
@@ -65,6 +99,11 @@ pub fn calculate(validated: &ValidatedMove<'_>) -> Result<MoveScore, ScoreError>
         let score = sum.checked_mul(multiplier).ok_or(ScoreError::Overflow)?;
         total = total.checked_add(score).ok_or(ScoreError::Overflow)?;
         word_scores.push(score);
+        words.push(WordScore {
+            text: word.text(),
+            direction: word.direction(),
+            score,
+        });
     }
     let bingo_bonus = if validated.placements().len() == usize::from(rules.rack_size) {
         u32::from(rules.bingo_bonus)
@@ -73,6 +112,7 @@ pub fn calculate(validated: &ValidatedMove<'_>) -> Result<MoveScore, ScoreError>
     };
     total = total.checked_add(bingo_bonus).ok_or(ScoreError::Overflow)?;
     Ok(MoveScore {
+        words,
         word_scores,
         bingo_bonus,
         total,

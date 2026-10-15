@@ -197,9 +197,7 @@ impl GameState {
             .map(|entry| entry.rack.as_slice())
     }
     fn board_index(&self, coordinate: Coordinate) -> Result<usize, StateError> {
-        if coordinate.row() >= self.ruleset.board_size
-            || coordinate.column() >= self.ruleset.board_size
-        {
+        if !self.ruleset.contains(coordinate.row(), coordinate.column()) {
             return Err(StateError::OutsideBoard);
         }
         Ok(

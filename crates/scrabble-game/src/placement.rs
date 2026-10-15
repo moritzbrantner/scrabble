@@ -1,6 +1,7 @@
 //! Pure structural validation. Dictionary acceptance and scoring are separate boundaries.
 use crate::identity::{Coordinate, PlayerId};
 use crate::protocol::{Phase, Placement};
+use crate::ruleset::{BoardShape, WordLengthMetric};
 use crate::state::{GameState, StateError};
 use std::{collections::BTreeMap, fmt};
 
@@ -30,6 +31,17 @@ impl From<StateError> for PlacementError {
 pub enum Direction {
     Horizontal,
     Vertical,
+    /// Third hexagonal axis, step `(+1, −1)`; never used on square boards.
+    Diagonal,
+}
+impl Direction {
+    const fn step(self) -> (i16, i16) {
+        match self {
+            Self::Horizontal => (0, 1),
+            Self::Vertical => (1, 0),
+            Self::Diagonal => (1, -1),
+        }
+    }
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct WordTile {
@@ -124,18 +136,39 @@ pub fn validate<'a>(
             },
         );
     }
+    let rules = state.ruleset();
+    let hex = rules.board_shape == BoardShape::Hexagon;
+    let axes: &[Direction] = if hex {
+        &[
+            Direction::Horizontal,
+            Direction::Vertical,
+            Direction::Diagonal,
+        ]
+    } else {
+        &[Direction::Horizontal, Direction::Vertical]
+    };
     let first = placements[0].coordinate;
-    let horizontal = placements
-        .iter()
-        .all(|tile| tile.coordinate.row() == first.row());
-    let vertical = placements
-        .iter()
-        .all(|tile| tile.coordinate.column() == first.column());
-    if !horizontal && !vertical {
+    let on_line = |direction: Direction| {
+        placements.iter().all(|tile| match direction {
+            Direction::Horizontal => tile.coordinate.row() == first.row(),
+            Direction::Vertical => tile.coordinate.column() == first.column(),
+            Direction::Diagonal => {
+                u16::from(tile.coordinate.row()) + u16::from(tile.coordinate.column())
+                    == u16::from(first.row()) + u16::from(first.column())
+            }
+        })
+    };
+    let line = axes.iter().copied().find(|&direction| on_line(direction));
+    let Some(line) = line else {
         return Err(PlacementError::NotLine);
-    }
-    let size = state.ruleset().board_size;
-    let at = |row: u8, column: u8| -> Option<WordTile> {
+    };
+    let size = rules.board_size;
+    let at = |row: i16, column: i16| -> Option<WordTile> {
+        let row = u8::try_from(row).ok()?;
+        let column = u8::try_from(column).ok()?;
+        if !rules.contains(row, column) {
+            return None;
+        }
         let coordinate = Coordinate::new(row, column).ok()?;
         proposed.get(&(row, column)).copied().or_else(|| {
             state.board_tile(coordinate).map(|tile| WordTile {
@@ -148,33 +181,37 @@ pub fn validate<'a>(
         })
     };
     let word = |coordinate: Coordinate, direction: Direction| -> Word {
-        let (dr, dc) = match direction {
-            Direction::Horizontal => (0, 1),
-            Direction::Vertical => (1, 0),
-        };
-        let (mut row, mut column) = (coordinate.row(), coordinate.column());
-        while row >= dr && column >= dc && at(row - dr, column - dc).is_some() {
+        let (dr, dc) = direction.step();
+        let (mut row, mut column) = (i16::from(coordinate.row()), i16::from(coordinate.column()));
+        while at(row - dr, column - dc).is_some() {
             row -= dr;
             column -= dc;
         }
         let mut tiles = Vec::new();
-        while row < size && column < size {
-            let Some(tile) = at(row, column) else {
-                break;
-            };
+        while let Some(tile) = at(row, column) {
             tiles.push(tile);
             row += dr;
             column += dc;
         }
         Word { direction, tiles }
     };
-    let direction = if placements.len() == 1 {
-        if word(first, Direction::Horizontal).tiles.len() > 1 {
-            Direction::Horizontal
-        } else {
-            Direction::Vertical
+    let direction = if placements.len() > 1 {
+        line
+    } else if hex {
+        // Decision 1.15: longest formed word; ties follow the fixed axis order.
+        let length = |word: &Word| match rules.main_word_length {
+            WordLengthMetric::Tiles => word.tiles.len(),
+            WordLengthMetric::Letters => word.text().chars().count(),
+        };
+        let mut best = (Direction::Horizontal, 0);
+        for &axis in axes {
+            let candidate = word(first, axis);
+            if candidate.tiles.len() > 1 && length(&candidate) > best.1 {
+                best = (axis, length(&candidate));
+            }
         }
-    } else if horizontal {
+        best.0
+    } else if word(first, Direction::Horizontal).tiles.len() > 1 {
         Direction::Horizontal
     } else {
         Direction::Vertical
@@ -191,14 +228,12 @@ pub fn validate<'a>(
     if main.tiles.len() > 1 {
         words.push(main);
     }
-    let perpendicular = match direction {
-        Direction::Horizontal => Direction::Vertical,
-        Direction::Vertical => Direction::Horizontal,
-    };
     for tile in proposed.values() {
-        let cross = word(tile.coordinate, perpendicular);
-        if cross.tiles.len() > 1 {
-            words.push(cross);
+        for &axis in axes.iter().filter(|&&axis| axis != direction) {
+            let cross = word(tile.coordinate, axis);
+            if cross.tiles.len() > 1 {
+                words.push(cross);
+            }
         }
     }
     if words.is_empty() {

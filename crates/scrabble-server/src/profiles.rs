@@ -249,6 +249,9 @@ pub fn compose_profiles(
         scoreless_turn_limit: settings.scoreless_turn_limit,
         minimum_players: settings.minimum_players,
         maximum_players: settings.maximum_players,
+        board_shape: Default::default(),
+        premium_policy: Default::default(),
+        main_word_length: Default::default(),
     };
     rules
         .validate()

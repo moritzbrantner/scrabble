@@ -272,7 +272,8 @@ fn opening_word_must_cover_the_center_hexagon() {
 
 #[test]
 fn words_extend_along_each_of_the_three_hex_axes() {
-    let cases: [(Direction, [(u8, u8, char); 3], Option<&str>); 3] = [
+    type AxisCase<'a> = (Direction, [(u8, u8, char); 3], Option<&'a str>);
+    let cases: [AxisCase<'_>; 3] = [
         (
             Direction::Horizontal,
             [(3, 2, 'B'), (3, 3, 'A'), (3, 4, 'A')],
