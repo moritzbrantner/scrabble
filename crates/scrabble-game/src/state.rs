@@ -768,7 +768,7 @@ impl GameState {
     }
     pub(crate) fn record_analysis(
         &mut self,
-        analysis: crate::protocol::MoveAnalysis,
+        analysis: crate::protocol::HistoryAnalysis,
     ) -> Result<(), StateError> {
         self.history
             .last_mut()

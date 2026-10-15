@@ -100,7 +100,7 @@ pub(crate) fn apply_with_dictionary_at(
         .map_err(CommitError::State)?;
     if state.ruleset().board_shape == crate::ruleset::BoardShape::Hexagon {
         candidate
-            .record_analysis(score.analysis(state.ruleset().main_word_length))
+            .record_analysis(score.history_analysis(state.ruleset().main_word_length))
             .map_err(CommitError::State)?;
     }
     if let Some(now) = now_ms {

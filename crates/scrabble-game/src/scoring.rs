@@ -61,6 +61,20 @@ impl MoveScore {
             total: self.total,
         }
     }
+    pub fn history_analysis(
+        &self,
+        length_metric: crate::ruleset::WordLengthMetric,
+    ) -> crate::protocol::HistoryAnalysis {
+        crate::protocol::HistoryAnalysis {
+            word_scores: self
+                .words
+                .iter()
+                .map(|word| (word.direction, word.score))
+                .collect(),
+            length_metric,
+            bingo_bonus: self.bingo_bonus,
+        }
+    }
     pub fn word_scores(&self) -> &[u32] {
         &self.word_scores
     }

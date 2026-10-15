@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { type CSSProperties, type ReactNode } from "react";
 import { boardCells, hexBoardStyle, hexCellStyle } from "./board-geometry";
 
 export function HexBoard({
@@ -7,12 +7,14 @@ export function HexBoard({
   renderCell,
   cellLabel,
   className = "",
+  style,
 }: {
   size: number;
   label: string;
   renderCell: (row: number, column: number, premiumIndex: number) => ReactNode;
   cellLabel?: (row: number, column: number, premiumIndex: number) => string;
   className?: string;
+  style?: CSSProperties;
 }) {
   const cells = boardCells({ board_size: size, board_shape: "hexagon" });
   return (
@@ -20,7 +22,7 @@ export function HexBoard({
       className={`hex-board ${className}`}
       aria-label={label}
       data-board-size={size}
-      style={hexBoardStyle(size)}
+      style={{ ...hexBoardStyle(size), ...style }}
     >
       <caption className="sr-only">{label}</caption>
       <tbody>

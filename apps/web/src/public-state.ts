@@ -144,21 +144,38 @@ export const turnAction = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("pass") }),
   z.strictObject({ kind: z.literal("exchange"), tile_count: z.int().min(1).max(15) }),
 ]);
-const publicTurn = z.strictObject({
-  turn: id,
-  player_id: id,
-  action: turnAction,
-  analysis: moveAnalysis.optional(),
-  scores: z
+const historyAnalysis = z.strictObject({
+  word_scores: z
     .array(
-      z.strictObject({
-        player_id: id,
-        delta: z.int().min(-4294967295).max(4294967295),
-        score: z.int().min(-2147483648).max(2147483647),
-      }),
+      z.tuple([z.enum(["horizontal", "vertical", "diagonal"]), z.int().min(0).max(4294967295)]),
     )
-    .max(4),
+    .min(1)
+    .max(31),
+  length_metric: z.enum(["tiles", "letters"]),
+  bingo_bonus: z.int().min(0).max(4294967295),
 });
+const publicTurn = z
+  .strictObject({
+    turn: id,
+    player_id: id,
+    action: turnAction,
+    analysis: historyAnalysis.optional(),
+    scores: z
+      .array(
+        z.strictObject({
+          player_id: id,
+          delta: z.int().min(-4294967295).max(4294967295),
+          score: z.int().min(-2147483648).max(2147483647),
+        }),
+      )
+      .max(4),
+  })
+  .refine(
+    (turn) =>
+      !turn.analysis ||
+      (turn.action.kind === "commit" &&
+        turn.analysis.word_scores.length === turn.action.words.length),
+  );
 export const ruleset = z
   .strictObject({
     identity,

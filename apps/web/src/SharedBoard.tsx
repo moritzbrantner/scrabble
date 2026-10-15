@@ -61,6 +61,7 @@ export function SharedBoard({ snapshot, rules }: { snapshot: PublicSnapshot; rul
           size={rules.board_size}
           label={t("board.title")}
           className="board"
+          style={{ width: "100%" }}
           cellLabel={(row, column, index) => {
             const tile = cells.get(`${row},${column}`) ?? tentative.get(`${row},${column}`);
             return t("board.square", {

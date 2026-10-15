@@ -770,6 +770,9 @@ body {
   border-radius: 0;
   clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
 }
+.hex-board td {
+  background: var(--border);
+}
 .hex-board .board-cell,
 .hex-board .board-preview-cell {
   display: grid;
@@ -778,6 +781,14 @@ body {
   height: 100%;
   aspect-ratio: auto;
   border-radius: 0;
+  clip-path: polygon(
+    50% 1px,
+    calc(100% - 1px) calc(25% + 0.5px),
+    calc(100% - 1px) calc(75% - 0.5px),
+    50% calc(100% - 1px),
+    1px calc(75% - 0.5px),
+    1px calc(25% + 0.5px)
+  );
 }
 .player-phone .hex-editor-grid .phone-square {
   min-width: 0;
