@@ -66,9 +66,7 @@ export function BoardLayoutPreview({ board }: { board: BoardProfile }) {
               <span className={`board-preview-swatch premium-${kind.replaceAll("_", "-")}`}>
                 {t(`premiumShort.${kind}`)}
               </span>
-              <span>
-                {t(`premium.${kind}`)}: {number(count)}
-              </span>
+              <span>{t(`premium.${kind}`)}: {number(count)}</span>
             </li>
           );
         })}
