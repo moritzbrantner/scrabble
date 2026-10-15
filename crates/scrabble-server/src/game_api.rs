@@ -209,11 +209,15 @@ async fn route(request: Request, games: &Games, board_origin: &str) -> Response 
     }
     if request.path == "/profiles" || request.path == "/profiles/hex" {
         return if request.method == "GET" {
-            match serde_json::to_string(&if request.path == "/profiles/hex" {
-                games.hex_profiles()
+            let catalog = if request.path == "/profiles/hex" {
+                Some(games.hex_profiles())
             } else {
                 games.profiles()
-            }) {
+            };
+            let Some(catalog) = catalog else {
+                return Response::error(406, "legacy-square-catalog-unavailable");
+            };
+            match serde_json::to_string(&catalog) {
                 Ok(body) => Response { status: 200, body },
                 Err(_) => operation_error(GameOperationError::Internal),
             }
@@ -318,6 +322,7 @@ async fn write_response(
         403 => "Forbidden",
         404 => "Not Found",
         405 => "Method Not Allowed",
+        406 => "Not Acceptable",
         408 => "Request Timeout",
         409 => "Conflict",
         410 => "Gone",

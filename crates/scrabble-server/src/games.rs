@@ -221,7 +221,7 @@ impl Games {
     pub fn hex_profiles(&self) -> serde_json::Value {
         self.factory.hex_profile_catalog()
     }
-    pub fn profiles(&self) -> serde_json::Value {
+    pub fn profiles(&self) -> Option<serde_json::Value> {
         self.factory.catalog()
     }
     pub async fn create_configured(

@@ -199,7 +199,7 @@ impl MatchFactory {
         ))?)
     }
 
-    pub(crate) fn catalog(&self) -> serde_json::Value {
+    pub(crate) fn catalog(&self) -> Option<serde_json::Value> {
         self.catalog.public()
     }
     pub fn hex_profile_catalog(&self) -> serde_json::Value {

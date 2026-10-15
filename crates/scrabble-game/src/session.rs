@@ -209,11 +209,12 @@ impl GameSession {
                                 evaluation: (self.state.ruleset().board_shape
                                     == crate::ruleset::BoardShape::Hexagon)
                                     .then(|| {
-                                        crate::analysis::evaluate(
+                                        crate::analysis::evaluate_at(
                                             &self.state,
                                             player,
                                             placements,
                                             self.dictionary.as_ref(),
+                                            clock_now,
                                         )
                                     }),
                             })

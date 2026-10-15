@@ -144,6 +144,7 @@ pub(crate) struct ProfileCatalog {
     tiles: Vec<Named<TileProfile>>,
     boards: Vec<Named<BoardProfile>>,
     public: serde_json::Value,
+    legacy_public: Option<serde_json::Value>,
 }
 impl ProfileCatalog {
     pub fn load(path: Option<&Path>, legacy: &Ruleset, dictionary: &WordList) -> ErrorResult<Self> {
@@ -272,6 +273,8 @@ impl ProfileCatalog {
                     let mut premiums = vec![Premium::Normal; 37];
                     // Row-major on-board cells of the radius-three board.
                     premiums[18] = Premium::DoubleWord;
+                    // Interior (3, 2) remains available for a later crossing-word premium.
+                    premiums[17] = Premium::DoubleWord;
                     boards.push(Named {
                         label: format!("{label} ({metric_label})"),
                         profile: BoardProfile::with_geometry(
@@ -334,15 +337,35 @@ impl ProfileCatalog {
             tiles,
             boards,
             public: serde_json::Value::Null,
+            legacy_public: None,
         };
         let prepared = catalog
             .resolve(&selection, MatchRules::from(legacy))
             .map_err(|_| "default profile combination is invalid")?;
-        let composed = &prepared.composed;
-        let legacy_compatible = composed.rules.tiles == legacy.tiles
-            && composed.rules.board_size == legacy.board_size
-            && composed.rules.premiums == legacy.premiums
-            && composed.dictionary.words().eq(dictionary.words());
+        let legacy_compatible = |composed: &ComposedRuleset| {
+            composed.rules.tiles == legacy.tiles
+                && composed.rules.board_shape == BoardShape::Square
+                && composed.rules.board_size == legacy.board_size
+                && composed.rules.premiums == legacy.premiums
+                && composed.dictionary.words().eq(dictionary.words())
+        };
+        let square_selection = catalog
+            .boards
+            .iter()
+            .find(|row| {
+                row.profile.shape() == BoardShape::Square
+                    && row.profile.identity() == &selection.board
+            })
+            .or_else(|| {
+                catalog
+                    .boards
+                    .iter()
+                    .find(|row| row.profile.shape() == BoardShape::Square)
+            })
+            .map(|row| Selection {
+                board: row.profile.identity().clone(),
+                ..selection.clone()
+            });
         catalog.public = serde_json::json!({"version":1,
             "wordLists":catalog.words.iter().map(|r|serde_json::json!({"identity":r.profile.identity(),"label":r.label})).collect::<Vec<_>>(),
             "tileProfiles":catalog.tiles.iter().map(|r|serde_json::json!({"identity":r.profile.identity(),"label":r.label,"tiles":r.profile.tiles()})).collect::<Vec<_>>(),
@@ -355,18 +378,30 @@ impl ProfileCatalog {
                 }
                 row
             }).collect::<Vec<_>>(),
-            "defaults":{"selection":selection,"rules":MatchRules::from(legacy),"legacyCompatible":legacy_compatible}});
+            "defaults":{"selection":selection,"rules":MatchRules::from(legacy),"legacyCompatible":legacy_compatible(&prepared.composed)}});
+        if let Some(square_selection) = square_selection {
+            let square = catalog
+                .resolve(&square_selection, MatchRules::from(legacy))
+                .map_err(|_| "legacy square profile combination is invalid")?;
+            let mut projection = catalog.public.clone();
+            projection["boardProfiles"]
+                .as_array_mut()
+                .ok_or("invalid public board profiles")?
+                .retain(|row| row.get("boardShape").is_none());
+            projection["defaults"] = serde_json::json!({
+                "selection": square_selection,
+                "rules": MatchRules::from(legacy),
+                "legacyCompatible": legacy_compatible(&square.composed),
+            });
+            catalog.legacy_public = Some(projection);
+        }
         if serde_json::to_vec(&catalog.public)?.len() > 128 * 1024 {
             return Err("public profile catalog exceeds 128 KiB".into());
         }
         Ok(catalog)
     }
-    pub fn public(&self) -> serde_json::Value {
-        let mut legacy = self.public.clone();
-        if let Some(rows) = legacy["boardProfiles"].as_array_mut() {
-            rows.retain(|row| row.get("boardShape").is_none());
-        }
-        legacy
+    pub fn public(&self) -> Option<serde_json::Value> {
+        self.legacy_public.clone()
     }
     pub fn public_hex(&self) -> serde_json::Value {
         self.public.clone()
@@ -435,7 +470,7 @@ mod board_size_tests {
         let original = english_fixture();
         let dictionary = WordList::from_text(original.dictionary.clone(), "CAT\nAT\n").unwrap();
         let catalog = ProfileCatalog::load(None, &original, &dictionary).unwrap();
-        let public = catalog.public();
+        let public = catalog.public().unwrap();
         assert_eq!(public["defaults"]["legacyCompatible"], true);
         let boards = public["boardProfiles"].as_array().unwrap();
         let sizes: Vec<u64> = boards
@@ -476,7 +511,7 @@ mod board_size_tests {
         let original = english_fixture();
         let dictionary = WordList::from_text(original.dictionary.clone(), "CAT\nAT\n").unwrap();
         let catalog = ProfileCatalog::load(None, &original, &dictionary).unwrap();
-        let legacy = catalog.public();
+        let legacy = catalog.public().unwrap();
         let extended = catalog.public_hex();
         assert_eq!(extended["defaults"], legacy["defaults"]);
         assert_eq!(legacy["defaults"]["legacyCompatible"], true);

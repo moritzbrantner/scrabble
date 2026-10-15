@@ -9,16 +9,24 @@ fingerprints retain their original input tuple. Hex fingerprints additionally
 bind the geometry and both scoring choices. Recovery reconstructs these same
 inputs instead of substituting square defaults.
 
-`GET /profiles` retains the original strict square catalog shape and default
-identities. `GET /profiles/hex` exposes the extended catalog, including independent
-Hex sample board choices under both premium policies. The browser tries the
+`GET /profiles` retains the strict square catalog shape. A configured Hex default
+is projected to an actual retained square board with compatible selected words,
+tiles and settings, and an accurately recomputed `legacyCompatible` flag. A
+Hex-only operator catalog returns HTTP 406 from this legacy endpoint; it remains
+fully available through `GET /profiles/hex`, which preserves configured choices
+and defaults. No unconfigured classic profiles are invented. The fallback catalog
+retains the original classic default identities and offers independent Hex sample
+board choices under both premium policies and both length metrics. Center and
+interior word premiums let later crossing moves demonstrate policy differences. The browser tries the
 extended endpoint and falls back to the original endpoint on HTTP 404. Deploy
 the compatible client before exposing Hex configurations on the server. Existing
 single-letter public tile defaults stay unchanged; combined-face public presets
 remain the separate #121 scope.
 
-Rust evaluates tentative placements through the same placement, dictionary and
-scoring functions used by commit. Hex public previews include either a native
+Rust evaluates tentative placements by preparing the same complete atomic
+candidate as commit, then discarding it. Commit alone publishes the candidate.
+Score representability, cumulative totals, final adjustments and clock checks
+therefore share one authority with placement, dictionary and scoring validation. Hex public previews include either a native
 score breakdown or a bounded structured invalid-placement reason. Browser copy
 translates the reason; native errors do not serialize storage diagnostics. The
 browser accepts an evaluation only for the current player, turn and exact draft

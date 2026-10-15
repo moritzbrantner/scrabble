@@ -1,11 +1,12 @@
-//! Non-mutating explanations of the same placement, dictionary and scoring authority as commit.
+//! Non-mutating explanations of the exact atomic transaction used by commit.
 use crate::{
-    dictionary::{self, Dictionary},
+    commit::{self, CommitError},
+    dictionary::{Dictionary, DictionaryError},
     identity::PlayerId,
-    placement::{self, PlacementError},
+    placement::PlacementError,
     protocol::{EvaluationProblem, Placement, PlacementEvaluation},
-    scoring,
-    state::GameState,
+    scoring::ScoredCommitError,
+    state::{GameState, StateError},
 };
 
 pub fn evaluate(
@@ -14,14 +15,28 @@ pub fn evaluate(
     placements: &[Placement],
     dictionary: &dyn Dictionary,
 ) -> PlacementEvaluation {
-    let invalid = |problem| PlacementEvaluation::Invalid {
-        problem,
-        words: Vec::new(),
-    };
-    let validated = match placement::validate(state, player, placements) {
-        Ok(value) => value,
-        Err(error) => {
-            return invalid(match error {
+    evaluate_at(state, player, placements, dictionary, None)
+}
+
+pub(crate) fn evaluate_at(
+    state: &GameState,
+    player: PlayerId,
+    placements: &[Placement],
+    dictionary: &dyn Dictionary,
+    now_ms: Option<u64>,
+) -> PlacementEvaluation {
+    let error =
+        match commit::prepare_with_dictionary_at(state, player, placements, dictionary, now_ms) {
+            Ok((_, score)) => {
+                return PlacementEvaluation::Valid {
+                    analysis: score.analysis(state.ruleset().main_word_length),
+                };
+            }
+            Err(error) => error,
+        };
+    let problem = match error {
+        CommitError::Placement(error) | CommitError::Score(ScoredCommitError::Placement(error)) => {
+            match error {
                 PlacementError::CenterRequired => EvaluationProblem::Center,
                 PlacementError::NotLine => EvaluationProblem::NotLine,
                 PlacementError::Gap => EvaluationProblem::Gap,
@@ -30,22 +45,28 @@ pub fn evaluate(
                 PlacementError::TooManyTiles | PlacementError::Storage(_) => {
                     EvaluationProblem::Unavailable
                 }
-            });
+            }
         }
-    };
-    if let Err(error) = dictionary::validate(&validated, dictionary) {
-        return match error {
-            dictionary::DictionaryError::InvalidWords { words } => PlacementEvaluation::Invalid {
+        CommitError::Dictionary(DictionaryError::InvalidWords { words }) => {
+            return PlacementEvaluation::Invalid {
                 problem: EvaluationProblem::InvalidWords,
                 words,
-            },
-            dictionary::DictionaryError::IdentityMismatch => invalid(EvaluationProblem::Dictionary),
-        };
-    }
-    match scoring::calculate(&validated) {
-        Ok(score) => PlacementEvaluation::Valid {
-            analysis: score.analysis(state.ruleset().main_word_length),
-        },
-        Err(_) => invalid(EvaluationProblem::ScoreOverflow),
+            };
+        }
+        CommitError::Dictionary(DictionaryError::IdentityMismatch) => EvaluationProblem::Dictionary,
+        CommitError::Score(ScoredCommitError::Score(_) | ScoredCommitError::CumulativeOverflow)
+        | CommitError::State(StateError::ScoreOverflow)
+        | CommitError::Score(ScoredCommitError::State(StateError::ScoreOverflow)) => {
+            EvaluationProblem::ScoreOverflow
+        }
+        CommitError::NotActive
+        | CommitError::State(_)
+        | CommitError::Score(ScoredCommitError::NotActive | ScoredCommitError::State(_)) => {
+            EvaluationProblem::Unavailable
+        }
+    };
+    PlacementEvaluation::Invalid {
+        problem,
+        words: Vec::new(),
     }
 }
