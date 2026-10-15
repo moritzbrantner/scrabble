@@ -252,6 +252,7 @@ pub fn compose_profiles(
         board_shape: Default::default(),
         premium_policy: Default::default(),
         main_word_length: Default::default(),
+        time_control: None,
     };
     rules
         .validate()

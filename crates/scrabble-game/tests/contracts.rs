@@ -98,6 +98,7 @@ fn public_snapshot_has_no_private_fields_and_rejects_injected_racks() {
     let rules = english_fixture();
     let snapshot = PublicSnapshot {
         host: None,
+        clock: None,
         version: ProtocolVersion,
         game_id: GameId::new(1),
         revision: TurnId::new(0),

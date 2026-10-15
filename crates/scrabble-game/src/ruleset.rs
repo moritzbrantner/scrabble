@@ -59,6 +59,68 @@ pub enum WordLengthMetric {
     Tiles,
     Letters,
 }
+/// Upper bound for any configured clock duration (24 hours); a safety limit, not a default.
+pub const MAX_CLOCK_MS: u64 = 86_400_000;
+
+/// Decision 3.5: a carried per-player budget or a fresh per-turn countdown.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ClockModel {
+    Cumulative {
+        initial_ms: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        increment_ms: Option<u64>,
+    },
+    PerTurn {
+        allowance_ms: u64,
+    },
+}
+/// Decision 3.4: what happens when the active clock expires.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExpiryConsequence {
+    Pass,
+    Forfeit,
+}
+/// Optional, immutable match time control (Decision 3.1); absent means untimed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TimeControl {
+    pub clock: ClockModel,
+    pub on_expiry: ExpiryConsequence,
+}
+impl TimeControl {
+    pub fn validate(&self) -> Result<(), ContractError> {
+        let valid = |ms: u64| (1..=MAX_CLOCK_MS).contains(&ms);
+        let ok = match self.clock {
+            ClockModel::Cumulative {
+                initial_ms,
+                increment_ms,
+            } => {
+                if self.on_expiry == ExpiryConsequence::Pass && increment_ms.is_none() {
+                    return Err(ContractError(
+                        "cumulative clocks with automatic pass need a positive turn increment"
+                            .into(),
+                    ));
+                }
+                valid(initial_ms) && increment_ms.is_none_or(valid)
+            }
+            ClockModel::PerTurn { allowance_ms } => valid(allowance_ms),
+        };
+        if !ok {
+            return Err(ContractError("clock durations are out of range".into()));
+        }
+        Ok(())
+    }
+    /// Balance each player holds when the match starts.
+    pub const fn starting_ms(&self) -> u64 {
+        match self.clock {
+            ClockModel::Cumulative { initial_ms, .. } => initial_ms,
+            ClockModel::PerTurn { allowance_ms } => allowance_ms,
+        }
+    }
+}
+
 fn is_default<T: Default + PartialEq>(value: &T) -> bool {
     *value == T::default()
 }
@@ -84,6 +146,8 @@ pub struct Ruleset {
     pub premium_policy: PremiumPolicy,
     #[serde(default, skip_serializing_if = "is_default")]
     pub main_word_length: WordLengthMetric,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time_control: Option<TimeControl>,
 }
 impl ContentIdentity {
     pub fn validate(&self) -> Result<(), ContractError> {
@@ -226,6 +290,9 @@ impl Ruleset {
                 }
             }
             BoardShape::Hexagon => validate_hex_board(self.board_size, &self.premiums)?,
+        }
+        if let Some(control) = &self.time_control {
+            control.validate()?;
         }
         if self.rack_size == 0
             || self.rack_size > 15
@@ -378,6 +445,7 @@ pub fn english_fixture() -> Ruleset {
         board_shape: BoardShape::Square,
         premium_policy: PremiumPolicy::AllWord,
         main_word_length: WordLengthMetric::Tiles,
+        time_control: None,
     }
 }
 

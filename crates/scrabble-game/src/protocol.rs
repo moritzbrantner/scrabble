@@ -176,6 +176,23 @@ pub struct PublicSnapshot {
     /// Present only for matches with a shared board outside the playing roster.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host: Option<PublicHost>,
+    /// Timed matches only: balances and the active expiry instant, no private data.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clock: Option<PublicClock>,
+}
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PublicClock {
+    /// Seat order.
+    pub players: Vec<PlayerClock>,
+    pub turn_started_at_ms: Option<u64>,
+    pub expires_at_ms: Option<u64>,
+}
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PlayerClock {
+    pub player_id: PlayerId,
+    pub remaining_ms: u64,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

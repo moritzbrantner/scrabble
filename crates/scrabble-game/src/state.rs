@@ -7,7 +7,7 @@ use crate::protocol::{
     BoardTile, Phase, Placement, PlayerSnapshot, PrivateRack, PublicPlayer, PublicSnapshot,
     RackTile,
 };
-use crate::ruleset::{Ruleset, TileFace};
+use crate::ruleset::{ClockModel, Ruleset, TileFace};
 use rand::{SeedableRng, seq::SliceRandom};
 use rand_chacha::ChaCha8Rng;
 use serde::Serialize;
@@ -36,11 +36,29 @@ pub enum StateError {
     ScoreOverflow,
     EmptyExchange,
     ExchangeUnavailable,
+    Clock(ClockError),
+}
+/// Match-clock rejections. The engine consumes caller-supplied authoritative instants only.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ClockError {
+    /// A timed match driven through an untimed entry point.
+    InstantRequired,
+    /// An instant earlier than the active turn's start.
+    TimeRegression,
+    /// A turn command at or after the expiry instant.
+    Expired,
+    /// A timeout before the expiry instant.
+    NotExpired,
+    /// A timeout on an untimed match.
+    Untimed,
+    /// Provisional (#99): forfeit outcomes are not applied until the owner decides.
+    ForfeitUnavailable,
 }
 impl fmt::Display for StateError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let message = match self {
             Self::InvalidRuleset(error) => return write!(f, "invalid ruleset: {error}"),
+            Self::Clock(error) => return write!(f, "match clock: {error:?}"),
             Self::DuplicatePlayer => "player already admitted",
             Self::PlayerLimit => "player limit reached",
             Self::InvalidName => "display name must contain 1 to 32 characters",
@@ -110,6 +128,14 @@ struct Player {
     rack: Vec<Tile>,
 }
 
+/// Private clock state of a timed match. Balances are in seat order and are the
+/// balance at turn start for the active player; they are not decremented live.
+#[derive(Clone, Default, Serialize)]
+struct ClockState {
+    remaining_ms: Vec<u64>,
+    turn_started_at_ms: Option<u64>,
+}
+
 /// Owned canonical state; no Deserialize or public mutable collections can bypass invariants.
 /// Deliberately has no Debug/Serialize implementation exposing private racks or bag order.
 #[derive(Clone)]
@@ -123,8 +149,13 @@ pub struct GameState {
     board: Vec<Option<CommittedTile>>,
     consecutive_scoreless_turns: u16,
     history: Vec<crate::protocol::PublicTurn>,
+    clock: Option<ClockState>,
     // Immutable replay input, held privately so exchange shuffles never depend on client input.
     seed: [u8; 32],
+}
+
+fn ruleset_clock(rules: &Ruleset) -> Option<ClockState> {
+    rules.time_control.map(|_| ClockState::default())
 }
 
 fn make_tiles(rules: &Ruleset) -> Vec<Tile> {
@@ -147,6 +178,7 @@ impl GameState {
         // Explicit ChaCha variant, full seed and locked shuffle implementation form replay inputs.
         bag.shuffle(&mut ChaCha8Rng::from_seed(seed));
         let board = vec![None; usize::from(ruleset.board_size).pow(2)];
+        let clock = ruleset_clock(&ruleset);
         Ok(Self {
             game_id,
             ruleset,
@@ -157,6 +189,7 @@ impl GameState {
             board,
             consecutive_scoreless_turns: 0,
             history: Vec::new(),
+            clock,
             seed,
         })
     }
@@ -272,6 +305,123 @@ impl GameState {
         Ok(())
     }
     pub fn deal_initial_racks(&mut self) -> Result<(), StateError> {
+        if self.clock.is_some() {
+            return Err(StateError::Clock(ClockError::InstantRequired));
+        }
+        self.deal_racks()
+    }
+    /// Starts the match at an authoritative instant; untimed matches ignore it.
+    pub fn deal_initial_racks_at(&mut self, now_ms: u64) -> Result<(), StateError> {
+        let mut candidate = self.clone();
+        candidate.deal_racks()?;
+        if let (Some(clock), Some(control)) = (&mut candidate.clock, self.ruleset.time_control) {
+            clock.remaining_ms = vec![control.starting_ms(); candidate.players.len()];
+            candidate.begin_clock_turn(now_ms)?;
+        }
+        *self = candidate;
+        Ok(())
+    }
+    pub(crate) fn is_timed(&self) -> bool {
+        self.clock.is_some()
+    }
+    /// The instant at which the active turn expires, while a timed match is playing.
+    pub fn clock_expires_at(&self) -> Option<u64> {
+        let clock = self.clock.as_ref()?;
+        let start = clock.turn_started_at_ms?;
+        let index = self.active_index()?;
+        start.checked_add(*clock.remaining_ms.get(index)?)
+    }
+    fn active_index(&self) -> Option<usize> {
+        let Phase::Playing { active_player, .. } = self.phase else {
+            return None;
+        };
+        self.players
+            .iter()
+            .position(|player| player.id == active_player)
+    }
+    /// Rejects turn commands outside the active window. Untimed matches always pass.
+    pub(crate) fn check_clock(&self, now_ms: u64) -> Result<(), StateError> {
+        let Some(clock) = &self.clock else {
+            return Ok(());
+        };
+        let start = clock
+            .turn_started_at_ms
+            .ok_or(StateError::InvariantViolation)?;
+        if now_ms < start {
+            return Err(StateError::Clock(ClockError::TimeRegression));
+        }
+        let expires = self
+            .clock_expires_at()
+            .ok_or(StateError::CounterExhausted)?;
+        if now_ms >= expires {
+            return Err(StateError::Clock(ClockError::Expired));
+        }
+        Ok(())
+    }
+    /// Settles the active player's balance as their turn ends at `now_ms`.
+    pub(crate) fn settle_clock_turn(
+        &mut self,
+        now_ms: u64,
+        expired: bool,
+    ) -> Result<(), StateError> {
+        let Some(control) = self.ruleset.time_control else {
+            return Ok(());
+        };
+        let index = self.active_index().ok_or(StateError::WrongPhase)?;
+        let clock = self.clock.as_mut().ok_or(StateError::InvariantViolation)?;
+        let start = clock
+            .turn_started_at_ms
+            .ok_or(StateError::InvariantViolation)?;
+        let balance = clock
+            .remaining_ms
+            .get_mut(index)
+            .ok_or(StateError::InvariantViolation)?;
+        *balance = match control.clock {
+            ClockModel::Cumulative { .. } if expired => 0,
+            ClockModel::Cumulative { .. } => {
+                let elapsed = now_ms
+                    .checked_sub(start)
+                    .ok_or(StateError::CounterExhausted)?;
+                balance
+                    .checked_sub(elapsed)
+                    .ok_or(StateError::CounterExhausted)?
+            }
+            ClockModel::PerTurn { allowance_ms } => allowance_ms,
+        };
+        Ok(())
+    }
+    /// Starts the next turn's clock at `now_ms`, or clears the instant once finished.
+    pub(crate) fn begin_clock_turn(&mut self, now_ms: u64) -> Result<(), StateError> {
+        let Some(control) = self.ruleset.time_control else {
+            return Ok(());
+        };
+        let index = self.active_index();
+        let clock = self.clock.as_mut().ok_or(StateError::InvariantViolation)?;
+        let Some(index) = index else {
+            clock.turn_started_at_ms = None;
+            return Ok(());
+        };
+        let balance = clock
+            .remaining_ms
+            .get_mut(index)
+            .ok_or(StateError::InvariantViolation)?;
+        *balance = match control.clock {
+            ClockModel::Cumulative {
+                increment_ms: Some(increment),
+                ..
+            } => balance
+                .checked_add(increment)
+                .ok_or(StateError::CounterExhausted)?,
+            ClockModel::Cumulative { .. } => *balance,
+            ClockModel::PerTurn { allowance_ms } => allowance_ms,
+        };
+        now_ms
+            .checked_add(*balance)
+            .ok_or(StateError::CounterExhausted)?;
+        clock.turn_started_at_ms = Some(now_ms);
+        Ok(())
+    }
+    fn deal_racks(&mut self) -> Result<(), StateError> {
         if !matches!(self.phase, Phase::Lobby {}) {
             return Err(StateError::WrongPhase);
         }
@@ -625,6 +775,8 @@ impl GameState {
             players: &'a [Player],
             bag: &'a [Tile],
             board: &'a [Option<CommittedTile>],
+            #[serde(skip_serializing_if = "Option::is_none")]
+            clock: Option<&'a ClockState>,
         }
         serde_json::to_vec(&Evidence {
             version: 3,
@@ -637,6 +789,7 @@ impl GameState {
             players: &self.players,
             bag: &self.bag,
             board: &self.board,
+            clock: self.clock.as_ref(),
         })
     }
     pub fn public_snapshot(&self) -> PublicSnapshot {
@@ -677,7 +830,25 @@ impl GameState {
             remaining_tiles: self.bag.len() as u16,
             history: self.history.clone(),
             preview: None,
+            clock: self.public_clock(),
         }
+    }
+    fn public_clock(&self) -> Option<crate::protocol::PublicClock> {
+        let clock = self.clock.as_ref()?;
+        let starting = self.ruleset.time_control?.starting_ms();
+        Some(crate::protocol::PublicClock {
+            players: self
+                .players
+                .iter()
+                .enumerate()
+                .map(|(index, player)| crate::protocol::PlayerClock {
+                    player_id: player.id,
+                    remaining_ms: clock.remaining_ms.get(index).copied().unwrap_or(starting),
+                })
+                .collect(),
+            turn_started_at_ms: clock.turn_started_at_ms,
+            expires_at_ms: self.clock_expires_at(),
+        })
     }
     /// Trusted in-process projection; the transport adapter must select player using authenticated identity.
     pub fn player_snapshot(&self, player: PlayerId) -> Result<PlayerSnapshot, StateError> {
