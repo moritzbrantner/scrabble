@@ -1,7 +1,8 @@
 import { Button } from "@moritzbrantner/ui/client";
 
 import { useCopy } from "./preferences";
-import { type PlayerSnapshot, type Ruleset } from "./public-state";
+import { faceClass } from "./tile-face";
+import { faceText, faceValues, type PlayerSnapshot, type Ruleset } from "./public-state";
 
 /** Receives only the authenticated recipient's rack; public scores contain no private tiles. */
 export function PlayerRack({
@@ -20,17 +21,13 @@ export function PlayerRack({
   };
 }) {
   const { t, number } = useCopy();
-  const values = new Map(
-    rules.tiles.flatMap((tile) =>
-      tile.face.kind === "letter" ? [[tile.face.letter, tile.value] as const] : [],
-    ),
-  );
+  const values = faceValues(rules);
   return (
     <section className="phone-rack" aria-label={t("rack.title")}>
       <ul aria-label={t("rack.list")} aria-disabled={!canAct}>
         {rack.tiles.map((tile) => {
           const blank = tile.face.kind === "blank";
-          const letter = tile.face.kind === "letter" ? tile.face.letter : "◇";
+          const letter = faceText(tile.face) ?? "◇";
           const value = blank ? 0 : values.get(letter);
           const description = t(blank ? "rack.blank" : "rack.letter", {
             letter,
@@ -40,7 +37,7 @@ export function PlayerRack({
             <li key={tile.id} data-tile-id={tile.id} aria-label={description}>
               {selection === undefined ? (
                 <span className={`rack-tile${blank ? " blank-tile" : ""}`} aria-hidden="true">
-                  <span>{letter}</span>
+                  <span className={faceClass(letter)}>{letter}</span>
                   <small>{value === undefined ? "?" : number(value)}</small>
                 </span>
               ) : (
@@ -56,7 +53,9 @@ export function PlayerRack({
                   aria-pressed={selection.selected.includes(tile.id)}
                   onClick={() => selection.onSelect(tile.id)}
                 >
-                  <span aria-hidden="true">{letter}</span>
+                  <span aria-hidden="true" className={faceClass(letter)}>
+                    {letter}
+                  </span>
                   <small aria-hidden="true">{value === undefined ? "?" : number(value)}</small>
                 </Button>
               )}

@@ -18,7 +18,13 @@ import { matchRules, requireMatchRules } from "./match-rules";
 import { MoveEditor } from "./MoveEditor";
 import { PlayerRack } from "./PlayerRack";
 import { useCopy } from "./preferences";
-import { type PlayerSnapshot, type Ruleset } from "./public-state";
+import {
+  faceText,
+  faceValues,
+  maxWordLength,
+  type PlayerSnapshot,
+  type Ruleset,
+} from "./public-state";
 import { BrowserMatch, matchUrl, type ConnectionState } from "./transport/browser-match";
 import {
   forgetPlayerSession,
@@ -72,6 +78,9 @@ export function PlayerPhone({
   const [connection, setConnection] = useState<ConnectionState>({ kind: "idle" });
   const [snapshot, setSnapshot] = useState<PlayerSnapshot>();
   const [rules, setRules] = useState<Ruleset>(fixtures.ruleset);
+  // Rejection decoding runs in long-lived transport callbacks; read the current match rules.
+  const rulesRef = useRef(rules);
+  rulesRef.current = rules;
   const [turnRejection, setTurnRejection] = useState<TurnRejection>();
   const submittedAction = useRef<SubmittedTurnAction>(undefined);
   const privateResume = useRef<ResumeCapability>(undefined);
@@ -191,7 +200,9 @@ export function PlayerPhone({
             if (!active) {
               return;
             }
-            const feedback = decodeExchangeRejection(payload) ?? decodeWordRejection(payload);
+            const feedback =
+              decodeExchangeRejection(payload) ??
+              decodeWordRejection(payload, maxWordLength(rulesRef.current));
             if (feedback.game_id !== join.gameId) {
               throw new ProtocolError("Rejection belongs to a different match");
             }
@@ -362,15 +373,10 @@ export function PlayerPhone({
       clearTimeout(timer);
     };
   }, [finished, rematch, api, endpoint, matchId]);
+  const values = faceValues(rules);
   const unplayed = (snapshot?.own_rack.tiles ?? []).reduce((sum, tile) => {
-    if (tile.face.kind !== "letter") {
-      return sum;
-    }
-    const letter = tile.face.letter;
-    const definition = rules.tiles.find(
-      (entry) => entry.face.kind === "letter" && entry.face.letter === letter,
-    );
-    return sum + (definition?.value ?? 0);
+    const text = faceText(tile.face);
+    return text === null ? sum : sum + (values.get(text) ?? 0);
   }, 0);
   const canAct =
     state.kind === "joined" &&

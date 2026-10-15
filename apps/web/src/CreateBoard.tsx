@@ -14,6 +14,7 @@ import { reportMoenarchMatch } from "./moenarch-launch";
 import { useCopy } from "./preferences";
 import { fetchProfiles } from "./profile-catalog";
 import { matchSettings, type MatchSettings, type ProfileCatalog } from "./profile-model";
+import { faceText } from "./public-state";
 
 const numericFields = [
   "rack_size",
@@ -276,8 +277,7 @@ export function CreateBoard({
               {catalog.tileProfiles
                 .find((row) => row.identity.name === choices.tile)
                 ?.tiles.map(
-                  (tile) =>
-                    `${tile.face.kind === "letter" ? tile.face.letter : "□"}: ${tile.value} × ${tile.count}`,
+                  (tile) => `${faceText(tile.face) ?? "□"}: ${tile.value} × ${tile.count}`,
                 )
                 .join(" · ")}
             </p>

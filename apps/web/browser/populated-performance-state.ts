@@ -2,7 +2,7 @@
  * Its connected geometry and tile inventory are plausible, but it is not
  * an authoritative replay or dictionary-validated match.
  */
-import { type PlayerSnapshot, type Ruleset } from "../src/public-state";
+import { faceText, type PlayerSnapshot, type Ruleset } from "../src/public-state";
 
 export type BrowserWorkload = "opening" | "populated";
 export type BoardFixturePhase = "playing" | "finished" | "populated" | "populated-updated";
@@ -49,11 +49,7 @@ export function populatedPlayerSnapshot(opening: PlayerSnapshot, rules: Ruleset)
   // Do not duplicate any face already held in the measured player's private rack.
   const stock = rules.tiles.map((tile) => ({ face: tile.face, count: tile.count }));
   for (const tile of opening.own_rack.tiles) {
-    const entry = stock.find(({ face }) =>
-      face.kind === "blank"
-        ? tile.face.kind === "blank"
-        : tile.face.kind === "letter" && face.letter === tile.face.letter,
-    );
+    const entry = stock.find(({ face }) => faceText(face) === faceText(tile.face));
     if (entry === undefined || entry.count === 0) {
       throw new Error("Populated fixture exhausts the authored tile inventory");
     }
@@ -93,7 +89,7 @@ export function populatedPlayerSnapshot(opening: PlayerSnapshot, rules: Ruleset)
       const face = faces[slot]!;
       return {
         coordinate: { row: Math.floor(index / rules.board_size), column: index % rules.board_size },
-        letter: face.kind === "blank" ? "E" : face.letter,
+        letter: faceText(face) ?? "E",
         is_blank: face.kind === "blank",
       };
     });
