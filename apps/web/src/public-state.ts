@@ -158,7 +158,8 @@ export const ruleset = z
     const total = value.tiles.reduce((sum, tile) => sum + tile.count, 0);
     return (
       new Set(faces).size === faces.length &&
-      faces.some((face) => face !== "") &&
+      // Rust `validate_tiles` still requires at least one single-letter face (#116).
+      value.tiles.some((tile) => tile.face.kind === "letter") &&
       value.tiles.every((tile) =>
         tile.face.kind === "blank"
           ? tile.value === 0

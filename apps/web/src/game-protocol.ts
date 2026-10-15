@@ -51,34 +51,36 @@ export function decodePlayerSnapshot(bytes: Uint8Array, playerId: string): Playe
   return parsed.data;
 }
 
-const wordRejection = z.strictObject({
-  version: z.literal(1),
-  game_id: id,
-  expected_turn: id,
-  error: z.strictObject({
-    kind: z.literal("invalid_words"),
-    words: z
-      .array(
-        z
-          .string()
-          .min(1)
-          .max(30)
-          .refine((word) => Array.from(word).length <= 15 && /^\p{L}+$/u.test(word)),
-      )
-      .min(1)
-      .max(16)
-      .refine((words) => new Set(words).size === words.length),
-  }),
-});
-export type WordRejection = z.infer<typeof wordRejection>;
-export function decodeWordRejection(bytes: Uint8Array): WordRejection {
+/** `maxLength` is the match ruleset's longest spelled word (`maxWordLength`); 15 by default. */
+const wordRejection = (maxLength: number) =>
+  z.strictObject({
+    version: z.literal(1),
+    game_id: id,
+    expected_turn: id,
+    error: z.strictObject({
+      kind: z.literal("invalid_words"),
+      words: z
+        .array(
+          z
+            .string()
+            .min(1)
+            .max(2 * maxLength)
+            .refine((word) => Array.from(word).length <= maxLength && /^\p{L}+$/u.test(word)),
+        )
+        .min(1)
+        .max(16)
+        .refine((words) => new Set(words).size === words.length),
+    }),
+  });
+export type WordRejection = z.infer<ReturnType<typeof wordRejection>>;
+export function decodeWordRejection(bytes: Uint8Array, maxLength = 15): WordRejection {
   let raw: unknown;
   try {
     raw = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
   } catch {
     throw new ProtocolError("Invalid word rejection encoding");
   }
-  const parsed = wordRejection.safeParse(raw);
+  const parsed = wordRejection(maxLength).safeParse(raw);
   if (!parsed.success) {
     throw new ProtocolError("Invalid word rejection protocol");
   }

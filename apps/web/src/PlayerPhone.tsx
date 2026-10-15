@@ -18,7 +18,13 @@ import { matchRules, requireMatchRules } from "./match-rules";
 import { MoveEditor } from "./MoveEditor";
 import { PlayerRack } from "./PlayerRack";
 import { useCopy } from "./preferences";
-import { faceText, faceValues, type PlayerSnapshot, type Ruleset } from "./public-state";
+import {
+  faceText,
+  faceValues,
+  maxWordLength,
+  type PlayerSnapshot,
+  type Ruleset,
+} from "./public-state";
 import { BrowserMatch, matchUrl, type ConnectionState } from "./transport/browser-match";
 import {
   forgetPlayerSession,
@@ -72,6 +78,9 @@ export function PlayerPhone({
   const [connection, setConnection] = useState<ConnectionState>({ kind: "idle" });
   const [snapshot, setSnapshot] = useState<PlayerSnapshot>();
   const [rules, setRules] = useState<Ruleset>(fixtures.ruleset);
+  // Rejection decoding runs in long-lived transport callbacks; read the current match rules.
+  const rulesRef = useRef(rules);
+  rulesRef.current = rules;
   const [turnRejection, setTurnRejection] = useState<TurnRejection>();
   const submittedAction = useRef<SubmittedTurnAction>(undefined);
   const privateResume = useRef<ResumeCapability>(undefined);
@@ -191,7 +200,9 @@ export function PlayerPhone({
             if (!active) {
               return;
             }
-            const feedback = decodeExchangeRejection(payload) ?? decodeWordRejection(payload);
+            const feedback =
+              decodeExchangeRejection(payload) ??
+              decodeWordRejection(payload, maxWordLength(rulesRef.current));
             if (feedback.game_id !== join.gameId) {
               throw new ProtocolError("Rejection belongs to a different match");
             }
