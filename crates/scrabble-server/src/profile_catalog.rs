@@ -240,7 +240,7 @@ impl ProfileCatalog {
             let names = DefaultNames {
                 word_list: words.identity().name.clone(),
                 tile: tiles.identity().name.clone(),
-                board: boards.identity().name.clone(),
+                board: legacy.identity.name.clone(),
             };
             (
                 vec![Named {
