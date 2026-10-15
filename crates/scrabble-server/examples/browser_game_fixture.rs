@@ -150,6 +150,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         ("SCRABBLE_API_PORT".into(), api_port.to_string()),
         ("SCRABBLE_BOARD_ORIGIN".into(), origin),
         ("SCRABBLE_MATCH_IDS".into(), String::new()),
+        // One shared fixture server hosts every match the browser suites create; the
+        // production default (16) is too small for the whole suite, so use the bound (64).
+        ("SCRABBLE_MAX_MATCHES".into(), "64".into()),
         (
             "SCRABBLE_CERT_PEM".into(),
             certificate_pem.to_str().ok_or("invalid cert path")?.into(),

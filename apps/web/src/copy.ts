@@ -34,6 +34,9 @@ export const en = {
   "settings.dark": "Dark",
   "settings.system": "System",
   "settings.storage": "Preferences could not be saved. They apply to this page.",
+  "settings.close": "Close",
+  "settings.note":
+    "The interface language changes labels and messages only. It does not change the word list, tiles or match rules.",
   "app.player": "Player",
   "app.activePlayer": "the active player",
   "app.preview": "Board preview · Multiplayer is not connected yet.",
@@ -290,6 +293,9 @@ const de: Record<CopyKey, string> = {
   "settings.system": "System",
   "settings.storage":
     "Die Einstellungen konnten nicht gespeichert werden. Sie gelten für diese Seite.",
+  "settings.close": "Schließen",
+  "settings.note":
+    "Die Sprache der Oberfläche ändert nur Beschriftungen und Meldungen. Wortliste, Spielsteine und Spielregeln bleiben unverändert.",
   "app.player": "Spieler",
   "app.activePlayer": "den aktiven Spieler",
   "app.preview": "Spielbrettvorschau · Mehrspieler ist noch nicht verbunden.",
@@ -559,6 +565,9 @@ const es: Record<CopyKey, string> = {
   "settings.dark": "Oscuro",
   "settings.system": "Sistema",
   "settings.storage": "No se pudieron guardar los ajustes. Se aplican a esta página.",
+  "settings.close": "Cerrar",
+  "settings.note":
+    "El idioma de la interfaz solo cambia etiquetas y mensajes. No cambia la lista de palabras, las fichas ni las reglas de la partida.",
   "app.player": "Jugador",
   "app.activePlayer": "el jugador activo",
   "app.preview": "Vista previa del tablero · El multijugador aún no está conectado.",
