@@ -129,7 +129,8 @@ fn error(error: impl std::fmt::Display) -> SimulationError {
 impl ScrabbleSimulation {
     /// Applies automatic pass once when the active clock has expired at this tick.
     /// A blocked forfeit (#99) leaves the match unchanged and never fails the tick.
-    fn apply_clock_expiry(&mut self) -> Result<(), SimulationError> {
+    /// Atomic: on error the session is unchanged (`timeout_at` publishes only on success).
+    fn apply_clock_expiry(&mut self, tick: u64) -> Result<(), SimulationError> {
         let Phase::Playing { turn, .. } = self.session.state().phase() else {
             return Ok(());
         };
@@ -137,7 +138,7 @@ impl ScrabbleSimulation {
         let Some(expires_at) = self.session.state().clock_expires_at() else {
             return Ok(());
         };
-        let now_ms = match_time_ms(self.tick)?;
+        let now_ms = match_time_ms(tick)?;
         if now_ms < expires_at {
             return Ok(());
         }
@@ -152,7 +153,7 @@ impl ScrabbleSimulation {
             && let Some(lifecycle) = &mut self.lifecycle
             && lifecycle.finished_at_tick.is_none()
         {
-            lifecycle.finished_at_tick = Some(self.tick);
+            lifecycle.finished_at_tick = Some(tick);
         }
         Ok(())
     }
@@ -383,17 +384,20 @@ impl GameSimulation for ScrabbleSimulation {
     }
 
     fn advance_tick(&mut self) -> Result<(), SimulationError> {
-        self.tick = self
+        // Stage the next tick; nothing is committed unless every fallible step succeeds.
+        let next = self
             .tick
             .checked_add(1)
             .ok_or_else(|| SimulationError::new("simulation tick exhausted"))?;
+        self.apply_clock_expiry(next)?;
+        self.tick = next;
         if let Some((player, deadline)) = self.preview_deadline
             && self.tick >= deadline
         {
             self.session.clear_preview_for(player);
             self.preview_deadline = None;
         }
-        self.apply_clock_expiry()
+        Ok(())
     }
 
     fn snapshot_scope(&self) -> SnapshotScope {
@@ -515,6 +519,46 @@ mod tests {
             )
             .unwrap()
         );
+    }
+
+    /// Regression (PR #115 review): a failing clock-expiry step must not commit the tick
+    /// or clear an elapsed preview.
+    #[test]
+    fn failed_clock_expiry_leaves_tick_and_snapshot_unchanged() {
+        use scrabble_game::{
+            identity::{ProtocolVersion, TurnId},
+            ruleset::{ClockModel, ExpiryConsequence, TimeControl},
+        };
+        let mut rules = scrabble_game::ruleset::english_fixture();
+        rules.time_control = Some(TimeControl {
+            clock: ClockModel::PerTurn { allowance_ms: 1000 },
+            on_expiry: ExpiryConsequence::Pass,
+        });
+        let mut simulation = ScrabbleSimulation::new(GameId::new(1), rules, [7; 32]).unwrap();
+        for id in [1, 2] {
+            simulation
+                .session
+                .add_player(PlayerId::new(id), format!("P{id}"))
+                .unwrap();
+        }
+        let start = CommandEnvelope {
+            version: ProtocolVersion,
+            game_id: GameId::new(1),
+            player_id: PlayerId::new(1),
+            sequence: 1,
+            expected_turn: TurnId::new(0),
+            command: Command::Start {},
+        };
+        simulation
+            .session
+            .apply_at(PlayerId::new(1), 1, &start, 0)
+            .unwrap();
+        // The next tick's match time overflows while the clock has expired.
+        simulation.tick = u64::MAX / 50;
+        let before = simulation.snapshot().unwrap();
+        assert!(simulation.advance_tick().is_err());
+        assert_eq!(simulation.tick, u64::MAX / 50);
+        assert_eq!(simulation.snapshot().unwrap(), before);
     }
 
     #[test]
