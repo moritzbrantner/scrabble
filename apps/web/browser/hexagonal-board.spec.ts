@@ -109,6 +109,7 @@ const sessionIdentity = (page: Page) =>
   page.evaluate(() => {
     const identity: Record<string, unknown> = {};
     const sequences: Record<string, number> = {};
+    const capabilities: Record<string, string> = {};
     for (const key of Object.keys(sessionStorage)) {
       const raw = sessionStorage.getItem(key);
       let value: unknown = raw;
@@ -118,7 +119,10 @@ const sessionIdentity = (page: Page) =>
         /* compare non-JSON verbatim */
       }
       if (value !== null && typeof value === "object" && !Array.isArray(value)) {
-        const { sequence, ...rest } = value as Record<string, unknown>;
+        const { sequence, token, ...rest } = value as Record<string, unknown>;
+        if (typeof token === "string") {
+          capabilities[key] = token;
+        }
         if (typeof sequence === "number") {
           sequences[key] = sequence;
         }
@@ -126,7 +130,7 @@ const sessionIdentity = (page: Page) =>
       }
       identity[key] = value;
     }
-    return { identity, sequences };
+    return { identity, sequences, capabilities };
   });
 async function expectFaceFits(scope: Locator, face: string, where: string) {
   const found = await scope.evaluate((root, face) => {
@@ -608,6 +612,21 @@ for (const policy of ["all_word", "main_word_only"] as const) {
           JSON.stringify(restored.identity) === JSON.stringify(identity.identity),
           "reload preserves private session identity",
         ).toBe(true);
+        // ADR 0004: reconnect keeps the player/route but rotates its private capability.
+        // Compare booleans so a failed assertion never prints either private token.
+        expect(Object.keys(identity.capabilities)).toHaveLength(1);
+        expect(Object.keys(restored.capabilities)).toEqual(Object.keys(identity.capabilities));
+        for (const [key, token] of Object.entries(identity.capabilities)) {
+          expect(/^[0-9a-f]{32}$/.test(token), "original resume capability is valid").toBe(true);
+          expect(
+            /^[0-9a-f]{32}$/.test(restored.capabilities[key] ?? ""),
+            "restored resume capability is valid",
+          ).toBe(true);
+          expect(
+            restored.capabilities[key] !== token,
+            "reconnect rotates the private resume capability",
+          ).toBe(true);
+        }
         expect(Object.keys(restored.sequences)).toEqual(Object.keys(identity.sequences));
         for (const [key, sequence] of Object.entries(identity.sequences)) {
           expect(restored.sequences[key]).toBeGreaterThanOrEqual(sequence);
