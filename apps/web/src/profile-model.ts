@@ -39,6 +39,9 @@ export const profileCatalog = z.strictObject({
         identity: ruleset.shape.identity,
         label: z.string(),
         boardSize: z.int().min(1).max(15),
+        boardShape: z.enum(["square", "hexagon"]).optional(),
+        premiumPolicy: z.enum(["all_word", "main_word_only"]).optional(),
+        mainWordLength: z.enum(["tiles", "letters"]).optional(),
         premiums: ruleset.shape.premiums,
       }),
     )

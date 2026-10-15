@@ -1,3 +1,4 @@
+import { MoveAnalysis } from "./MoveAnalysis";
 import { useCopy } from "./preferences";
 import { type PublicSnapshot } from "./public-state";
 
@@ -43,6 +44,7 @@ export function TurnHistory({ snapshot }: { snapshot: PublicSnapshot }) {
                 })}
               </span>
             )}
+            {turn.analysis && <MoveAnalysis analysis={turn.analysis} />}
             <span className="turn-scores">
               {turn.scores
                 .map((score) =>

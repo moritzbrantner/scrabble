@@ -1,3 +1,4 @@
+import { containsCell } from "./board-geometry";
 import { type CommandEnvelope } from "./game-protocol";
 import { type PlayerSnapshot, type Ruleset } from "./public-state";
 
@@ -83,8 +84,7 @@ function placementProblem(
       !Number.isInteger(column) ||
       row < 0 ||
       column < 0 ||
-      row >= rules.board_size ||
-      column >= rules.board_size
+      !containsCell(rules, row, column)
     ) {
       return "coordinate";
     }
@@ -162,6 +162,10 @@ export function draftProblem(
   const invalid = placementProblem(snapshot, rules, placements);
   if (invalid !== undefined) {
     return invalid;
+  }
+  // The server evaluates all Hex word/connection rules before confirmation.
+  if (rules.board_shape === "hexagon") {
+    return undefined;
   }
   const first = placements[0];
   if (first === undefined) {

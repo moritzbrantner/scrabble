@@ -68,7 +68,7 @@ const wordRejection = (maxLength: number) =>
             .refine((word) => Array.from(word).length <= maxLength && /^\p{L}+$/u.test(word)),
         )
         .min(1)
-        .max(16)
+        .max(31)
         .refine((words) => new Set(words).size === words.length),
     }),
   });
