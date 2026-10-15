@@ -450,10 +450,12 @@ body {
   padding: 0.5rem 0.5rem 0;
   font-size: 0.875rem;
 }
-/* Short landscape phones: float the chrome over the empty top-right corner so the
-   turn actions stay inside the viewport. */
-@media (orientation: landscape) and (max-height: 32rem) {
-  .app-preferences {
+/* Short, wide landscape player controllers: float the chrome over the empty top-right
+   corner beside the player heading so the turn actions stay inside the viewport. Other
+   routes (shared board, creation) and narrower landscapes keep it in flow, so it can
+   never cover their content. */
+@media (orientation: landscape) and (max-height: 32rem) and (min-width: 44rem) {
+  :root:has(main.player-phone) .app-preferences {
     position: absolute;
     top: 0;
     right: 0;
