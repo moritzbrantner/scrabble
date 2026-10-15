@@ -120,6 +120,15 @@ test("three independent selectors and exact advanced values drive two simultaneo
     await expect(preview.locator("td")).toHaveCount(225);
     const originalTile = await tiles(page).inputValue();
     const originalBoard = await board(page).inputValue();
+    const size = page.getByRole("combobox", { name: "Board size", exact: true });
+    for (const side of [7, 15]) {
+      await size.selectOption(String(side));
+      await expect(preview.locator("td")).toHaveCount(side * side);
+      await expect(preview).toHaveAttribute("data-board-size", String(side));
+      expect(await tiles(page).inputValue()).toBe(originalTile);
+      expect(await word(page).inputValue()).toBe(sources.defaults.selection.wordList.name);
+    }
+    expect(await board(page).inputValue()).toBe(originalBoard);
     await word(page).selectOption({ label: "Authored two-letter pairs" });
     expect(await tiles(page).inputValue()).toBe(originalTile);
     expect(await board(page).inputValue()).toBe(originalBoard);
@@ -485,6 +494,9 @@ test("the match setup previews the board on narrow screens without horizontal ov
   const preview = page.getByRole("table", { name: "Board preview", exact: true });
   await expect(preview).toBeVisible();
   await expect(preview.locator("td")).toHaveCount(225);
+  await page.getByRole("combobox", { name: "Board size", exact: true }).selectOption("7");
+  await expect(preview.locator("td")).toHaveCount(49);
+  await expect(preview).toHaveAttribute("data-board-size", "7");
   await page.getByText("Advanced match rules", { exact: true }).click();
   await expect(
     page.getByText("Each player can hold this many tiles on their rack.", { exact: true }),

@@ -288,7 +288,7 @@ export function CreateBoard({
                   <p className="setting-note">{t("profiles.distributionExplanation")}</p>
                   <ul className="tile-preview-list">
                     {selectedTiles.tiles.map((tile) => {
-                      const face = faceText(tile.face);
+                      const face = faceText(tile.face) ?? "□";
                       return (
                         <li key={face}>
                           <span className="tile-preview-square">
