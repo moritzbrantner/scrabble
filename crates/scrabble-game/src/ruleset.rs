@@ -35,6 +35,34 @@ pub enum Premium {
     TripleWord,
 }
 
+/// Board geometry. A hexagon of radius R uses axial cells on a `(2R+1)²` grid.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BoardShape {
+    #[default]
+    Square,
+    Hexagon,
+}
+/// How newly covered premiums apply when a move forms several words (Decision 1.13).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PremiumPolicy {
+    #[default]
+    AllWord,
+    MainWordOnly,
+}
+/// Length used to pick the single-tile main word (Decision 1.23).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WordLengthMetric {
+    #[default]
+    Tiles,
+    Letters,
+}
+fn is_default<T: Default + PartialEq>(value: &T) -> bool {
+    *value == T::default()
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Ruleset {
@@ -50,6 +78,12 @@ pub struct Ruleset {
     pub scoreless_turn_limit: u16,
     pub minimum_players: u8,
     pub maximum_players: u8,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub board_shape: BoardShape,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub premium_policy: PremiumPolicy,
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub main_word_length: WordLengthMetric,
 }
 impl ContentIdentity {
     pub fn validate(&self) -> Result<(), ContractError> {
@@ -84,6 +118,30 @@ pub fn validate_board(board_size: u8, premiums: &[Premium]) -> Result<(), Contra
         return Err(ContractError(
             "invalid ruleset dimensions or turn limits".into(),
         ));
+    }
+    Ok(())
+}
+
+/// Number of on-board cells of a hexagon with the given storage-grid side.
+pub const fn hex_cell_count(board_size: u8) -> usize {
+    let radius = (board_size / 2) as usize;
+    3 * radius * radius + 3 * radius + 1
+}
+
+/// Whether `(row, column)` lies on a hexagonal board of the given storage-grid side.
+pub const fn hex_contains(board_size: u8, row: u8, column: u8) -> bool {
+    let radius = board_size / 2;
+    let sum = row as u16 + column as u16;
+    row < board_size && column < board_size && sum >= radius as u16 && sum <= 3 * radius as u16
+}
+
+/// Hexagonal-board invariants: odd storage side `2R+1`, `1 <= R <= 7`, one premium per cell.
+pub fn validate_hex_board(board_size: u8, premiums: &[Premium]) -> Result<(), ContractError> {
+    if !(3..=15).contains(&board_size)
+        || board_size.is_multiple_of(2)
+        || premiums.len() != hex_cell_count(board_size)
+    {
+        return Err(ContractError("invalid hexagonal board geometry".into()));
     }
     Ok(())
 }
@@ -124,10 +182,51 @@ pub fn validate_tiles(tiles: &[TileDefinition]) -> Result<u32, ContractError> {
 }
 
 impl Ruleset {
+    /// Whether a storage-grid cell is part of this board.
+    pub fn contains(&self, row: u8, column: u8) -> bool {
+        match self.board_shape {
+            BoardShape::Square => row < self.board_size && column < self.board_size,
+            BoardShape::Hexagon => hex_contains(self.board_size, row, column),
+        }
+    }
+    /// Premium of an on-board cell (row-major over on-board cells).
+    pub fn premium_at(&self, row: u8, column: u8) -> Option<Premium> {
+        if !self.contains(row, column) {
+            return None;
+        }
+        let index = match self.board_shape {
+            BoardShape::Square => {
+                usize::from(row) * usize::from(self.board_size) + usize::from(column)
+            }
+            BoardShape::Hexagon => {
+                let before: usize = (0..row)
+                    .map(|r| {
+                        (0..self.board_size)
+                            .filter(|&c| self.contains(r, c))
+                            .count()
+                    })
+                    .sum();
+                before + (0..column).filter(|&c| self.contains(row, c)).count()
+            }
+        };
+        self.premiums.get(index).copied()
+    }
     pub fn validate(&self) -> Result<(), ContractError> {
         self.identity.validate()?;
         self.dictionary.validate()?;
-        validate_board(self.board_size, &self.premiums)?;
+        match self.board_shape {
+            BoardShape::Square => {
+                validate_board(self.board_size, &self.premiums)?;
+                if self.premium_policy != PremiumPolicy::default()
+                    || self.main_word_length != WordLengthMetric::default()
+                {
+                    return Err(ContractError(
+                        "premium policy and main-word length apply only to hexagonal boards".into(),
+                    ));
+                }
+            }
+            BoardShape::Hexagon => validate_hex_board(self.board_size, &self.premiums)?,
+        }
         if self.rack_size == 0
             || self.rack_size > 15
             || self.scoreless_turn_limit == 0
@@ -276,6 +375,9 @@ pub fn english_fixture() -> Ruleset {
         scoreless_turn_limit: 6,
         minimum_players: 2,
         maximum_players: 4,
+        board_shape: BoardShape::Square,
+        premium_policy: PremiumPolicy::AllWord,
+        main_word_length: WordLengthMetric::Tiles,
     }
 }
 
