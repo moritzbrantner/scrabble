@@ -32,7 +32,7 @@ Every application route renders one compact preferences chrome: the shared board
 - Opening or closing the dialog, and changing either visible preference, on the shared board or on a joined player controller of a real native match does not:
   - create a new WebTransport connection (connection count stays 1);
   - clear the tentative draft on the controller or the preview on the shared board;
-  - change the player's session storage (identity and credential) or connection status;
+  - change the player's session storage (identity and credential) or connection status. The transport `sequence` counter in the session entry is not identity: it advances while the draft preview is re-published, so it may only grow;
   - change the private rack, the authoritative phase/active turn, the ruleset or the dictionary.
 - Interface language changes labels and messages only. It never changes the word list, tile distribution or rules.
 - Blocked storage keeps the page usable and announces "Preferences could not be saved. They apply to this page." with `role="alert"`. Unsupported `lang` values and corrupt stored preferences fall back to English, and the gear is then named "Settings".
@@ -51,7 +51,7 @@ Axe reports no violations, without rule exclusions, with the dialog closed and o
 3. **Translated gear and dialog.** Checks German and Spanish names (gear, dialog, close), an English fallback for `lang=fr`, and a live language switch from the chrome while on the page.
 4. **Appearance changes the dialog.** The Light and Dark dialog colours differ. Light and dark screenshots are attached.
 5. **Blocked storage while open.** The storage alert is announced. If the dialog repeats the appearance selector, changing it there leaves an alert that is the topmost element at its centre.
-6. **Native match invariants.** Uses a real board and two phones (390×844, reduced motion) with a two-tile draft. The phone and shared board each open and close via the keyboard and the close button. They switch language and appearance from the visible chrome. Connection count, draft/preview, session storage, rack, phase, ruleset, dictionary and non-`lang` URL parameters all remain unchanged. The test checks that gameplay targets are not obstructed and runs axe with the dialog open and closed. Mobile and desktop screenshots are attached.
+6. **Native match invariants.** Uses a real board and two phones (390×844, reduced motion) with a two-tile draft. The phone and shared board each open and close via the keyboard and the close button. They switch language and appearance from the visible chrome. Connection count, draft/preview, session identity/credential (the `sequence` counter may only grow), rack, phase, ruleset, dictionary and non-`lang` URL parameters all remain unchanged. The test checks that gameplay targets are not obstructed and runs axe with the dialog open and closed. Mobile and desktop screenshots are attached.
 
 Screenshots are test attachments (`testInfo.attach`), not committed baselines.
 

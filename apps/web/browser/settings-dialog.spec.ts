@@ -358,12 +358,33 @@ async function countConnections(page: Page) {
   });
 }
 
+/**
+ * Session entries split into identity/credential and the transport `sequence` counter. The
+ * counter advances with time while a draft preview is re-published, so it may only grow.
+ */
 const sessionDump = (page: Page) =>
-  page.evaluate(() =>
-    Object.fromEntries(
-      Object.keys(sessionStorage).map((key) => [key, sessionStorage.getItem(key)]),
-    ),
-  );
+  page.evaluate(() => {
+    const identity: Record<string, unknown> = {};
+    const sequences: Record<string, number> = {};
+    for (const key of Object.keys(sessionStorage)) {
+      const raw = sessionStorage.getItem(key);
+      let value: unknown = raw;
+      try {
+        value = JSON.parse(raw ?? "null");
+      } catch {
+        // Non-JSON entries are compared verbatim.
+      }
+      if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+        const { sequence, ...rest } = value as Record<string, unknown>;
+        if (typeof sequence === "number") {
+          sequences[key] = sequence;
+        }
+        value = rest;
+      }
+      identity[key] = value;
+    }
+    return { identity, sequences };
+  });
 
 const unblocked = async (page: Page, target: Locator) => {
   await target.scrollIntoViewIfNeeded();
@@ -479,7 +500,12 @@ test("native match keeps draft, connection, identity and rack through settings a
     await expect(editor.locator(".tentative-square")).toHaveCount(2);
     await expect(page.locator(".tentative-tile")).toHaveCount(2);
     await expect(connected).toBeVisible();
-    expect(await sessionDump(active)).toEqual(sessionBefore);
+    const sessionAfter = await sessionDump(active);
+    expect(sessionAfter.identity).toEqual(sessionBefore.identity);
+    expect(Object.keys(sessionAfter.sequences)).toEqual(Object.keys(sessionBefore.sequences));
+    for (const [key, sequence] of Object.entries(sessionBefore.sequences)) {
+      expect(sessionAfter.sequences[key]).toBeGreaterThanOrEqual(sequence);
+    }
     expect(activeState()?.own_rack).toEqual(before?.own_rack);
     expect(activeState()?.public.phase).toEqual(before?.public.phase);
     expect(activeState()?.public.ruleset).toEqual(before?.public.ruleset);
