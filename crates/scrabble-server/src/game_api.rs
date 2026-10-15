@@ -194,7 +194,11 @@ async fn route(request: Request, games: &Games, board_origin: &str) -> Response 
         };
         Some((MatchId::new(id).ok()?, resource))
     });
-    if request.path != "/games" && request.path != "/profiles" && is_game.is_none() {
+    if request.path != "/games"
+        && request.path != "/profiles"
+        && request.path != "/profiles/hex"
+        && is_game.is_none()
+    {
         return Response::error(404, "not-found");
     }
     if request.method == "OPTIONS" {
@@ -203,9 +207,13 @@ async fn route(request: Request, games: &Games, board_origin: &str) -> Response 
             body: String::new(),
         };
     }
-    if request.path == "/profiles" {
+    if request.path == "/profiles" || request.path == "/profiles/hex" {
         return if request.method == "GET" {
-            match serde_json::to_string(&games.profiles()) {
+            match serde_json::to_string(&if request.path == "/profiles/hex" {
+                games.hex_profiles()
+            } else {
+                games.profiles()
+            }) {
                 Ok(body) => Response { status: 200, body },
                 Err(_) => operation_error(GameOperationError::Internal),
             }

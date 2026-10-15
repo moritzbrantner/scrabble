@@ -1,4 +1,5 @@
 //! Deterministic Scrabble domain and versioned wire contracts.
+pub mod analysis;
 pub mod commit;
 pub mod dictionary;
 pub mod identity;

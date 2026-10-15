@@ -8,7 +8,10 @@ use crate::{
 };
 use scrabble_game::{
     dictionary::WordList,
-    ruleset::{ContentIdentity, Premium, Ruleset, TileDefinition},
+    ruleset::{
+        BoardShape, ContentIdentity, Premium, PremiumPolicy, Ruleset, TileDefinition,
+        WordLengthMetric,
+    },
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, fs::File, io::Read, path::Path};
@@ -79,6 +82,12 @@ struct BoardSource {
     label: String,
     board_size: u8,
     premiums: Vec<Premium>,
+    #[serde(default)]
+    board_shape: BoardShape,
+    #[serde(default)]
+    premium_policy: PremiumPolicy,
+    #[serde(default)]
+    main_word_length: WordLengthMetric,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -191,7 +200,14 @@ impl ProfileCatalog {
                 .map(|r| {
                     Ok(Named {
                         label: r.label,
-                        profile: BoardProfile::new(r.identity, r.board_size, r.premiums)?,
+                        profile: BoardProfile::with_geometry(
+                            r.identity,
+                            r.board_size,
+                            r.premiums,
+                            r.board_shape,
+                            r.premium_policy,
+                            r.main_word_length,
+                        )?,
                     })
                 })
                 .collect::<ErrorResult<Vec<_>>>()?;
@@ -237,6 +253,36 @@ impl ProfileCatalog {
                     legacy.premiums.clone(),
                 )?,
             });
+            for (name, label, policy) in [
+                (
+                    "builtin-hex-all-word",
+                    "Hex all-word",
+                    PremiumPolicy::AllWord,
+                ),
+                (
+                    "builtin-hex-main-word",
+                    "Hex main-word-only",
+                    PremiumPolicy::MainWordOnly,
+                ),
+            ] {
+                let mut premiums = vec![Premium::Normal; 37];
+                // Row-major on-board cells of the radius-three board.
+                premiums[18] = Premium::DoubleWord;
+                boards.push(Named {
+                    label: label.into(),
+                    profile: BoardProfile::with_geometry(
+                        ContentIdentity {
+                            name: name.into(),
+                            revision: "1".into(),
+                        },
+                        7,
+                        premiums,
+                        BoardShape::Hexagon,
+                        policy,
+                        WordLengthMetric::Tiles,
+                    )?,
+                });
+            }
             let names = DefaultNames {
                 word_list: words.identity().name.clone(),
                 tile: tiles.identity().name.clone(),
@@ -295,7 +341,15 @@ impl ProfileCatalog {
         catalog.public = serde_json::json!({"version":1,
             "wordLists":catalog.words.iter().map(|r|serde_json::json!({"identity":r.profile.identity(),"label":r.label})).collect::<Vec<_>>(),
             "tileProfiles":catalog.tiles.iter().map(|r|serde_json::json!({"identity":r.profile.identity(),"label":r.label,"tiles":r.profile.tiles()})).collect::<Vec<_>>(),
-            "boardProfiles":catalog.boards.iter().map(|r|serde_json::json!({"identity":r.profile.identity(),"label":r.label,"boardSize":r.profile.size(),"premiums":r.profile.premiums()})).collect::<Vec<_>>(),
+            "boardProfiles":catalog.boards.iter().map(|r| {
+                let mut row = serde_json::json!({"identity":r.profile.identity(),"label":r.label,"boardSize":r.profile.size(),"premiums":r.profile.premiums()});
+                if r.profile.shape() == BoardShape::Hexagon {
+                    row["boardShape"] = serde_json::json!(r.profile.shape());
+                    row["premiumPolicy"] = serde_json::json!(r.profile.policy());
+                    row["mainWordLength"] = serde_json::json!(r.profile.metric());
+                }
+                row
+            }).collect::<Vec<_>>(),
             "defaults":{"selection":selection,"rules":MatchRules::from(legacy),"legacyCompatible":legacy_compatible}});
         if serde_json::to_vec(&catalog.public)?.len() > 128 * 1024 {
             return Err("public profile catalog exceeds 128 KiB".into());
@@ -303,6 +357,13 @@ impl ProfileCatalog {
         Ok(catalog)
     }
     pub fn public(&self) -> serde_json::Value {
+        let mut legacy = self.public.clone();
+        if let Some(rows) = legacy["boardProfiles"].as_array_mut() {
+            rows.retain(|row| row.get("boardShape").is_none());
+        }
+        legacy
+    }
+    pub fn public_hex(&self) -> serde_json::Value {
         self.public.clone()
     }
     pub fn resolve(

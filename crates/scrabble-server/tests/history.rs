@@ -291,6 +291,7 @@ fn largest_supported_public_history_stays_inside_native_snapshot_byte_limit() {
         .map(|index| PublicTurn {
             turn: TurnId::new(u64::MAX - index as u64),
             player_id: PlayerId::new(u64::MAX),
+            analysis: None,
             action: TurnAction::Commit {
                 words: vec![letter.to_string().repeat(15); 16],
                 move_score: u32::MAX,
@@ -515,6 +516,7 @@ fn largest_supported_private_checkpoint_stays_inside_native_byte_limit() {
         .map(|index| scrabble_game::protocol::PublicTurn {
             turn: TurnId::new(u64::MAX - index as u64),
             player_id: PlayerId::new(u64::MAX),
+            analysis: None,
             action: TurnAction::Commit {
                 words: vec!["\u{10400}".repeat(15); 16],
                 move_score: u32::MAX,

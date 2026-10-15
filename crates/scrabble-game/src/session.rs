@@ -206,6 +206,16 @@ impl GameSession {
                                 player_id: player,
                                 turn: *turn,
                                 tiles,
+                                evaluation: (self.state.ruleset().board_shape
+                                    == crate::ruleset::BoardShape::Hexagon)
+                                    .then(|| {
+                                        crate::analysis::evaluate(
+                                            &self.state,
+                                            player,
+                                            placements,
+                                            self.dictionary.as_ref(),
+                                        )
+                                    }),
                             })
                         };
                     }

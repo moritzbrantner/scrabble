@@ -202,6 +202,9 @@ impl MatchFactory {
     pub(crate) fn catalog(&self) -> serde_json::Value {
         self.catalog.public()
     }
+    pub fn hex_profile_catalog(&self) -> serde_json::Value {
+        self.catalog.public_hex()
+    }
     pub(crate) fn configured_id(
         &self,
         request_id: &str,

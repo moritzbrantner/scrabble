@@ -3,7 +3,10 @@ use crate::dictionary::{fingerprint_word_list, hexadecimal};
 use ring::digest;
 use scrabble_game::{
     dictionary::{Dictionary, WordList},
-    ruleset::{ContentIdentity, Premium, Ruleset, TileDefinition, validate_board, validate_tiles},
+    ruleset::{
+        BoardShape, ContentIdentity, Premium, PremiumPolicy, Ruleset, TileDefinition,
+        WordLengthMetric, validate_board, validate_hex_board, validate_tiles,
+    },
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -147,12 +150,15 @@ impl TileProfile {
     }
 }
 
-/// The existing square-board contract. Hex geometry is a separate #96 capability.
+/// Validated immutable board geometry and its scoring policies.
 pub struct BoardProfile {
     source: ContentIdentity,
     identity: ContentIdentity,
     board_size: u8,
     premiums: Vec<Premium>,
+    shape: BoardShape,
+    policy: PremiumPolicy,
+    metric: WordLengthMetric,
 }
 impl BoardProfile {
     pub fn new(
@@ -160,15 +166,54 @@ impl BoardProfile {
         board_size: u8,
         premiums: Vec<Premium>,
     ) -> Result<Self, ProfileError> {
-        validate_board(board_size, &premiums)
-            .map_err(|error| ProfileError::InvalidBoard(error.to_string()))?;
+        Self::with_geometry(
+            identity,
+            board_size,
+            premiums,
+            BoardShape::Square,
+            PremiumPolicy::AllWord,
+            WordLengthMetric::Tiles,
+        )
+    }
+    pub fn with_geometry(
+        identity: ContentIdentity,
+        board_size: u8,
+        premiums: Vec<Premium>,
+        shape: BoardShape,
+        policy: PremiumPolicy,
+        metric: WordLengthMetric,
+    ) -> Result<Self, ProfileError> {
+        match shape {
+            BoardShape::Square => {
+                if policy != PremiumPolicy::AllWord || metric != WordLengthMetric::Tiles {
+                    return Err(ProfileError::InvalidBoard(
+                        "hex policies require hex geometry".into(),
+                    ));
+                }
+                validate_board(board_size, &premiums)
+            }
+            BoardShape::Hexagon => validate_hex_board(board_size, &premiums),
+        }
+        .map_err(|error| ProfileError::InvalidBoard(error.to_string()))?;
         let source = identity;
-        let identity = content_identity(&source, "board-profile", &(board_size, &premiums))?;
+        // Preserve every established square profile fingerprint exactly.
+        let identity = if shape == BoardShape::Square {
+            content_identity(&source, "board-profile", &(board_size, &premiums))?
+        } else {
+            content_identity(
+                &source,
+                "board-profile",
+                &(shape, board_size, &premiums, policy, metric),
+            )?
+        };
         Ok(Self {
             source,
             identity,
             board_size,
             premiums,
+            shape,
+            policy,
+            metric,
         })
     }
     pub(crate) fn source(&self) -> &ContentIdentity {
@@ -179,6 +224,15 @@ impl BoardProfile {
     }
     pub(crate) fn premiums(&self) -> &[Premium] {
         &self.premiums
+    }
+    pub(crate) fn shape(&self) -> BoardShape {
+        self.shape
+    }
+    pub(crate) fn policy(&self) -> PremiumPolicy {
+        self.policy
+    }
+    pub(crate) fn metric(&self) -> WordLengthMetric {
+        self.metric
     }
     pub fn identity(&self) -> &ContentIdentity {
         &self.identity
@@ -258,9 +312,9 @@ pub fn compose_timed_profiles(
         scoreless_turn_limit: settings.scoreless_turn_limit,
         minimum_players: settings.minimum_players,
         maximum_players: settings.maximum_players,
-        board_shape: Default::default(),
-        premium_policy: Default::default(),
-        main_word_length: Default::default(),
+        board_shape: board.shape,
+        premium_policy: board.policy,
+        main_word_length: board.metric,
         time_control,
     };
     rules

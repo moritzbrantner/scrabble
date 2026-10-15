@@ -762,7 +762,18 @@ impl GameState {
             player_id: active_player,
             action,
             scores,
+            analysis: None,
         });
+        Ok(())
+    }
+    pub(crate) fn record_analysis(
+        &mut self,
+        analysis: crate::protocol::MoveAnalysis,
+    ) -> Result<(), StateError> {
+        self.history
+            .last_mut()
+            .ok_or(StateError::InvariantViolation)?
+            .analysis = Some(analysis);
         Ok(())
     }
     /// Private replay evidence. Never send these bytes through a browser snapshot connection.

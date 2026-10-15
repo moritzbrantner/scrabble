@@ -218,6 +218,9 @@ impl Games {
         .map_err(|_| GameOperationError::Internal)?;
         self.place_created(&id, request.requested_at).await
     }
+    pub fn hex_profiles(&self) -> serde_json::Value {
+        self.factory.hex_profile_catalog()
+    }
     pub fn profiles(&self) -> serde_json::Value {
         self.factory.catalog()
     }

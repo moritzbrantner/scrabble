@@ -202,10 +202,13 @@ impl ConfigurationStore {
             }
         };
         let tiles = TileProfile::new(manifest.sources.tile, manifest.rules.tiles.clone())?;
-        let board = BoardProfile::new(
+        let board = BoardProfile::with_geometry(
             manifest.sources.board,
             manifest.rules.board_size,
             manifest.rules.premiums.clone(),
+            manifest.rules.board_shape,
+            manifest.rules.premium_policy,
+            manifest.rules.main_word_length,
         )?;
         let composed = compose_timed_profiles(
             &words,
