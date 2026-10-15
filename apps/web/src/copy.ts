@@ -33,14 +33,20 @@ export const en = {
   "profiles.center": "Starting square",
   "profiles.bonusLegend": "Bonus squares",
   "profiles.wordListExplanation": "Only words from this list are accepted in a match.",
-  "profiles.tilesExplanation": "This profile determines which tiles exist, their counts and their point values.",
-  "profiles.boardExplanation": "The layout determines the playing area and where bonus squares appear.",
+  "profiles.tilesExplanation":
+    "This profile determines which tiles exist, their counts and their point values.",
+  "profiles.boardExplanation":
+    "The layout determines the playing area and where bonus squares appear.",
   "profiles.distributionExplanation": "Each tile shows its point value and number of copies.",
   "profiles.rack_sizeExplanation": "Each player can hold this many tiles on their rack.",
-  "profiles.bingo_bonusExplanation": "Using every tile from a full rack in one move awards these extra points.",
-  "profiles.exchange_minimum_bagExplanation": "Tiles can be exchanged only when at least this many remain in the bag.",
-  "profiles.scoreless_turn_limitExplanation": "The match ends after this many consecutive turns without scoring.",
-  "profiles.minimum_playersExplanation": "At least this many players must join before a match can start.",
+  "profiles.bingo_bonusExplanation":
+    "Using every tile from a full rack in one move awards these extra points.",
+  "profiles.exchange_minimum_bagExplanation":
+    "Tiles can be exchanged only when at least this many remain in the bag.",
+  "profiles.scoreless_turn_limitExplanation":
+    "The match ends after this many consecutive turns without scoring.",
+  "profiles.minimum_playersExplanation":
+    "At least this many players must join before a match can start.",
   "profiles.maximum_playersExplanation": "No more than this many players can join a match.",
   "settings.title": "Settings",
   "settings.language": "Interface language",
@@ -303,14 +309,21 @@ const de: Record<CopyKey, string> = {
   "profiles.center": "Startfeld",
   "profiles.bonusLegend": "Bonusfelder",
   "profiles.wordListExplanation": "Nur Wörter aus dieser Liste sind im Spiel erlaubt.",
-  "profiles.tilesExplanation": "Das Profil legt Buchstaben, Häufigkeit und Punktwerte der Steine fest.",
-  "profiles.boardExplanation": "Das Layout bestimmt die Spielfläche und die Position der Bonusfelder.",
-  "profiles.distributionExplanation": "Jeder Stein zeigt seinen Punktwert und die Anzahl der Exemplare.",
+  "profiles.tilesExplanation":
+    "Das Profil legt Buchstaben, Häufigkeit und Punktwerte der Steine fest.",
+  "profiles.boardExplanation":
+    "Das Layout bestimmt die Spielfläche und die Position der Bonusfelder.",
+  "profiles.distributionExplanation":
+    "Jeder Stein zeigt seinen Punktwert und die Anzahl der Exemplare.",
   "profiles.rack_sizeExplanation": "So viele Steine kann jeder Spieler auf seiner Ablage halten.",
-  "profiles.bingo_bonusExplanation": "Wer alle Steine einer vollen Ablage in einem Zug legt, erhält diese Zusatzpunkte.",
-  "profiles.exchange_minimum_bagExplanation": "Steine dürfen nur getauscht werden, wenn noch mindestens so viele im Beutel liegen.",
-  "profiles.scoreless_turn_limitExplanation": "Nach so vielen aufeinanderfolgenden Zügen ohne Punkte endet das Spiel.",
-  "profiles.minimum_playersExplanation": "Mindestens so viele Spieler müssen beitreten, bevor das Spiel starten kann.",
+  "profiles.bingo_bonusExplanation":
+    "Wer alle Steine einer vollen Ablage in einem Zug legt, erhält diese Zusatzpunkte.",
+  "profiles.exchange_minimum_bagExplanation":
+    "Steine dürfen nur getauscht werden, wenn noch mindestens so viele im Beutel liegen.",
+  "profiles.scoreless_turn_limitExplanation":
+    "Nach so vielen aufeinanderfolgenden Zügen ohne Punkte endet das Spiel.",
+  "profiles.minimum_playersExplanation":
+    "Mindestens so viele Spieler müssen beitreten, bevor das Spiel starten kann.",
   "profiles.maximum_playersExplanation": "Höchstens so viele Spieler dürfen am Spiel teilnehmen.",
   "settings.title": "Einstellungen",
   "settings.language": "Sprache der Oberfläche",
@@ -588,14 +601,20 @@ const es: Record<CopyKey, string> = {
   "profiles.center": "Casilla inicial",
   "profiles.bonusLegend": "Casillas de bonificación",
   "profiles.wordListExplanation": "Solo se aceptan palabras incluidas en esta lista.",
-  "profiles.tilesExplanation": "El perfil determina las fichas disponibles, sus cantidades y sus puntos.",
-  "profiles.boardExplanation": "El diseño determina el área de juego y la ubicación de las bonificaciones.",
+  "profiles.tilesExplanation":
+    "El perfil determina las fichas disponibles, sus cantidades y sus puntos.",
+  "profiles.boardExplanation":
+    "El diseño determina el área de juego y la ubicación de las bonificaciones.",
   "profiles.distributionExplanation": "Cada ficha muestra sus puntos y el número de copias.",
   "profiles.rack_sizeExplanation": "Cada jugador puede tener esta cantidad de fichas en su atril.",
-  "profiles.bingo_bonusExplanation": "Usar todas las fichas de un atril completo en una jugada otorga estos puntos extra.",
-  "profiles.exchange_minimum_bagExplanation": "Solo se pueden cambiar fichas si quedan al menos tantas en la bolsa.",
-  "profiles.scoreless_turn_limitExplanation": "La partida termina después de esta cantidad de turnos consecutivos sin puntos.",
-  "profiles.minimum_playersExplanation": "Deben unirse al menos tantos jugadores antes de comenzar la partida.",
+  "profiles.bingo_bonusExplanation":
+    "Usar todas las fichas de un atril completo en una jugada otorga estos puntos extra.",
+  "profiles.exchange_minimum_bagExplanation":
+    "Solo se pueden cambiar fichas si quedan al menos tantas en la bolsa.",
+  "profiles.scoreless_turn_limitExplanation":
+    "La partida termina después de esta cantidad de turnos consecutivos sin puntos.",
+  "profiles.minimum_playersExplanation":
+    "Deben unirse al menos tantos jugadores antes de comenzar la partida.",
   "profiles.maximum_playersExplanation": "No pueden unirse más jugadores que esta cantidad.",
   "settings.title": "Ajustes",
   "settings.language": "Idioma de la interfaz",
