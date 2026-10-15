@@ -360,6 +360,48 @@ fn words_extend_along_each_of_the_three_hex_axes() {
     }
 }
 
+/// Atlas 1.43: down-left reads from top-right to bottom-left, never whichever spelling
+/// happens to be in the dictionary. Non-palindromic input pins the owner decision.
+#[test]
+fn diagonal_reads_top_to_bottom_and_never_substitutes_the_reverse_word() {
+    let cells = [(2, 4, 'B'), (3, 3, 'A'), (4, 2, 'A')];
+    for policy in [PremiumPolicy::AllWord, PremiumPolicy::MainWordOnly] {
+        for reverse_input in [false, true] {
+            let mut state = game(hex_rules(policy, &[]), (2, 1), (0, 0));
+            let mut placements = tiles(&state, 1, &cells);
+            if reverse_input {
+                placements.reverse();
+            }
+            let before = state.canonical_bytes().unwrap();
+            // A valid reverse spelling cannot rescue the invalid actual top-to-bottom word.
+            assert_eq!(
+                commit::apply_with_dictionary(
+                    &mut state,
+                    PlayerId::new(1),
+                    &placements,
+                    &dictionary(&["AAB"]),
+                ),
+                Err(CommitError::Dictionary(DictionaryError::InvalidWords {
+                    words: vec!["BAA".into()],
+                })),
+            );
+            assert_eq!(state.canonical_bytes().unwrap(), before);
+            let result = commit::apply_with_dictionary(
+                &mut state,
+                PlayerId::new(1),
+                &placements,
+                &dictionary(&["BAA"]),
+            )
+            .unwrap();
+            assert_eq!(result.main_word().text(), "BAA");
+            assert_eq!(result.main_word().direction(), Direction::Diagonal);
+            assert_eq!(result.total(), B_VALUE + 2 * A_VALUE);
+            assert_eq!(last_commit_words(&state), ["BAA"]);
+            state.verify_tile_conservation().unwrap();
+        }
+    }
+}
+
 #[test]
 fn bent_square_diagonal_gapped_and_disconnected_placements_are_rejected() {
     let mut state = game(hex_rules(PremiumPolicy::AllWord, &[]), (3, 0), (2, 0));
