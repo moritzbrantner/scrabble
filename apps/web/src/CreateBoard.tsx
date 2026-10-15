@@ -15,6 +15,8 @@ import { reportMoenarchMatch } from "./moenarch-launch";
 import { useCopy } from "./preferences";
 import { fetchProfiles } from "./profile-catalog";
 import { matchSettings, type MatchSettings, type ProfileCatalog } from "./profile-model";
+import { faceText } from "./public-state";
+import { faceClass } from "./tile-face";
 
 const numericFields = [
   "rack_size",
@@ -286,11 +288,11 @@ export function CreateBoard({
                   <p className="setting-note">{t("profiles.distributionExplanation")}</p>
                   <ul className="tile-preview-list">
                     {selectedTiles.tiles.map((tile) => {
-                      const face = tile.face.kind === "letter" ? tile.face.letter : "□";
+                      const face = faceText(tile.face);
                       return (
                         <li key={face}>
                           <span className="tile-preview-square">
-                            <strong>{face}</strong>
+                            <strong className={faceClass(face)}>{face}</strong>
                             <small>{number(tile.value)}</small>
                           </span>
                           <span className="tile-preview-count">×{number(tile.count)}</span>

@@ -15,7 +15,8 @@ import {
 } from "./move-draft";
 import { PlayerRack } from "./PlayerRack";
 import { useCopy } from "./preferences";
-import { type PlayerSnapshot, type Ruleset } from "./public-state";
+import { faceText, type PlayerSnapshot, type Ruleset } from "./public-state";
+import { faceClass } from "./tile-face";
 
 type EditorState = {
   draft: MoveDraft;
@@ -343,7 +344,7 @@ export function MoveEditor({
               const letter =
                 fixed?.letter ??
                 draft?.blank_as ??
-                (rackTile?.face.kind === "letter" ? rackTile.face.letter : undefined);
+                (rackTile === undefined ? undefined : (faceText(rackTile.face) ?? undefined));
               const premium = rules.premiums[row * rules.board_size + column] ?? "normal";
               const center =
                 row === Math.floor(rules.board_size / 2) &&
@@ -388,7 +389,7 @@ export function MoveEditor({
                     {String.fromCharCode(65 + column)}
                     {row + 1}
                   </small>
-                  <span aria-hidden="true">
+                  <span aria-hidden="true" className={letter && faceClass(letter)}>
                     {letter ?? (center ? "★" : t(`premiumShort.${premium}`) || "·")}
                   </span>
                 </Button>
