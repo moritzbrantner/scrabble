@@ -37,7 +37,7 @@ fn draft(session: &GameSession, column: u8) -> Command {
             coordinate: Coordinate::new(7, column).unwrap(),
             blank_as: match tile.face() {
                 TileFace::Blank {} => Some('A'),
-                TileFace::Letter { .. } => None,
+                TileFace::Letter { .. } | TileFace::Letters { .. } => None,
             },
         }],
     }

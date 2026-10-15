@@ -76,10 +76,9 @@ pub(crate) fn load_prepared(
     let alphabet: BTreeSet<_> = rules
         .tiles
         .iter()
-        .filter_map(|tile| match tile.face {
-            scrabble_game::ruleset::TileFace::Letter { letter } => Some(letter),
-            scrabble_game::ruleset::TileFace::Blank {} => None,
-        })
+        // Every letter of every non-blank face, including multi-letter faces (#116).
+        .filter_map(|tile| tile.face.spelled())
+        .flat_map(|face| face.chars().collect::<Vec<_>>())
         .collect();
     if !words
         .words()

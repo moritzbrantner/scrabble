@@ -43,28 +43,30 @@ impl Direction {
         }
     }
 }
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WordTile {
     coordinate: Coordinate,
-    letter: char,
+    /// The tile's whole spelled face; a multi-letter tile contributes all its letters.
+    letter: String,
     value: u16,
     is_blank: bool,
     is_new: bool,
 }
 impl WordTile {
-    pub const fn coordinate(self) -> Coordinate {
+    pub const fn coordinate(&self) -> Coordinate {
         self.coordinate
     }
-    pub const fn letter(self) -> char {
-        self.letter
+    /// The whole spelled face of this cell; never truncated to one character.
+    pub fn letter(&self) -> &str {
+        &self.letter
     }
-    pub const fn value(self) -> u16 {
+    pub const fn value(&self) -> u16 {
         self.value
     }
-    pub const fn is_blank(self) -> bool {
+    pub const fn is_blank(&self) -> bool {
         self.is_blank
     }
-    pub const fn is_new(self) -> bool {
+    pub const fn is_new(&self) -> bool {
         self.is_new
     }
 }
@@ -81,7 +83,7 @@ impl Word {
         &self.tiles
     }
     pub fn text(&self) -> String {
-        self.tiles.iter().map(|tile| tile.letter).collect()
+        self.tiles.iter().map(|tile| tile.letter.as_str()).collect()
     }
 }
 /// Borrows the validated state, so a caller cannot mutate the board while using its derived words.
@@ -170,10 +172,10 @@ pub fn validate<'a>(
             return None;
         }
         let coordinate = Coordinate::new(row, column).ok()?;
-        proposed.get(&(row, column)).copied().or_else(|| {
+        proposed.get(&(row, column)).cloned().or_else(|| {
             state.board_tile(coordinate).map(|tile| WordTile {
                 coordinate,
-                letter: tile.letter(),
+                letter: tile.letter().to_owned(),
                 value: tile.tile().value(),
                 is_blank: tile.is_blank(),
                 is_new: false,

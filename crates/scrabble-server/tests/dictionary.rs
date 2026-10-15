@@ -91,7 +91,7 @@ fn deployment_word_list_is_immutable_content_identified_and_used_during_replay_a
         own.public
             .board
             .iter()
-            .map(|tile| tile.letter)
+            .map(|tile| tile.letter.as_str())
             .collect::<String>(),
         "TA"
     );

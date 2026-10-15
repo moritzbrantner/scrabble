@@ -290,7 +290,7 @@ fn draft(snapshot: &PlayerSnapshot) -> Command {
             tile_id: tile.id,
             coordinate: Coordinate::new(7, 7).unwrap(),
             blank_as: match tile.face {
-                TileFace::Letter { .. } => None,
+                TileFace::Letter { .. } | TileFace::Letters { .. } => None,
                 TileFace::Blank {} => Some('A'),
             },
         }],
@@ -971,7 +971,7 @@ fn committed_turn_converges_privately_and_replays_with_exactly_once_scoring() {
                         coordinate: Coordinate::new(6, 7).unwrap(),
                         blank_as: match tile.face {
                             TileFace::Blank {} => Some('A'),
-                            TileFace::Letter { .. } => None,
+                            TileFace::Letter { .. } | TileFace::Letters { .. } => None,
                         },
                     }],
                 },

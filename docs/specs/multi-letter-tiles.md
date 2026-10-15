@@ -113,6 +113,8 @@ the history all follow that selection.
   `WordTile::letter`) must not silently truncate a multi-letter face. The
   exact replacement accessor is a routine implementation choice, and the
   tests only use the snapshot DTOs, `Word::text()` and `Tile::face()`.
+  The implementation returns the whole face as `&str` from both accessors
+  and adds `TileFace::spelled()` for the letters of a non-blank face.
 
 ## Server composition (Decision 1.25)
 
@@ -123,7 +125,7 @@ truncated. The word-list/tile-profile compatibility check in
 treat **every letter of every non-blank face** as supported. With only CH, A
 and T tiles, a word list with `CHAT` is compatible. A word list with a letter
 that appears on no face is rejected with `UnsupportedLetters`, which names the
-missing letters. Whether a word must also be *spellable* by a face
+missing letters. Whether a word must also be _spellable_ by a face
 segmentation is an open question (see below). This contract does not decide it.
 
 ## Acceptance mapping (#116)
@@ -132,20 +134,20 @@ Native acceptance lives in
 `crates/scrabble-game/tests/multi_letter_tiles.rs` (public engine API only) and
 `crates/scrabble-server/tests/multi_letter_profiles.rs`:
 
-| #116 acceptance item | Test |
-| --- | --- |
-| CH + A + T spells CHAT across three cells | `ch_a_t_spells_chat_across_three_cells` |
-| a cross word through a multi-letter tile | `cross_words_through_a_multi_letter_tile_score_its_value_once_with_premiums` |
-| dictionary acceptance and rejection on the spelled word | `dictionary_validates_the_fully_spelled_words` |
-| the tile scored once, with premiums | the two tests above, plus `final_rack_deductions_count_each_tile_value_once` |
-| rack counts and bingo based on physical tiles | `racks_refills_and_bingo_count_physical_tiles`, `exchange_counts_physical_bag_tiles` |
-| invalid face configurations rejected | `invalid_multi_letter_face_configurations_are_rejected` |
-| blanks stay single-letter | `blanks_keep_single_letter_assignments` |
-| hex `letters` vs `tiles` main-word selection | `hex_main_word_length_counts_cells_or_spelled_letters` |
-| canonical serialization and replay | `multi_letter_matches_serialize_reconstruct_and_replay_canonically` |
-| single-letter byte-identity pins | `single_letter_rulesets_states_and_snapshots_stay_byte_identical` |
-| profile composition / compatibility | server: `tile_profiles_keep_multi_letter_faces_and_check_word_lists_by_face_letters`, `deployment_loader_accepts_words_spelled_with_multi_letter_faces` |
-| bounds within transport/replay limits | server: `largest_multi_letter_public_snapshot_and_checkpoint_stay_inside_native_limit` |
+| #116 acceptance item                                    | Test                                                                                                                                                    |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CH + A + T spells CHAT across three cells               | `ch_a_t_spells_chat_across_three_cells`                                                                                                                 |
+| a cross word through a multi-letter tile                | `cross_words_through_a_multi_letter_tile_score_its_value_once_with_premiums`                                                                            |
+| dictionary acceptance and rejection on the spelled word | `dictionary_validates_the_fully_spelled_words`                                                                                                          |
+| the tile scored once, with premiums                     | the two tests above, plus `final_rack_deductions_count_each_tile_value_once`                                                                            |
+| rack counts and bingo based on physical tiles           | `racks_refills_and_bingo_count_physical_tiles`, `exchange_counts_physical_bag_tiles`                                                                    |
+| invalid face configurations rejected                    | `invalid_multi_letter_face_configurations_are_rejected`                                                                                                 |
+| blanks stay single-letter                               | `blanks_keep_single_letter_assignments`                                                                                                                 |
+| hex `letters` vs `tiles` main-word selection            | `hex_main_word_length_counts_cells_or_spelled_letters`                                                                                                  |
+| canonical serialization and replay                      | `multi_letter_matches_serialize_reconstruct_and_replay_canonically`                                                                                     |
+| single-letter byte-identity pins                        | `single_letter_rulesets_states_and_snapshots_stay_byte_identical`                                                                                       |
+| profile composition / compatibility                     | server: `tile_profiles_keep_multi_letter_faces_and_check_word_lists_by_face_letters`, `deployment_loader_accepts_words_spelled_with_multi_letter_faces` |
+| bounds within transport/replay limits                   | server: `largest_multi_letter_public_snapshot_and_checkpoint_stay_inside_native_limit`                                                                  |
 
 The full `bun run check` remains the completion gate.
 

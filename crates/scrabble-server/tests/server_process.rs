@@ -1023,9 +1023,10 @@ fn nonlegacy_pair(snapshot: &PlayerSnapshot) -> Vec<scrabble_game::protocol::Pla
     let spelling = |tiles: &[&scrabble_game::protocol::RackTile]| -> String {
         tiles
             .iter()
-            .map(|tile| match tile.face {
-                TileFace::Letter { letter } => letter,
-                TileFace::Blank {} => 'A',
+            .map(|tile| match &tile.face {
+                TileFace::Letter { letter } => letter.to_string(),
+                TileFace::Letters { letters } => letters.clone(),
+                TileFace::Blank {} => "A".to_owned(),
             })
             .collect()
     };
