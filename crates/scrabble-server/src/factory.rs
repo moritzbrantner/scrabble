@@ -231,9 +231,10 @@ impl MatchFactory {
         &self,
         selection: &crate::profile_catalog::Selection,
         rules: crate::profiles::MatchRules,
+        time_control: Option<scrabble_game::ruleset::TimeControl>,
     ) -> Result<crate::profile_catalog::PreparedConfiguration, crate::profile_catalog::SelectionError>
     {
-        self.catalog.resolve(selection, rules)
+        self.catalog.resolve_timed(selection, rules, time_control)
     }
     pub(crate) fn initialize(
         &self,

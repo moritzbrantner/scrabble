@@ -280,6 +280,14 @@ impl ProfileCatalog {
         selection: &Selection,
         rules: MatchRules,
     ) -> Result<PreparedConfiguration, SelectionError> {
+        self.resolve_timed(selection, rules, None)
+    }
+    pub fn resolve_timed(
+        &self,
+        selection: &Selection,
+        rules: MatchRules,
+        time_control: Option<scrabble_game::ruleset::TimeControl>,
+    ) -> Result<PreparedConfiguration, SelectionError> {
         let words = &self
             .words
             .iter()
@@ -299,14 +307,13 @@ impl ProfileCatalog {
             .ok_or(SelectionError::Unknown("board"))?
             .profile;
         let composed =
-            crate::profiles::compose_profiles(words, tiles, board, rules).map_err(|error| {
-                match error {
+            crate::profiles::compose_timed_profiles(words, tiles, board, rules, time_control)
+                .map_err(|error| match error {
                     ProfileError::UnsupportedLetters { letters } => {
                         SelectionError::Incompatible(letters)
                     }
                     _ => SelectionError::InvalidRules,
-                }
-            })?;
+                })?;
         let (word_content, word_hash) = words.content();
         Ok(PreparedConfiguration {
             composed,

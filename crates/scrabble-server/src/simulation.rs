@@ -5,7 +5,7 @@ use scrabble_game::{
     protocol::{Command, CommandEnvelope, Phase, PlayerSnapshot, PrivateRack, PublicHost},
     ruleset::Ruleset,
     session::{CommandError, GameSession},
-    state::{GameState, StateError},
+    state::{ClockError, GameState, StateError},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
@@ -65,7 +65,26 @@ pub fn retirement_due(payload: &[u8], now: u64, tick: u64) -> Result<bool, serde
         .is_some_and(|lifecycle| lifecycle.can_retire(now, tick)))
 }
 
+/// Authoritative match time: the deterministic simulation tick, never the wall clock.
+/// Ticks only advance while the server runs, so outages are never charged (Decision 3.7).
+pub fn match_time_ms(tick: u64) -> Result<u64, SimulationError> {
+    tick.checked_mul(1000 / u64::from(SCRABBLE_TICK_HZ))
+        .ok_or_else(|| SimulationError::new("match time exhausted"))
+}
+
 fn command_error(error_value: CommandError, envelope: &CommandEnvelope) -> SimulationError {
+    if matches!(
+        error_value,
+        CommandError::State(StateError::Clock(ClockError::Expired))
+    ) {
+        let payload = serde_json::to_vec(
+            &serde_json::json!({"version":1,"game_id":envelope.game_id,"expected_turn":envelope.expected_turn,"error":{"kind":"clock_expired"}}),
+        );
+        return match payload {
+            Ok(payload) => SimulationError::command_rejected(payload).unwrap_or_else(error),
+            Err(failure) => error(failure),
+        };
+    }
     if matches!(
         error_value,
         CommandError::State(StateError::ExchangeUnavailable)
@@ -108,6 +127,36 @@ fn error(error: impl std::fmt::Display) -> SimulationError {
 }
 
 impl ScrabbleSimulation {
+    /// Applies automatic pass once when the active clock has expired at this tick.
+    /// A blocked forfeit (#99) leaves the match unchanged and never fails the tick.
+    fn apply_clock_expiry(&mut self) -> Result<(), SimulationError> {
+        let Phase::Playing { turn, .. } = self.session.state().phase() else {
+            return Ok(());
+        };
+        let turn = *turn;
+        let Some(expires_at) = self.session.state().clock_expires_at() else {
+            return Ok(());
+        };
+        let now_ms = match_time_ms(self.tick)?;
+        if now_ms < expires_at {
+            return Ok(());
+        }
+        match self.session.timeout_at(turn, now_ms) {
+            Ok(()) => {}
+            Err(CommandError::State(StateError::Clock(ClockError::ForfeitUnavailable))) => {
+                return Ok(());
+            }
+            Err(failure) => return Err(error(failure)),
+        }
+        if matches!(self.session.state().phase(), Phase::Finished { .. })
+            && let Some(lifecycle) = &mut self.lifecycle
+            && lifecycle.finished_at_tick.is_none()
+        {
+            lifecycle.finished_at_tick = Some(self.tick);
+        }
+        Ok(())
+    }
+
     pub fn new(game_id: GameId, ruleset: Ruleset, seed: [u8; 32]) -> Result<Self, StateError> {
         Self::with_dictionary(game_id, ruleset, seed, authored_fixture())
     }
@@ -275,6 +324,7 @@ impl GameSimulation for ScrabbleSimulation {
             ));
         }
         let envelope = CommandEnvelope::decode(payload).map_err(error)?;
+        let now_ms = match_time_ms(self.tick)?;
         if let Some(board) = &mut self.board {
             match &envelope.command {
                 Command::ClaimBoard { request_id } => {
@@ -304,17 +354,17 @@ impl GameSimulation for ScrabbleSimulation {
                         ));
                     }
                     self.session
-                        .start_by_authorized_board(player, sequence, &envelope)
+                        .start_by_authorized_board_at(player, sequence, &envelope, now_ms)
                         .map_err(error)?;
                 }
                 _ => self
                     .session
-                    .apply(player, sequence, &envelope)
+                    .apply_at(player, sequence, &envelope, now_ms)
                     .map_err(|failure| command_error(failure, &envelope))?,
             }
         } else {
             self.session
-                .apply(player, sequence, &envelope)
+                .apply_at(player, sequence, &envelope, now_ms)
                 .map_err(|failure| command_error(failure, &envelope))?;
         }
         self.preview_deadline = match &envelope.command {
@@ -343,7 +393,7 @@ impl GameSimulation for ScrabbleSimulation {
             self.session.clear_preview_for(player);
             self.preview_deadline = None;
         }
-        Ok(())
+        self.apply_clock_expiry()
     }
 
     fn snapshot_scope(&self) -> SnapshotScope {

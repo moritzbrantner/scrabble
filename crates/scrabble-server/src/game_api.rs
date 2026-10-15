@@ -234,6 +234,11 @@ async fn route(request: Request, games: &Games, board_origin: &str) -> Response 
                     Ok(join) => join_response(Ok(join)),
                     Err(ConfiguredError::Game(error)) => operation_error(error),
                     Err(ConfiguredError::Conflict) => Response::error(409, "creation-conflict"),
+                    Err(ConfiguredError::TimeControl(reason)) => Response {
+                        status: 400,
+                        body: serde_json::json!({"error":"invalid-time-control","reason":reason})
+                            .to_string(),
+                    },
                     Err(ConfiguredError::Selection(error)) => {
                         let body = match error {
                             crate::profile_catalog::SelectionError::Unknown(profile) => {

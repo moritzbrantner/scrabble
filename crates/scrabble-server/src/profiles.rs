@@ -219,6 +219,18 @@ pub fn compose_profiles(
     board: &BoardProfile,
     settings: MatchRules,
 ) -> Result<ComposedRuleset, ProfileError> {
+    compose_timed_profiles(word_list, tile, board, settings, None)
+}
+
+/// `compose_profiles` with an optional, immutable match time control (#114). The time
+/// control is part of the effective ruleset and therefore of its composed identity.
+pub fn compose_timed_profiles(
+    word_list: &WordListProfile,
+    tile: &TileProfile,
+    board: &BoardProfile,
+    settings: MatchRules,
+    time_control: Option<scrabble_game::ruleset::TimeControl>,
+) -> Result<ComposedRuleset, ProfileError> {
     let unsupported: Vec<_> = word_list
         .alphabet
         .difference(&tile.alphabet)
@@ -252,7 +264,7 @@ pub fn compose_profiles(
         board_shape: Default::default(),
         premium_policy: Default::default(),
         main_word_length: Default::default(),
-        time_control: None,
+        time_control,
     };
     rules
         .validate()
