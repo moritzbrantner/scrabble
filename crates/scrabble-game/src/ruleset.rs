@@ -10,11 +10,35 @@ pub struct ContentIdentity {
     pub revision: String,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+/// Maximum UTF-8 size of a multi-letter face: the largest single-letter face, so every
+/// per-cell string stays inside the existing snapshot and replay budget (#116).
+pub const MAX_FACE_BYTES: usize = 4;
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum TileFace {
-    Letter { letter: char },
+    Letter {
+        letter: char,
+    },
+    /// One physical tile spelling several letters, such as CH or SCH (Decision 1.21).
+    Letters {
+        letters: String,
+    },
     Blank {},
+}
+impl TileFace {
+    /// The letters this face spells, or `None` for a blank.
+    pub fn spelled(&self) -> Option<String> {
+        match self {
+            Self::Letter { letter } => Some(letter.to_string()),
+            Self::Letters { letters } => Some(letters.clone()),
+            Self::Blank {} => None,
+        }
+    }
+}
+
+fn valid_face_letter(letter: char) -> bool {
+    letter.is_alphabetic() && !letter.is_lowercase()
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -218,6 +242,7 @@ pub fn validate_tiles(tiles: &[TileDefinition]) -> Result<u32, ContractError> {
         ));
     }
     let mut letters = BTreeSet::new();
+    let mut faces = BTreeSet::new();
     let mut blank = false;
     let mut total = 0_u32;
     for tile in tiles {
@@ -225,10 +250,21 @@ pub fn validate_tiles(tiles: &[TileDefinition]) -> Result<u32, ContractError> {
             return Err(ContractError("empty tile definition".into()));
         }
         total += u32::from(tile.count);
-        match tile.face {
+        match &tile.face {
             TileFace::Letter { letter } => {
-                if !letter.is_alphabetic() || !letters.insert(letter) {
+                if !letter.is_alphabetic() || !letters.insert(*letter) {
                     return Err(ContractError("invalid or duplicate alphabet letter".into()));
+                }
+            }
+            TileFace::Letters { letters: face } => {
+                if face.chars().count() < 2
+                    || face.len() > MAX_FACE_BYTES
+                    || !face.chars().all(valid_face_letter)
+                    || !faces.insert(face.as_str())
+                {
+                    return Err(ContractError(
+                        "invalid or duplicate multi-letter tile face".into(),
+                    ));
                 }
             }
             TileFace::Blank {} => {

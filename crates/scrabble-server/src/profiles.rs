@@ -3,9 +3,7 @@ use crate::dictionary::{fingerprint_word_list, hexadecimal};
 use ring::digest;
 use scrabble_game::{
     dictionary::{Dictionary, WordList},
-    ruleset::{
-        ContentIdentity, Premium, Ruleset, TileDefinition, TileFace, validate_board, validate_tiles,
-    },
+    ruleset::{ContentIdentity, Premium, Ruleset, TileDefinition, validate_board, validate_tiles},
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -127,10 +125,9 @@ impl TileProfile {
         let identity = content_identity(&source, "tile-profile", &tiles)?;
         let alphabet = tiles
             .iter()
-            .filter_map(|tile| match tile.face {
-                TileFace::Letter { letter } => Some(letter),
-                TileFace::Blank {} => None,
-            })
+            // Every letter of every non-blank face, including multi-letter faces (#116).
+            .filter_map(|tile| tile.face.spelled())
+            .flat_map(|face| face.chars().collect::<Vec<_>>())
             .collect();
         Ok(Self {
             source,

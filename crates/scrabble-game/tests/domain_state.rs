@@ -20,7 +20,7 @@ fn placements(game: &GameState, player: PlayerId, row: u8) -> Vec<Placement> {
             coordinate: Coordinate::new(row, column as u8).unwrap(),
             blank_as: match tile.face() {
                 TileFace::Blank {} => Some('A'),
-                TileFace::Letter { .. } => None,
+                TileFace::Letter { .. } | TileFace::Letters { .. } => None,
             },
         })
         .collect()
@@ -153,7 +153,7 @@ fn blanks_keep_zero_value_and_require_an_alphabet_assignment() {
     state.place_tiles(player, &[placement]).unwrap();
     let committed = state.board_tile(Coordinate::new(7, 7).unwrap()).unwrap();
     assert!(committed.is_blank());
-    assert_eq!(committed.letter(), 'A');
+    assert_eq!(committed.letter(), "A");
     assert_eq!(committed.tile().value(), 0);
     assert!(state.verify_tile_conservation().is_ok());
 }

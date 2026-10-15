@@ -138,7 +138,7 @@ fn blanks_words_exchange_pass_completion_and_reconnect_reproduce_one_authoritati
         opening
             .board
             .iter()
-            .any(|tile| tile.is_blank && tile.letter == 'T')
+            .any(|tile| tile.is_blank && tile.letter == "T")
     );
     assert!(runtime.disconnect(2, 1));
     let resumed = runtime
@@ -274,7 +274,7 @@ fn largest_supported_public_history_stays_inside_native_snapshot_byte_limit() {
     snapshot.public.board = (0..225)
         .map(|index| BoardTile {
             coordinate: Coordinate::new(index / 15, index % 15).unwrap(),
-            letter,
+            letter: letter.to_string(),
             is_blank: true,
         })
         .collect();

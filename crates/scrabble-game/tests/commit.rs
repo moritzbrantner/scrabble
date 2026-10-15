@@ -363,7 +363,7 @@ fn non_active_owned_commit_cannot_change_the_playable_turn() {
             coordinate: Coordinate::new(7, 7 + index as u8).unwrap(),
             blank_as: match tile.face() {
                 TileFace::Blank {} => Some('A'),
-                TileFace::Letter { .. } => None,
+                TileFace::Letter { .. } | TileFace::Letters { .. } => None,
             },
         })
         .collect();

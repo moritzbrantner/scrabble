@@ -164,7 +164,7 @@ fn unicode_ruleset_scores_blanks_and_replays_only_under_the_original_immutable_c
             .public
             .board
             .iter()
-            .map(|tile| tile.letter)
+            .map(|tile| tile.letter.as_str())
             .collect::<String>(),
         "ÖL"
     );

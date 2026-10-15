@@ -97,8 +97,8 @@ impl Tile {
     pub const fn id(&self) -> TileId {
         self.id
     }
-    pub const fn face(&self) -> TileFace {
-        self.face
+    pub fn face(&self) -> TileFace {
+        self.face.clone()
     }
     pub const fn value(&self) -> u16 {
         self.value
@@ -107,14 +107,16 @@ impl Tile {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct CommittedTile {
     tile: Tile,
-    letter: char,
+    /// The spelled face: one letter, a blank's assignment, or a whole multi-letter face.
+    letter: String,
 }
 impl CommittedTile {
     pub fn tile(&self) -> &Tile {
         &self.tile
     }
-    pub const fn letter(&self) -> char {
-        self.letter
+    /// The whole spelled face of this cell; never truncated to one character.
+    pub fn letter(&self) -> &str {
+        &self.letter
     }
     pub const fn is_blank(&self) -> bool {
         matches!(self.tile.face, TileFace::Blank {})
@@ -164,7 +166,7 @@ fn make_tiles(rules: &Ruleset) -> Vec<Tile> {
         for _ in 0..definition.count {
             result.push(Tile {
                 id: TileId::new(result.len() as u64),
-                face: definition.face,
+                face: definition.face.clone(),
                 value: definition.value,
             });
         }
@@ -573,7 +575,7 @@ impl GameState {
             if let Some((_, index, letter)) = transfers.iter().find(|(id, _, _)| *id == tile.id) {
                 self.board[*index] = Some(CommittedTile {
                     tile,
-                    letter: *letter,
+                    letter: letter.clone(),
                 });
             } else {
                 remaining.push(tile);
@@ -587,7 +589,7 @@ impl GameState {
         &self,
         player: PlayerId,
         placements: &[Placement],
-    ) -> Result<Vec<(TileId, usize, char)>, StateError> {
+    ) -> Result<Vec<(TileId, usize, String)>, StateError> {
         let player_index = self
             .players
             .iter()
@@ -612,8 +614,10 @@ impl GameState {
                 .iter()
                 .find(|tile| tile.id == placement.tile_id)
                 .ok_or(StateError::TileNotOwned)?;
-            let letter = match (tile.face, placement.blank_as) {
-                (TileFace::Letter { letter }, None) => letter,
+            let letter = match (&tile.face, placement.blank_as) {
+                (TileFace::Letter { letter }, None) => letter.to_string(),
+                (TileFace::Letters { letters }, None) => letters.clone(),
+                // Blanks stay single-letter: only letters with their own `Letter` face (#116).
                 (TileFace::Blank {}, Some(letter))
                     if self
                         .ruleset
@@ -621,7 +625,7 @@ impl GameState {
                         .iter()
                         .any(|definition| definition.face == TileFace::Letter { letter }) =>
                 {
-                    letter
+                    letter.to_string()
                 }
                 _ => return Err(StateError::InvalidBlankAssignment),
             };
@@ -801,7 +805,7 @@ impl GameState {
             .filter_map(|(index, entry)| {
                 entry.as_ref().map(|tile| BoardTile {
                     coordinate: board_coordinate(index, size),
-                    letter: tile.letter,
+                    letter: tile.letter.clone(),
                     is_blank: tile.is_blank(),
                 })
             })
@@ -861,7 +865,7 @@ impl GameState {
                     .iter()
                     .map(|tile| RackTile {
                         id: tile.id,
-                        face: tile.face,
+                        face: tile.face.clone(),
                     })
                     .collect(),
             },

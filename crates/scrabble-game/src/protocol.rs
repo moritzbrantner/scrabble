@@ -107,14 +107,16 @@ pub struct PublicPlayer {
 #[serde(deny_unknown_fields)]
 pub struct BoardTile {
     pub coordinate: Coordinate,
-    pub letter: char,
+    /// The whole spelled face (`"CH"` for a multi-letter tile); one character otherwise.
+    pub letter: String,
     pub is_blank: bool,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PreviewTile {
     pub coordinate: Coordinate,
-    pub letter: char,
+    /// The whole spelled face, as in [`BoardTile::letter`].
+    pub letter: String,
     pub is_blank: bool,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
