@@ -790,6 +790,10 @@ body {
     1px calc(25% + 0.5px)
   );
 }
+.hex-board .letter-tile small {
+  right: 16%;
+  bottom: 20%;
+}
 .player-phone .hex-editor-grid .phone-square {
   min-width: 0;
   min-height: 0;

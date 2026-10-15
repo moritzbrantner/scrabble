@@ -1,7 +1,7 @@
 import { HexBoard } from "./HexBoard";
 import { MoveAnalysis } from "./MoveAnalysis";
 import { useCopy } from "./preferences";
-import { faceValues, type PublicSnapshot, type Ruleset } from "./public-state";
+import { faceValues, type Premium, type PublicSnapshot, type Ruleset } from "./public-state";
 import { faceClass } from "./tile-face";
 import { TurnHistory } from "./TurnHistory";
 
@@ -20,6 +20,20 @@ export function SharedBoard({ snapshot, rules }: { snapshot: PublicSnapshot; rul
     preview?.tiles.map((tile) => [`${tile.coordinate.row},${tile.coordinate.column}`, tile]) ?? [],
   );
   const values = faceValues(rules);
+  const tileDescription = (
+    tile: Pick<PublicSnapshot["board"][number], "letter" | "is_blank"> | undefined,
+    pending: boolean,
+    premium: Premium,
+  ) => {
+    if (tile === undefined) {
+      return t(`premium.${premium}`);
+    }
+    const key = pending ? "board.preview" : "board.committed";
+    return t(tile.is_blank ? `${key}Blank` : key, {
+      letter: tile.letter,
+      points: tile.is_blank ? 0 : (values.get(tile.letter) ?? t("score.unknown")),
+    });
+  };
   const indices = Array.from({ length: rules.board_size }, (_, index) => index);
   const active = snapshot.phase.kind === "playing" ? snapshot.phase.active_player : null;
   const finished = snapshot.phase.kind === "finished";
@@ -63,11 +77,16 @@ export function SharedBoard({ snapshot, rules }: { snapshot: PublicSnapshot; rul
           className="board"
           style={{ width: "100%" }}
           cellLabel={(row, column, index) => {
-            const tile = cells.get(`${row},${column}`) ?? tentative.get(`${row},${column}`);
+            const committed = cells.get(`${row},${column}`);
+            const tile = committed ?? tentative.get(`${row},${column}`);
             return t("board.square", {
               row: row + 1,
               column: column + 1,
-              description: tile?.letter ?? t(`premium.${rules.premiums[index] ?? "normal"}`),
+              description: tileDescription(
+                tile,
+                committed === undefined,
+                rules.premiums[index] ?? "normal",
+              ),
             });
           }}
           renderCell={(row, column, index) => {
@@ -120,14 +139,7 @@ export function SharedBoard({ snapshot, rules }: { snapshot: PublicSnapshot; rul
                     committed === undefined ? tentative.get(`${row},${column}`) : undefined;
                   const tile = committed ?? pending;
                   const value = tile?.is_blank ? 0 : values.get(tile?.letter ?? "");
-                  let description = t(`premium.${kind}`);
-                  if (tile !== undefined) {
-                    const key = pending === undefined ? "board.committed" : "board.preview";
-                    description = t(tile.is_blank ? `${key}Blank` : key, {
-                      letter: tile.letter,
-                      points: value ?? t("score.unknown"),
-                    });
-                  }
+                  const description = tileDescription(tile, pending !== undefined, kind);
                   return (
                     <td
                       key={column}
