@@ -585,7 +585,9 @@ for (const policy of ["all_word", "main_word_only"] as const) {
         await ada.reload();
         await expect(ada.getByText("Connected · Player 2", { exact: true })).toBeVisible();
         await expect.poll(() => adaState()?.own_rack).toEqual(savedRack);
-        expect(adaState()!.public.history).toEqual(savedPublic.history);
+        // The passive observer retains its last value across reload and batches
+        // native datagrams for 100 ms. An unchanged rack is not a history barrier.
+        await expect.poll(() => adaState()?.public.history).toEqual(savedPublic.history);
         for (const client of [page, ada, lin]) {
           const history = client.getByRole("region", { name: /history/i });
           const third = history.getByRole("listitem").filter({ hasText: /Turn 3:/ });
