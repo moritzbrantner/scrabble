@@ -122,10 +122,10 @@ pub fn replay(directory: &Path, match_id: &str) -> Result<scrabble_server::repla
         if !path.is_file() {
             continue;
         }
-        if let Ok(image) = game_server::RecoveryImage::read_file(&path) {
-            if let Ok(report) = scrabble_server::replay::inspect_replay(&factory, &id, &image) {
-                return Ok(report);
-            }
+        if let Ok(image) = game_server::RecoveryImage::read_file(&path)
+            && let Ok(report) = scrabble_server::replay::inspect_replay(&factory, &id, &image)
+        {
+            return Ok(report);
         }
     }
     Err("no matching verifiable recovery image exists yet".into())
