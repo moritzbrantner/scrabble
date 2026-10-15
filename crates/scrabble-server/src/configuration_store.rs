@@ -4,7 +4,7 @@ use crate::{
     profile_catalog::{PreparedConfiguration, Selection, read_bounded},
     profiles::{
         BoardProfile, ComposedRuleset, MatchRules, ProfileSelection, TileProfile, WordListProfile,
-        compose_profiles,
+        compose_timed_profiles,
     },
 };
 use game_server::MatchId;
@@ -207,7 +207,13 @@ impl ConfigurationStore {
             manifest.rules.board_size,
             manifest.rules.premiums.clone(),
         )?;
-        let composed = compose_profiles(&words, &tiles, &board, MatchRules::from(&manifest.rules))?;
+        let composed = compose_timed_profiles(
+            &words,
+            &tiles,
+            &board,
+            MatchRules::from(&manifest.rules),
+            manifest.rules.time_control,
+        )?;
         if composed.rules != manifest.rules
             || Selection::from(&composed.selection) != manifest.selection
         {

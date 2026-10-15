@@ -48,12 +48,50 @@ pub struct CreateConfiguredGame {
     pub requested_at: u64,
     pub selection: crate::profile_catalog::Selection,
     pub rules: crate::profiles::MatchRules,
+    /// Optional match clock (#114); absent or null is untimed (Decision 3.11).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time_control: Option<scrabble_game::ruleset::TimeControl>,
 }
 #[derive(Debug)]
 pub enum ConfiguredError {
     Game(GameOperationError),
     Selection(crate::profile_catalog::SelectionError),
+    /// Rejected time control; the value is the public `reason`.
+    TimeControl(&'static str),
     Conflict,
+}
+
+/// Validates a requested time control before any allocation: durations, then
+/// Decision 3.8, then the provisional forfeit block (#99).
+pub fn check_time_control(
+    control: &scrabble_game::ruleset::TimeControl,
+) -> Result<(), &'static str> {
+    use scrabble_game::ruleset::{ClockModel, ExpiryConsequence, MAX_CLOCK_MS};
+    let valid = |ms: u64| (1..=MAX_CLOCK_MS).contains(&ms);
+    let durations = match control.clock {
+        ClockModel::Cumulative {
+            initial_ms,
+            increment_ms,
+        } => valid(initial_ms) && increment_ms.is_none_or(valid),
+        ClockModel::PerTurn { allowance_ms } => valid(allowance_ms),
+    };
+    if !durations {
+        return Err("invalid-duration");
+    }
+    if matches!(
+        control.clock,
+        ClockModel::Cumulative {
+            increment_ms: None,
+            ..
+        }
+    ) && control.on_expiry == ExpiryConsequence::Pass
+    {
+        return Err("missing-increment");
+    }
+    if control.on_expiry == ExpiryConsequence::Forfeit {
+        return Err("forfeit-unavailable");
+    }
+    Ok(())
 }
 impl From<GameOperationError> for ConfiguredError {
     fn from(value: GameOperationError) -> Self {
@@ -191,6 +229,9 @@ impl Games {
         if request.version != 3 {
             return Err(GameOperationError::InvalidRequest.into());
         }
+        if let Some(control) = &request.time_control {
+            check_time_control(control).map_err(ConfiguredError::TimeControl)?;
+        }
         CreateGame {
             version: 2,
             request_id: request.request_id.clone(),
@@ -212,13 +253,14 @@ impl Games {
         if let Some(existing) = existing {
             if existing.selection != request.selection
                 || crate::profiles::MatchRules::from(&existing.configuration.rules) != request.rules
+                || existing.configuration.rules.time_control != request.time_control
             {
                 return Err(ConfiguredError::Conflict);
             }
         } else {
             let prepared = self
                 .factory
-                .resolve(&request.selection, request.rules)
+                .resolve(&request.selection, request.rules, request.time_control)
                 .map_err(ConfiguredError::Selection)?;
             if !self.host.is_serving() {
                 return Err(GameOperationError::NotServing.into());

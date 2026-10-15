@@ -1470,3 +1470,304 @@ async fn profiles_retry_revalidates_missing_initialization() {
 async fn profiles_retry_revalidates_corrupt_initialization() {
     assert_live_profile_publication_is_durable("corrupt manifest", true).await;
 }
+
+// Independent #114 acceptance (docs/specs/server-match-clock.md): version-3 timed creation,
+// the real hosted tick loop, automatic pass and graceful-restart outage freeze.
+fn timed_request(
+    catalog: &serde_json::Value,
+    nonce: u8,
+    time_control: serde_json::Value,
+) -> serde_json::Value {
+    let mut request = profile_request(catalog, nonce);
+    request["timeControl"] = time_control;
+    request
+}
+fn per_turn_clock(allowance_ms: u64, on_expiry: &str) -> serde_json::Value {
+    serde_json::json!({"clock":{"kind":"per_turn","allowance_ms":allowance_ms},"on_expiry":on_expiry})
+}
+
+#[tokio::test]
+async fn timed_creation_validates_time_controls_without_allocation_and_conflicts_on_retry() {
+    use serde_json::json;
+    let mut server = profile_server(false, false).await;
+    let origin = "http://localhost:5173";
+    let (status, catalog) = server.api("GET", "/profiles", None, origin).await;
+    assert_eq!(status, 200);
+    let max = scrabble_game::ruleset::MAX_CLOCK_MS;
+    let cumulative = json!({"clock":{"kind":"cumulative","initial_ms":60000,"increment_ms":5000},"on_expiry":"pass"});
+    let per_turn = per_turn_clock(20_000, "pass");
+    let rejected = [
+        (
+            json!({"clock":{"kind":"cumulative","initial_ms":60000},"on_expiry":"pass"}),
+            "missing-increment",
+        ),
+        (
+            json!({"clock":{"kind":"cumulative","initial_ms":60000,"increment_ms":0},"on_expiry":"pass"}),
+            "invalid-duration",
+        ),
+        (
+            json!({"clock":{"kind":"cumulative","initial_ms":0,"increment_ms":5000},"on_expiry":"pass"}),
+            "invalid-duration",
+        ),
+        (
+            json!({"clock":{"kind":"cumulative","initial_ms":max + 1,"increment_ms":1},"on_expiry":"pass"}),
+            "invalid-duration",
+        ),
+        (per_turn_clock(0, "pass"), "invalid-duration"),
+        (per_turn_clock(max + 1, "pass"), "invalid-duration"),
+        (
+            json!({"clock":{"kind":"cumulative","initial_ms":60000},"on_expiry":"forfeit"}),
+            "forfeit-unavailable",
+        ),
+        (
+            json!({"clock":{"kind":"cumulative","initial_ms":60000,"increment_ms":5000},"on_expiry":"forfeit"}),
+            "forfeit-unavailable",
+        ),
+        (per_turn_clock(20_000, "forfeit"), "forfeit-unavailable"),
+    ];
+    for (index, (time_control, reason)) in rejected.into_iter().enumerate() {
+        let body = timed_request(&catalog, 0x80 + u8::try_from(index).unwrap(), time_control);
+        let response = server.api("POST", "/games", Some(&body), origin).await;
+        assert_eq!(response.0, 400, "{reason}: {}", response.1);
+        assert_eq!(
+            response.1,
+            json!({"error":"invalid-time-control","reason":reason}),
+            "{body}"
+        );
+        assert_eq!(
+            hosted_profiles(&server).await,
+            0,
+            "a rejection must not allocate"
+        );
+    }
+    for malformed in [
+        json!({"clock":{"kind":"hourglass","allowance_ms":20000},"on_expiry":"pass"}),
+        json!({"clock":{"kind":"per_turn","allowance_ms":20000,"extra":1},"on_expiry":"pass"}),
+        json!({"clock":{"kind":"per_turn","allowance_ms":20000},"on_expiry":"sudden_death"}),
+        json!({"clock":{"kind":"per_turn","allowance_ms":-1},"on_expiry":"pass"}),
+        json!({"clock":{"kind":"per_turn","allowance_ms":"20000"},"on_expiry":"pass"}),
+        json!({"clock":{"kind":"per_turn","allowance_ms":20000}}),
+    ] {
+        let body = timed_request(&catalog, 0x8f, malformed);
+        let response = server.api("POST", "/games", Some(&body), origin).await;
+        assert_eq!(
+            (response.0, &response.1),
+            (400, &json!({"error":"invalid-request"})),
+            "{body}"
+        );
+        assert_eq!(hosted_profiles(&server).await, 0);
+    }
+    // A rejected time control binds nothing to its creation key.
+    let reused = profile_request(&catalog, 0x80);
+    assert_eq!(
+        server.api("POST", "/games", Some(&reused), origin).await.0,
+        200
+    );
+    assert_eq!(hosted_profiles(&server).await, 1);
+
+    let timed = timed_request(&catalog, 0x91, cumulative.clone());
+    let timed_join = server.api("POST", "/games", Some(&timed), origin).await;
+    assert_eq!(timed_join.0, 200, "{}", timed_join.1);
+    assert_eq!(
+        server.api("POST", "/games", Some(&timed), origin).await,
+        timed_join,
+        "an identical timed retry recovers the same match"
+    );
+    let turn = timed_request(&catalog, 0x92, per_turn.clone());
+    let turn_join = server.api("POST", "/games", Some(&turn), origin).await;
+    assert_eq!(turn_join.0, 200, "{}", turn_join.1);
+    let nulled = timed_request(&catalog, 0x93, serde_json::Value::Null);
+    let nulled_join = server.api("POST", "/games", Some(&nulled), origin).await;
+    assert_eq!(nulled_join.0, 200, "null means untimed");
+    let untimed = profile_request(&catalog, 0x94);
+    let untimed_join = server.api("POST", "/games", Some(&untimed), origin).await;
+    assert_eq!(untimed_join.0, 200);
+    assert_eq!(hosted_profiles(&server).await, 5);
+
+    let mut other_model = timed.clone();
+    other_model["timeControl"] = per_turn.clone();
+    let mut removed = timed.clone();
+    removed.as_object_mut().unwrap().remove("timeControl");
+    let mut added = untimed.clone();
+    added["timeControl"] = cumulative.clone();
+    for conflict in [other_model, removed, added] {
+        let response = server.api("POST", "/games", Some(&conflict), origin).await;
+        assert_eq!(
+            (response.0, &response.1),
+            (409, &json!({"error":"creation-conflict"})),
+            "{conflict}"
+        );
+    }
+    assert_eq!(hosted_profiles(&server).await, 5);
+    // Version 1/2 requests stay strict; enabling a clock requires version 3.
+    let legacy = json!({"version":2,"requestId":"95".repeat(16),"requestedAt":untimed["requestedAt"],"timeControl":cumulative});
+    let response = server.api("POST", "/games", Some(&legacy), origin).await;
+    assert_eq!(
+        (response.0, &response.1),
+        (400, &json!({"error":"invalid-request"}))
+    );
+    assert_eq!(hosted_profiles(&server).await, 5);
+
+    let client = server.client();
+    let mut views = Vec::new();
+    for join in [&timed_join.1, &turn_join.1, &nulled_join.1, &untimed_join.1] {
+        let (connection, _) = server
+            .connect(&client, join["matchPath"].as_str().unwrap())
+            .await;
+        views.push((snapshot(&connection, |_| true).await, connection));
+    }
+    for (index, expected) in [Some(&cumulative), Some(&per_turn)].into_iter().enumerate() {
+        let view = &views[index].0;
+        assert_eq!(
+            serde_json::to_value(view.public.configuration.time_control).unwrap(),
+            *expected.unwrap()
+        );
+        let lobby = view
+            .public
+            .clock
+            .as_ref()
+            .expect("timed lobby publishes a clock");
+        assert_eq!(lobby.turn_started_at_ms, None);
+        assert_eq!(lobby.expires_at_ms, None);
+    }
+    for (view, _) in &views[2..] {
+        assert_eq!(view.public.configuration.time_control, None);
+        let public = serde_json::to_value(&view.public).unwrap();
+        assert!(public.get("clock").is_none());
+        assert!(public["configuration"].get("time_control").is_none());
+    }
+    assert_ne!(
+        views[0].0.public.ruleset, views[3].0.public.ruleset,
+        "the time control is part of the immutable composed identity"
+    );
+    assert_ne!(views[0].0.public.ruleset, views[1].0.public.ruleset);
+    assert_eq!(
+        views[2].0.public.ruleset, views[3].0.public.ruleset,
+        "null and absent are the same untimed configuration"
+    );
+    drop(views);
+    server.stop().await;
+}
+
+#[tokio::test]
+async fn timed_board_match_auto_passes_from_the_real_tick_loop_and_freezes_across_restart() {
+    let mut server = profile_server(false, false).await;
+    let origin = "http://localhost:5173";
+    let (status, catalog) = server.api("GET", "/profiles", None, origin).await;
+    assert_eq!(status, 200);
+    let allowance = 2_000_u64;
+    let request = timed_request(&catalog, 0xa1, per_turn_clock(allowance, "pass"));
+    let join = server.api("POST", "/games", Some(&request), origin).await;
+    assert_eq!(join.0, 200, "{}", join.1);
+    let client = server.client();
+    let players = start_profile_match(
+        &server,
+        &client,
+        &join.1,
+        request["requestId"].as_str().unwrap(),
+    )
+    .await;
+    let started = snapshot(&players.phones[0].0, |s| {
+        matches!(s.public.phase, Phase::Playing { .. })
+    })
+    .await;
+    assert_eq!(
+        serde_json::to_value(started.public.configuration.time_control).unwrap(),
+        request["timeControl"]
+    );
+    let Phase::Playing {
+        active_player,
+        turn,
+    } = started.public.phase.clone()
+    else {
+        unreachable!()
+    };
+    assert_eq!(turn.get(), 0);
+    let clock = started.public.clock.clone().expect("timed match clock");
+    let begin = clock
+        .turn_started_at_ms
+        .expect("the board start begins the first turn");
+    assert_eq!(begin % 50, 0, "match time is tick × 50 ms");
+    assert_eq!(clock.expires_at_ms, Some(begin + allowance));
+    assert!(
+        clock
+            .players
+            .iter()
+            .all(|player| player.remaining_ms == allowance),
+        "{clock:?}"
+    );
+
+    // Nobody moves: the hosted tick loop applies exactly one automatic pass.
+    let passed = snapshot(&players.phones[0].0, |s| !s.public.history.is_empty()).await;
+    assert_eq!(passed.public.history.len(), 1);
+    assert_eq!(passed.public.history[0].turn.get(), 0);
+    assert_eq!(passed.public.history[0].player_id, active_player);
+    assert_eq!(
+        passed.public.history[0].action,
+        scrabble_game::protocol::TurnAction::Pass {}
+    );
+    let after = passed.public.clock.clone().unwrap();
+    assert_eq!(after.turn_started_at_ms, Some(begin + allowance));
+    assert_eq!(after.expires_at_ms, Some(begin + 2 * allowance));
+    assert_eq!(
+        snapshot(&players.board.0, |s| s.public.history.len() == 1)
+            .await
+            .public
+            .clock,
+        Some(after.clone()),
+        "the board observes the same authoritative clock"
+    );
+
+    server.stop().await;
+    // The persisted evidence replays the automatic pass through the public factory boundary.
+    let config = scrabble_server::config::ServerConfig::from_values(&server.values).unwrap();
+    let factory = scrabble_server::factory::MatchFactory::new(&config).unwrap();
+    let id = game_server::MatchId::new(join.1["matchId"].as_str().unwrap()).unwrap();
+    let image = game_server::RecoveryImage::read_file(
+        &server
+            .directory
+            .path()
+            .join("recovery")
+            .join(format!("{}.recovery", id.as_str())),
+    )
+    .unwrap();
+    let verified = game_server::verify_replay(factory.create(&id).unwrap(), &image.replay).unwrap();
+    let canonical: serde_json::Value =
+        serde_json::from_slice(&verified.final_snapshot.payload).unwrap();
+    assert_eq!(canonical["game"]["history"].as_array().unwrap().len(), 1);
+    // Downtime longer than the whole remaining turn must not be charged (Decision 3.7).
+    sleep(Duration::from_millis(allowance + 1_000)).await;
+    server.start().await;
+    let phone = &players.phones[0];
+    let token = game_server::ReconnectToken(phone.1.reconnect_token).encode_hex();
+    let (connection, _) = server
+        .connect(
+            &client,
+            &format!(
+                "{}/reconnect/{token}",
+                join.1["matchPath"].as_str().unwrap()
+            ),
+        )
+        .await;
+    let restored = snapshot(&connection, |_| true).await;
+    assert_eq!(
+        restored.public.history, passed.public.history,
+        "no automatic pass solely due to server downtime"
+    );
+    assert_eq!(restored.public.clock, Some(after.clone()));
+    assert_eq!(
+        restored.public.configuration.time_control,
+        started.public.configuration.time_control
+    );
+    // Ticks resume from the saved time: the next expiry passes exactly once more.
+    let resumed = snapshot(&connection, |s| s.public.history.len() >= 2).await;
+    assert_eq!(resumed.public.history.len(), 2);
+    assert_eq!(resumed.public.history[..1], passed.public.history[..]);
+    assert_eq!(resumed.public.history[1].turn.get(), 1);
+    assert_eq!(
+        resumed.public.clock.unwrap().turn_started_at_ms,
+        Some(begin + 2 * allowance)
+    );
+    drop(players);
+    server.stop().await;
+}
