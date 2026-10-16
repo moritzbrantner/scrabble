@@ -393,7 +393,7 @@ fn created_body(created: &Created) -> serde_json::Value {
 fn parse_layout(value: serde_json::Value) -> Result<Layout, Response> {
     serde_json::from_value(value).map_err(|error| {
         let mut reason = error.to_string();
-        reason.truncate(200);
+        reason.truncate(reason.floor_char_boundary(200));
         layout_error(LayoutError::Invalid(reason))
     })
 }
