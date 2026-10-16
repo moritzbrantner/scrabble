@@ -407,6 +407,12 @@ fn offline_report_verifies_persisted_native_evidence_and_excludes_private_fields
             .submit_command(actor, 1, sequence, &serde_json::to_vec(&pass).unwrap())
             .unwrap();
     }
+    // Retrospective acceptance migration for #136's additive report fields:
+    // compare the original public projection before freezing runtime presence.
+    let mut expected = read(&runtime, 1).public;
+    for player in &mut expected.players {
+        player.connected = None;
+    }
     runtime.freeze_for_recovery();
     let canonical = runtime.snapshot().unwrap();
     let path = directory.path().join("image");
@@ -433,17 +439,84 @@ fn offline_report_verifies_persisted_native_evidence_and_excludes_private_fields
             .keys()
             .map(String::as_str)
             .collect::<Vec<_>>(),
-        vec!["game_id", "history", "phase"]
+        vec!["game_id", "history", "phase", "players"]
     );
+    assert_eq!(
+        json["configuration"],
+        serde_json::to_value(&expected.configuration).unwrap()
+    );
+    assert_eq!(
+        json["game"]["players"],
+        serde_json::to_value(&expected.players).unwrap()
+    );
+    assert_eq!(
+        json["game"]["history"],
+        serde_json::to_value(&expected.history).unwrap()
+    );
+    assert_eq!(
+        json["game"]["phase"],
+        serde_json::to_value(&expected.phase).unwrap()
+    );
+    assert_eq!(
+        json["game"]["game_id"],
+        serde_json::to_value(expected.game_id).unwrap()
+    );
+    assert_eq!(
+        json.as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        vec![
+            "canonical_hash",
+            "checkpoints_verified",
+            "configuration",
+            "final_tick",
+            "game",
+            "records_verified"
+        ]
+    );
+    for player in json["game"]["players"].as_array().unwrap() {
+        assert!(player.as_object().unwrap().keys().all(|key| matches!(
+            key.as_str(),
+            "id" | "display_name" | "score" | "rack_count" | "forfeited"
+        )));
+    }
+    // Public rack_count and ruleset exchange_minimum_bag/rack_size are allowed.
+    // Actual private structures and credentials remain forbidden at ANY depth.
+    fn excludes_private_structures(value: &serde_json::Value) {
+        match value {
+            serde_json::Value::Object(fields) => {
+                for (key, value) in fields {
+                    assert!(
+                        !matches!(
+                            key.as_str(),
+                            "rack"
+                                | "bag"
+                                | "seed"
+                                | "rng"
+                                | "reconnect"
+                                | "reconnect_token"
+                                | "reconnect_tokens"
+                                | "private_key"
+                                | "ownerCapability"
+                        ),
+                        "private field {key} must not appear in an offline public report"
+                    );
+                    excludes_private_structures(value);
+                }
+            }
+            serde_json::Value::Array(values) => {
+                for value in values {
+                    excludes_private_structures(value);
+                }
+            }
+            _ => {}
+        }
+    }
+    excludes_private_structures(&json);
     let encoded = serde_json::to_string(&json).unwrap();
-    for secret in [
-        "rack",
-        "bag",
-        "reconnect",
-        "seed",
-        &"ab".repeat(16),
-        &"cd".repeat(16),
-    ] {
+    for secret in [&"ab".repeat(16), &"cd".repeat(16), &"07".repeat(32)] {
         assert!(!encoded.contains(secret));
     }
     let wrong = game_server::MatchId::new("beta").unwrap();
