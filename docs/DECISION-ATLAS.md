@@ -193,7 +193,7 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
 
 - **1.46 Shared Moenarch account owns linked player identity.**  
   Status: owner-approved 2026-10-16. Answers Question 1.44 (choice A); supersedes only the *deferral* in Decision 1.45, not its guest-first permission.  
-  When a player chooses to link guest-owned Scrabble word lists, private tile profiles or custom square/hex board layouts to an account, use **one shared Moenarch account identity across products**, not a Scrabble-specific account. Scrabble remains the authority for these game-specific libraries and their permissions; sharing a login does not transfer their data ownership or game rules to a shared identity service. Preserve guest use without sign-in, private guest ownership capabilities, independent recipient copies, share links, and immutable match/replay references under Decisions 1.20, 1.29, 1.33 and 1.35. Resolve and verify an existing supported shared-account service contract before integration; this decision does not choose or authorize a new identity provider, a duplicate authentication implementation, an automatic guest-library migration, or a specific sign-in UX. Account linking remains separate implementation work in [#132](https://github.com/moritzbrantner/scrabble/issues/132).  
+  When a player chooses to link guest-owned Scrabble word lists, private tile profiles or custom square/hex board layouts to an account, use **one shared Moenarch account identity across products**, not a Scrabble-specific account. Scrabble remains the authority for these game-specific libraries and their permissions; sharing a login does not transfer their data ownership or game rules to a shared identity service. Preserve guest use without sign-in, private guest ownership capabilities, independent recipient copies, share links, and immutable match/replay references under Decisions 1.20, 1.29, 1.33 and 1.35. Resolve and verify an existing supported shared-account service contract before integration; this decision does not choose or authorize a new identity provider, a duplicate authentication implementation, an automatic guest-library migration, or a specific sign-in UX. Account linking remains separate implementation work in [#132](https://github.com/moritzbrantner/scrabble/issues/132).
 
 ## 2. Game clients and interface controls
 
@@ -269,8 +269,8 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
 
 ## 4. Current execution priority
 
-- **4.1 Prioritize approved hexagonal-board or match-clock journeys.**  
-  Status: owner-approved 2026-10-14 in the interactive work-loop session.  
+- **4.1 Prioritize approved hexagonal-board or match-clock journeys.**
+  Status: owner-approved 2026-10-14 in the interactive work-loop session.
   Focus current implementation work on the approved **hexagonal-board or match-clock** journeys. This sets the current category priority; it does not change the behaviors approved in sections 1 and 3 or establish a preference between those two journeys. Follow their evidenced actionable prerequisites. Execution is tracked by [hexagonal gameplay #96](https://github.com/moritzbrantner/scrabble/issues/96) and [match clocks #99](https://github.com/moritzbrantner/scrabble/issues/99); independent match configuration [#94](https://github.com/moritzbrantner/scrabble/issues/94) is an existing prerequisite of the separately selectable hex board. Physical-device release acceptance remains required by #32/#34 and is not claimed complete by this scheduling choice.
 
 ## Existing baseline and boundaries
