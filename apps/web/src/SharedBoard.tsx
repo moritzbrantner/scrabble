@@ -1,11 +1,20 @@
 import { HexBoard } from "./HexBoard";
+import { MatchClocks, type ClockObservation } from "./MatchClocks";
 import { MoveAnalysis } from "./MoveAnalysis";
 import { useCopy } from "./preferences";
 import { faceValues, type Premium, type PublicSnapshot, type Ruleset } from "./public-state";
 import { faceClass } from "./tile-face";
 import { TurnHistory } from "./TurnHistory";
 
-export function SharedBoard({ snapshot, rules }: { snapshot: PublicSnapshot; rules: Ruleset }) {
+export function SharedBoard({
+  snapshot,
+  rules,
+  clockObservation,
+}: {
+  snapshot: PublicSnapshot;
+  rules: Ruleset;
+  clockObservation?: ClockObservation;
+}) {
   const { t, number } = useCopy();
   const cells = new Map(
     snapshot.board.map((tile) => [`${tile.coordinate.row},${tile.coordinate.column}`, tile]),
@@ -39,7 +48,11 @@ export function SharedBoard({ snapshot, rules }: { snapshot: PublicSnapshot; rul
   const finished = snapshot.phase.kind === "finished";
   // Final standings rank by score, highest first; ties keep seat order (stable sort).
   const standings = finished
-    ? [...snapshot.players].sort((left, right) => right.score - left.score)
+    ? [...snapshot.players].sort(
+        (left, right) =>
+          Number(Boolean(left.forfeited)) - Number(Boolean(right.forfeited)) ||
+          right.score - left.score,
+      )
     : snapshot.players;
   let status: string;
   switch (snapshot.phase.kind) {
@@ -175,6 +188,10 @@ export function SharedBoard({ snapshot, rules }: { snapshot: PublicSnapshot; rul
         <p role="status" className="turn-status">
           {status}
         </p>
+        <MatchClocks
+          snapshot={snapshot}
+          {...(clockObservation === undefined ? {} : { observation: clockObservation })}
+        />
         {snapshot.phase.kind === "playing" && (
           <p>{t("board.turnNumber", { turn: BigInt(snapshot.phase.turn) + 1n })}</p>
         )}
@@ -189,6 +206,7 @@ export function SharedBoard({ snapshot, rules }: { snapshot: PublicSnapshot; rul
               <li key={player.id} className={player.id === active ? "active-player" : ""}>
                 <span>
                   {player.display_name}
+                  {player.forfeited && <small> · {t("clock.forfeited")}</small>}
                   {player.connected !== undefined && (
                     <small>
                       {" "}

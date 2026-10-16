@@ -1,5 +1,37 @@
 // Stable semantic keys; gameplay content and private authority are not translated.
 export const en = {
+  "clock.setup": "Time controls",
+  "clock.enable": "Enable clocks",
+  "clock.explanation":
+    "Only the active clock runs. Cumulative time carries forward; per-turn time starts fresh.",
+  "clock.model": "Clock model",
+  "clock.choose": "Choose…",
+  "clock.cumulative": "Cumulative per-player clock",
+  "clock.perTurn": "Per-turn clock",
+  "clock.consequence": "Timeout consequence",
+  "clock.pass": "Automatic pass",
+  "clock.forfeit": "Forfeit",
+  "clock.initialLabel": "Initial time (seconds)",
+  "clock.incrementLabel": "Turn-start increment (seconds)",
+  "clock.perTurnLabel": "Time per turn (seconds)",
+  "clock.initialHelp": "Total starting budget per player, up to 24 hours.",
+  "clock.incrementHelp":
+    "Optional; added at every turn start. Automatic pass requires a positive increment.",
+  "clock.perTurnHelp": "A fresh allowance each turn, up to 24 hours.",
+  "clock.invalid":
+    "Choose a clock model, timeout consequence and valid positive times (up to 86400 seconds, millisecond precision).",
+  "clock.incrementRequired":
+    "Automatic pass with a cumulative clock requires a positive turn-start increment.",
+  "clock.title": "Match clocks",
+  "clock.cumulativeSummary": "Initial: {initial} s; added at turn start: {increment} s.",
+  "clock.perTurnSummary": "Fresh time each turn: {seconds} s.",
+  "clock.remaining": "{name} remaining time",
+  "clock.forfeited": "Forfeited",
+  "clock.eliminated":
+    "Your time expired. Your score and rack are frozen; the remaining players continue.",
+  "clock.frozenRack": "These tiles remain out of play and are not deducted from your frozen score.",
+  "clock.timedOutPass": "{name} timed out — automatic pass.",
+  "clock.timedOutForfeit": "{name} timed out — forfeit.",
   "hex.error.center": "The first word must cover the center hexagon.",
   "hex.error.not_line": "Place tiles along one straight hexagonal axis.",
   "hex.error.gap": "Fill the gaps between your tiles.",
@@ -299,6 +331,39 @@ export const en = {
 } as const;
 export type CopyKey = keyof typeof en;
 const de: Record<CopyKey, string> = {
+  "clock.setup": "Zeitkontrollen",
+  "clock.enable": "Uhren aktivieren",
+  "clock.explanation":
+    "Nur die aktive Uhr läuft. Kumulative Zeit bleibt erhalten; pro Zug beginnt sie neu.",
+  "clock.model": "Uhrmodell",
+  "clock.choose": "Auswählen…",
+  "clock.cumulative": "Kumulative Spieleruhr",
+  "clock.perTurn": "Uhr pro Zug",
+  "clock.consequence": "Folge bei Zeitablauf",
+  "clock.pass": "Automatisch passen",
+  "clock.forfeit": "Ausscheiden",
+  "clock.initialLabel": "Startzeit (Sekunden)",
+  "clock.incrementLabel": "Zuschlag bei Zugbeginn (Sekunden)",
+  "clock.perTurnLabel": "Zeit pro Zug (Sekunden)",
+  "clock.initialHelp": "Startguthaben pro Spieler, höchstens 24 Stunden.",
+  "clock.incrementHelp":
+    "Optional; bei jedem Zugbeginn hinzugefügt. Automatisches Passen erfordert einen positiven Zuschlag.",
+  "clock.perTurnHelp": "Neue Zeit für jeden Zug, höchstens 24 Stunden.",
+  "clock.invalid":
+    "Uhrmodell, Zeitablauffolge und gültige positive Zeiten wählen (bis 86400 Sekunden, Millisekundengenauigkeit).",
+  "clock.incrementRequired":
+    "Automatisches Passen mit kumulativer Uhr erfordert einen positiven Zuschlag bei Zugbeginn.",
+  "clock.title": "Spieluhren",
+  "clock.cumulativeSummary": "Start: {initial} s; Zuschlag bei Zugbeginn: {increment} s.",
+  "clock.perTurnSummary": "Neue Zeit pro Zug: {seconds} s.",
+  "clock.remaining": "{name} verbleibende Zeit",
+  "clock.forfeited": "Ausgeschieden",
+  "clock.eliminated":
+    "Deine Zeit ist abgelaufen. Punktestand und Ablage bleiben unverändert; die übrigen Spieler spielen weiter.",
+  "clock.frozenRack":
+    "Diese Steine bleiben aus dem Spiel und werden nicht von deinem festen Punktestand abgezogen.",
+  "clock.timedOutPass": "Zeitablauf bei {name} — automatisch gepasst.",
+  "clock.timedOutForfeit": "Zeitablauf bei {name} — ausgeschieden.",
   "hex.error.center": "Das erste Wort muss das mittlere Sechseck bedecken.",
   "hex.error.not_line": "Lege Steine auf einer geraden Sechseckachse.",
   "hex.error.gap": "Fülle die Lücken zwischen den Steinen.",
@@ -616,6 +681,39 @@ const de: Record<CopyKey, string> = {
   "editor.exchangePending": "Warten auf Bestätigung: Tausch…",
 };
 const es: Record<CopyKey, string> = {
+  "clock.setup": "Controles de tiempo",
+  "clock.enable": "Activar relojes",
+  "clock.explanation":
+    "Solo corre el reloj activo. El tiempo acumulativo se conserva; por turno empieza de nuevo.",
+  "clock.model": "Modelo de reloj",
+  "clock.choose": "Elegir…",
+  "clock.cumulative": "Reloj acumulativo por jugador",
+  "clock.perTurn": "Reloj por turno",
+  "clock.consequence": "Consecuencia al agotarse el tiempo",
+  "clock.pass": "Pase automático",
+  "clock.forfeit": "Eliminación",
+  "clock.initialLabel": "Tiempo inicial (segundos)",
+  "clock.incrementLabel": "Incremento al iniciar turno (segundos)",
+  "clock.perTurnLabel": "Tiempo por turno (segundos)",
+  "clock.initialHelp": "Tiempo inicial por jugador, hasta 24 horas.",
+  "clock.incrementHelp":
+    "Opcional; se añade al iniciar cada turno. El pase automático requiere un incremento positivo.",
+  "clock.perTurnHelp": "Tiempo nuevo en cada turno, hasta 24 horas.",
+  "clock.invalid":
+    "Elige modelo, consecuencia y tiempos positivos válidos (hasta 86400 segundos, precisión de milisegundos).",
+  "clock.incrementRequired":
+    "El pase automático con reloj acumulativo requiere un incremento positivo al iniciar turno.",
+  "clock.title": "Relojes de la partida",
+  "clock.cumulativeSummary": "Inicial: {initial} s; incremento por turno: {increment} s.",
+  "clock.perTurnSummary": "Tiempo nuevo por turno: {seconds} s.",
+  "clock.remaining": "Tiempo restante de {name}",
+  "clock.forfeited": "Eliminado",
+  "clock.eliminated":
+    "Se agotó tu tiempo. Tu puntuación y atril quedan congelados; los demás continúan.",
+  "clock.frozenRack":
+    "Estas fichas quedan fuera de juego y no se descuentan de tu puntuación congelada.",
+  "clock.timedOutPass": "Se agotó el tiempo de {name} — pase automático.",
+  "clock.timedOutForfeit": "Se agotó el tiempo de {name} — eliminación.",
   "hex.error.center": "La primera palabra debe cubrir el hexágono central.",
   "hex.error.not_line": "Coloca fichas sobre un solo eje recto.",
   "hex.error.gap": "Completa los huecos entre fichas.",

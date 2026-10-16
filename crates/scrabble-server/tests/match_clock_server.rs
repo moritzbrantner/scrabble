@@ -171,6 +171,7 @@ fn match_time_is_the_simulation_tick_and_start_and_commands_use_it() {
             ],
             turn_started_at_ms: None,
             expires_at_ms: None,
+            last_timeout: None,
         }
     );
     advance(&mut runtime, 7);
@@ -491,44 +492,113 @@ fn a_disconnected_active_player_keeps_losing_time() {
 }
 
 #[test]
-fn expired_moves_are_private_clock_rejections_and_blocked_forfeit_never_breaks_the_tick() {
-    let rules = rules(per_turn(1_000, ExpiryConsequence::Forfeit), 10);
-    let (mut runtime, [one, _two]) = seated(&rules, GRACE);
-    start(&mut runtime, &one);
-    for _ in 0..25 {
-        runtime
-            .advance_tick()
-            .expect("a blocked forfeit expiry must not fail the tick");
-    }
-    assert!(view(&runtime, 1).public.history.is_empty());
-    assert_eq!(view(&runtime, 1).public.phase, playing(1, 0));
-    let unchanged = clock(&runtime, 1);
-    assert_eq!(unchanged.turn_started_at_ms, Some(0));
-    assert_eq!(unchanged.expires_at_ms, Some(1_000));
-
-    let canonical = runtime.snapshot().unwrap();
-    let first = runtime.snapshot_for(1).unwrap();
-    let second = runtime.snapshot_for(2).unwrap();
-    let records = runtime.replay_log().unwrap().records().len();
-    for _ in 0..2 {
-        let failure = submit(&mut runtime, &one, 2, 0, Command::Pass {}).unwrap_err();
-        let RuntimeError::Simulation(failure) = failure else {
-            panic!("expected a recoverable simulation rejection, got {failure:?}");
-        };
-        let feedback: Value = serde_json::from_slice(
-            failure
-                .command_rejection()
-                .expect("clock errors are structured private rejections"),
-        )
-        .unwrap();
+fn forfeit_ticks_finish_once_and_replay_recovery_preserve_the_frozen_player() {
+    for control in [
+        per_turn(1_000, ExpiryConsequence::Forfeit),
+        Some(TimeControl {
+            clock: ClockModel::Cumulative {
+                initial_ms: 1_000,
+                increment_ms: None,
+            },
+            on_expiry: ExpiryConsequence::Forfeit,
+        }),
+    ] {
+        let rules = rules(control, 10);
+        let (mut runtime, [one, _two]) = seated(&rules, GRACE);
+        start(&mut runtime, &one);
+        let rack = view(&runtime, 1).own_rack;
+        advance(&mut runtime, 19);
+        assert_eq!(view(&runtime, 2).public.phase, playing(1, 0));
+        advance(&mut runtime, 1);
+        let finished = view(&runtime, 2);
         assert_eq!(
-            feedback,
-            serde_json::json!({"version":1,"game_id":"1","expected_turn":"0","error":{"kind":"clock_expired"}})
+            finished.public.phase,
+            Phase::Finished {
+                winners: vec![PlayerId::new(2)]
+            }
         );
-        assert_eq!(runtime.snapshot().unwrap(), canonical);
-        assert_eq!(runtime.snapshot_for(1).unwrap(), first);
-        assert_eq!(runtime.snapshot_for(2).unwrap(), second);
-        assert_eq!(runtime.replay_log().unwrap().records().len(), records);
+        assert_eq!(finished.public.history.len(), 1);
+        assert_eq!(view(&runtime, 1).own_rack, rack);
+        assert_eq!(finished.public.players[0].score, 0);
+        let saved = runtime.snapshot().unwrap();
+        let log = ReplayLog::decode(&runtime.replay_log().unwrap().encode().unwrap()).unwrap();
+        assert_eq!(
+            verify_replay(fresh(&rules), &log).unwrap().final_snapshot,
+            saved
+        );
+        runtime.freeze_for_recovery();
+        let image =
+            RecoveryImage::decode(&runtime.recovery_image().unwrap().encode().unwrap()).unwrap();
+        let mut restored = MatchRuntime::restore_from_recovery(fresh(&rules), image).unwrap();
+        assert_eq!(restored.snapshot().unwrap(), saved);
+        advance(&mut restored, 100);
+        let resumed = view(&restored, 2).public;
+        assert_eq!(resumed.phase, finished.public.phase);
+        assert_eq!(
+            resumed.history, finished.public.history,
+            "restart and late ticks cannot repeat a forfeit"
+        );
+        assert_eq!(resumed.clock, finished.public.clock);
+        assert_eq!(
+            resumed
+                .players
+                .iter()
+                .map(|player| player.score)
+                .collect::<Vec<_>>(),
+            finished
+                .public
+                .players
+                .iter()
+                .map(|player| player.score)
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(view(&restored, 1).own_rack, rack);
+        let stable = restored.snapshot().unwrap();
+        assert!(submit(&mut restored, &one, 2, 0, Command::Pass {}).is_err());
+        assert_eq!(restored.snapshot().unwrap(), stable);
+    }
+}
+
+#[test]
+fn multiplayer_forfeit_recovery_continues_rotation_and_disconnected_players_still_expire() {
+    for count in 3..=4 {
+        let mut rules = rules(per_turn(1_000, ExpiryConsequence::Forfeit), 100);
+        rules.maximum_players = count;
+        let mut runtime = MatchRuntime::new_with_replay_capture(fresh(&rules), GRACE);
+        let leases: Vec<_> = (1..=count)
+            .map(|id| runtime.admit(ReconnectToken([id; 16])).unwrap())
+            .collect();
+        start(&mut runtime, &leases[0]);
+        let rack = view(&runtime, 1).own_rack;
+        advance(&mut runtime, 20);
+        assert_eq!(view(&runtime, 2).public.phase, playing(2, 1));
+        let saved = runtime.snapshot().unwrap();
+        let log = runtime.replay_log().unwrap().clone();
+        assert_eq!(
+            verify_replay(fresh(&rules), &log).unwrap().final_snapshot,
+            saved
+        );
+        runtime.freeze_for_recovery();
+        let mut restored =
+            MatchRuntime::restore_from_recovery(fresh(&rules), runtime.recovery_image().unwrap())
+                .unwrap();
+        assert_eq!(restored.snapshot().unwrap(), saved);
+        for id in 2..u64::from(count) {
+            assert_eq!(view(&restored, 1).public.phase, playing(id, id - 1));
+            // Recovery has no live connections. Disconnected survivors still expire.
+            advance(&mut restored, 20);
+            assert_eq!(view(&restored, 1).own_rack, rack);
+        }
+        assert_eq!(
+            view(&restored, 1).public.phase,
+            Phase::Finished {
+                winners: vec![PlayerId::new(u64::from(count))]
+            }
+        );
+        assert_eq!(
+            view(&restored, 1).public.history.len(),
+            usize::from(count - 1)
+        );
     }
 }
 

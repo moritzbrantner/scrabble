@@ -2,8 +2,7 @@
 
 This headless enabler of #99 (issue #112) gives the authoritative
 `scrabble-game` engine an optional, immutable **time control** and a
-deterministic **clock state**. It implements Atlas Decisions 3.1, 3.4 (pass
-only, see [Forfeit](#forfeit-provisional)), 3.5, 3.8, 3.9 and 3.11. Decisions
+deterministic **clock state**. It implements Atlas Decisions 3.1, 3.4 and 3.12 (see [Forfeit](#forfeit)), 3.5, 3.8, 3.9 and 3.11. Decisions
 3.6 and 3.7 are satisfied by the server supplying the right instants: the engine
 never reads the wall clock and only consumes elapsed time that the caller states
 explicitly. Server timers, outage freezing, persistence/recovery wiring,
@@ -113,7 +112,6 @@ pub enum ClockError {
     Expired,            // a turn command at or after the expiry instant
     NotExpired,         // a timeout before the expiry instant
     Untimed,            // a timeout on an untimed match
-    ForfeitUnavailable, // provisional: a timeout whose consequence is forfeit
 }
 ```
 
@@ -173,7 +171,7 @@ consumes no sequence. Checks, in order:
    how a duplicate or late timeout for an already-ended turn is rejected;
 4. `now_ms < active turn start` → `ClockError::TimeRegression`;
 5. `now_ms < expires_at` → `ClockError::NotExpired`;
-6. `on_expiry` is `Forfeit` → `ClockError::ForfeitUnavailable` (provisional).
+6. Apply the selected pass or forfeit consequence.
 
 With `Pass`, the timeout applies **automatic pass exactly once** through the
 existing turn completion (`finish_turn` / `complete_turn` with move score 0).
@@ -189,21 +187,23 @@ All clock arithmetic is checked. An overflowing balance or expiry instant
 rejects the transition with `StateError::CounterExhausted` and publishes
 nothing.
 
-## Forfeit (provisional)
+## Forfeit
 
-Decision 3.4 makes forfeit a valid expiry consequence. How a forfeit resolves
-in a match of more than two players is undecided (#99, needs-decision). Until
-the owner decides:
+Atlas Decision **3.12** (merged in `d701266`, Answers historical Question 3.2)
+settles the provisional #112 restriction. At expiry, remove only the expired
+player from participation and turn rotation; freeze their score and private rack,
+keep their tiles out of play, and rank them below every remaining player regardless
+of score. Continue with the next participating seat while two or more remain;
+the last remaining player wins. This applies to two, three and four players.
+Ordinary scoreless/going-out completion must exclude forfeited racks from final
+deductions/transfers and exclude forfeited players from winners. Duplicate or stale
+timeouts cannot apply another elimination. Replaying the same events/instants must
+reproduce the elimination, remaining rotation and final result canonically.
 
-- forfeit configurations are represented, serialized and validated as above;
-- moves on a forfeit-configured match follow the same clock rules, so they are
-  rejected with `Expired` at or after expiry;
-- `timeout_at` at or after expiry returns `ClockError::ForfeitUnavailable`
-  and changes nothing. The engine applies no forfeit outcome.
-
-A forfeit-configured match therefore cannot progress past an expiry. The
-server (#99) must not offer forfeit to hosts until the semantics are decided
-and this section is replaced.
+The earlier `ForfeitUnavailable` behavior is historical #112 scaffolding and is
+superseded by #99; a hosted creation boundary must admit valid forfeit settings.
+No new clock defaults, pause controls or scoring policy among forfeited players
+are established by this change.
 
 ## Serialization, replay and snapshots
 
@@ -226,16 +226,24 @@ pub struct PublicClock {
     pub players: Vec<PlayerClock>,         // seat order
     pub turn_started_at_ms: Option<u64>,   // Some only while Playing
     pub expires_at_ms: Option<u64>,        // == GameState::clock_expires_at()
+    // Optional public-only session projection; omitted when absent.
+    pub last_timeout: Option<ClockTimeout>,
 }
 #[serde(deny_unknown_fields)]
 pub struct PlayerClock { pub player_id: PlayerId, pub remaining_ms: u64 }
 ```
 
-Both derive `Clone, Debug, Eq, PartialEq, Serialize, Deserialize`. `clock` is
+`ClockTimeout` contains `player_id`, `turn` and `consequence` (`pass`/`forfeit`).
+It records the most recent successful timeout, remains through later chosen turns,
+and is reconstructed by replay. It is not stored in canonical engine evidence:
+existing automatic-pass journals therefore remain compatible. It is absent before
+any timeout and omitted when absent. See [ADR 0011](../adr/0011-match-clock-presentation-and-forfeits.md).
+
+The clock DTOs derive `Clone, Debug, Eq, PartialEq, Serialize, Deserialize`. `clock` is
 `None` for untimed matches, so their snapshot JSON is unchanged. For a timed
 match it is `Some` in every phase. In the lobby it lists the seated players with
 their starting balance and no instants. In `Finished` it keeps the final
-balances and has no instants. The option fields serialize as `null` when
+balances and has no instants. The instant fields serialize as `null` when
 absent. Clients compute a live countdown as `expires_at_ms − now`. The clock
 contains no rack, bag, seed or other private data. `player_snapshot().public`
 equals `public_snapshot()`.
@@ -257,7 +265,7 @@ injected instants and covers:
   moves after expiry, and stale or duplicate timeouts;
 - interplay with the scoreless-turn ending and frozen finished matches;
 - untimed entry points rejected on timed matches;
-- provisional forfeit blocking;
+- forfeit elimination, frozen racks/scores and 2–4-player completion (#99);
 - canonical serialization, reconstruction and replay round-trip; public clock
   snapshot shape and privacy;
 - untimed byte-identity of ruleset JSON, canonical bytes and public and player
@@ -266,11 +274,9 @@ injected instants and covers:
 The existing `scrabble-game` suites stay green. The full gate is
 `bun run check`.
 
-## Open questions (owner)
+## Historical follow-ups
 
-1. **Forfeit semantics** (#99 comment, options A/B/C). Applying forfeit is
-   blocked by contract until answered.
-2. **Distinct history marker for an automatic pass.** The timeout records an
-   ordinary `TurnAction::Pass {}`, which keeps the public DTO unchanged. If the
-   #99 UI must tell a timed-out pass from a chosen pass, a new `TurnAction`
-   variant is a protocol change that needs a decision.
+The provisional forfeit question is resolved by Atlas 3.12. Automatic pass may
+retain the ordinary `TurnAction::Pass` history action: #99 must make the timeout
+result visible, but this does not require a separate action variant. See the #99
+acceptance handoff in [server-match-clock.md](server-match-clock.md#issue-99-independent-acceptance-handoff).

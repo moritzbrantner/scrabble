@@ -15,6 +15,7 @@ export default defineConfig({
     "**/profile-creation.spec.ts",
     "**/multi-letter-tiles.spec.ts",
     "**/hexagonal-board.spec.ts",
+    "**/match-clock.spec.ts",
   ],
   outputDir: "../../test-results/pages-browser",
   webServer: {

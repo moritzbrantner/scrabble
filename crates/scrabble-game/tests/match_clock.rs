@@ -9,8 +9,8 @@ use scrabble_game::{
     dictionary::WordList,
     identity::{Coordinate, GameId, PlayerId, ProtocolVersion, TileId, TurnId},
     protocol::{
-        Command, CommandEnvelope, Phase, Placement, PlayerClock, PublicClock, PublicSnapshot,
-        TurnAction,
+        ClockTimeout, Command, CommandEnvelope, Phase, Placement, PlayerClock, PublicClock,
+        PublicSnapshot, TurnAction,
     },
     ruleset::{
         ClockModel, ExpiryConsequence, MAX_CLOCK_MS, Premium, Ruleset, TileDefinition, TileFace,
@@ -496,6 +496,11 @@ fn expiry_applies_automatic_pass_exactly_once_and_rejects_later_moves() {
     );
     at(&mut session, P1, 1, 0, Command::Start {}, 0).unwrap();
     assert_eq!(session.state().clock_expires_at(), Some(65_000));
+    assert!(
+        serde_json::to_value(session.public_snapshot()).unwrap()["clock"]
+            .get("last_timeout")
+            .is_none()
+    );
     let placements = opening(&session, P1);
     at(
         &mut session,
@@ -560,6 +565,15 @@ fn expiry_applies_automatic_pass_exactly_once_and_rejects_later_moves() {
     assert_eq!(turn.turn, TurnId::new(0));
     assert_eq!(turn.player_id, PlayerId::new(P1));
     assert_eq!(turn.action, TurnAction::Pass {});
+    assert_eq!(
+        snapshot.clock.as_ref().unwrap().last_timeout,
+        Some(ClockTimeout {
+            player_id: PlayerId::new(P1),
+            turn: TurnId::new(0),
+            consequence: ExpiryConsequence::Pass,
+        }),
+        "public timeout evidence distinguishes the automatic pass from a chosen pass"
+    );
     assert!(
         turn.scores
             .iter()
@@ -581,6 +595,15 @@ fn expiry_applies_automatic_pass_exactly_once_and_rejects_later_moves() {
     timeout(&mut session, 1, 140_000).unwrap();
     playing(&session, P1, 2);
     assert_eq!(session.public_snapshot().history.len(), 2);
+    assert_eq!(
+        session.public_snapshot().clock.unwrap().last_timeout,
+        Some(ClockTimeout {
+            player_id: PlayerId::new(P2),
+            turn: TurnId::new(1),
+            consequence: ExpiryConsequence::Pass,
+        }),
+        "the marker identifies the latest accepted timeout"
+    );
     assert_eq!(
         clock(&session),
         (vec![(P1, 5_000), (P2, 0)], Some(140_000), Some(145_000))
@@ -746,51 +769,252 @@ fn session_state_before_start(rules: &Ruleset) -> GameState {
     state
 }
 
+/// Atlas 3.12: elimination, rather than ending every multiplayer game.
 #[test]
-fn forfeit_is_configurable_but_never_applied_until_the_owner_decides() {
-    // Cumulative + forfeit without increment: balances carry, and no grant is added.
-    let mut session = lobby(
-        timed(cumulative(30_000, None, ExpiryConsequence::Forfeit), 6),
-        3,
-    );
-    at(&mut session, P1, 1, 0, Command::Start {}, 0).unwrap();
-    assert_eq!(
-        clock(&session),
-        (vec![(P1, 30_000), (P2, 30_000)], Some(0), Some(30_000))
-    );
-    at(&mut session, P1, 2, 0, Command::Pass {}, 10_000).unwrap();
-    at(&mut session, P2, 1, 1, Command::Pass {}, 15_000).unwrap();
-    assert_eq!(
-        clock(&session),
-        (vec![(P1, 20_000), (P2, 25_000)], Some(15_000), Some(35_000))
-    );
-    let before = evidence(&session);
-    assert_eq!(
-        timeout(&mut session, 2, 34_999),
-        Err(clock_error(ClockError::NotExpired))
-    );
-    // Provisional: no forfeit outcome is applied, and moves stay expired.
-    for now in [35_000, 90_000] {
-        assert_eq!(
-            timeout(&mut session, 2, now),
-            Err(clock_error(ClockError::ForfeitUnavailable))
-        );
-        assert_eq!(
-            at(&mut session, P1, 3, 2, Command::Pass {}, now),
-            Err(clock_error(ClockError::Expired))
-        );
+fn forfeit_freezes_score_and_rack_skips_the_player_and_last_remaining_wins() {
+    for count in 2..=4 {
+        for control in [
+            cumulative(1_000, None, ExpiryConsequence::Forfeit),
+            per_turn(1_000, ExpiryConsequence::Forfeit),
+        ] {
+            let build = || {
+                let mut rules = timed(control, 100);
+                rules.maximum_players = count;
+                let mut session = lobby(rules, 3);
+                for id in 3..=u64::from(count) {
+                    session
+                        .add_player(PlayerId::new(id), format!("Player {id}"))
+                        .unwrap();
+                }
+                session
+            };
+            let mut session = build();
+            at(&mut session, P1, 1, 0, Command::Start {}, 0).unwrap();
+            // Give the eventual forfeiter a higher score than every survivor.
+            let placements = opening(&session, P1);
+            at(
+                &mut session,
+                P1,
+                2,
+                0,
+                Command::Commit {
+                    placements: placements.clone(),
+                },
+                100,
+            )
+            .unwrap();
+            for id in 2..=u64::from(count) {
+                at(&mut session, id, 1, id - 1, Command::Pass {}, 100).unwrap();
+            }
+            let first_turn = u64::from(count);
+            let frozen_score = scores(&session)[0];
+            assert!(frozen_score > 0);
+            let frozen_rack = session.player_snapshot(PlayerId::new(P1)).unwrap().own_rack;
+            let bag = session.public_snapshot().remaining_tiles;
+            let expiry = session.state().clock_expires_at().unwrap();
+            let before = evidence(&session);
+            assert_eq!(
+                timeout(&mut session, first_turn, expiry - 1),
+                Err(clock_error(ClockError::NotExpired))
+            );
+            assert_eq!(evidence(&session), before);
+            timeout(&mut session, first_turn, expiry)
+                .expect("approved forfeit must apply at expiry");
+            let after = evidence(&session);
+            assert!(after.1.players[0].forfeited);
+            assert!(
+                after
+                    .1
+                    .players
+                    .iter()
+                    .skip(1)
+                    .all(|player| !player.forfeited)
+            );
+            assert_eq!(
+                after.1.history.last().unwrap().action,
+                TurnAction::Forfeit {}
+            );
+            assert_eq!(
+                after.1.clock.as_ref().unwrap().last_timeout,
+                Some(ClockTimeout {
+                    player_id: PlayerId::new(P1),
+                    turn: TurnId::new(first_turn),
+                    consequence: ExpiryConsequence::Forfeit,
+                })
+            );
+            assert!(
+                timeout(&mut session, first_turn, expiry).is_err(),
+                "duplicate timeout cannot eliminate the next player"
+            );
+            assert_eq!(evidence(&session), after);
+            assert_eq!(
+                session.player_snapshot(PlayerId::new(P1)).unwrap().own_rack,
+                frozen_rack
+            );
+            assert_eq!(scores(&session)[0], frozen_score);
+            assert_eq!(
+                session.public_snapshot().remaining_tiles,
+                bag,
+                "forfeited tiles are not returned to the bag"
+            );
+            let mut replay = build();
+            at(&mut replay, P1, 1, 0, Command::Start {}, 0).unwrap();
+            at(&mut replay, P1, 2, 0, Command::Commit { placements }, 100).unwrap();
+            for id in 2..=u64::from(count) {
+                at(&mut replay, id, 1, id - 1, Command::Pass {}, 100).unwrap();
+            }
+            timeout(&mut replay, first_turn, expiry).unwrap();
+            assert_eq!(
+                evidence(&replay),
+                after,
+                "same events reproduce canonical elimination evidence"
+            );
+            if count > 2 {
+                playing(&session, 2, first_turn + 1);
+                // Complete a whole live rotation: P1 must never receive another turn.
+                for id in 2..=u64::from(count) {
+                    let Phase::Playing {
+                        active_player,
+                        turn,
+                    } = *session.state().phase()
+                    else {
+                        panic!("remaining players must continue")
+                    };
+                    assert_eq!(active_player, PlayerId::new(id));
+                    at(&mut session, id, 2, turn.get(), Command::Pass {}, expiry).unwrap();
+                }
+                playing(&session, 2, first_turn + u64::from(count));
+                for id in 2..u64::from(count) {
+                    let Phase::Playing {
+                        active_player,
+                        turn,
+                    } = *session.state().phase()
+                    else {
+                        panic!("more than one survivor must keep playing")
+                    };
+                    assert_eq!(active_player, PlayerId::new(id));
+                    let now = session.state().clock_expires_at().unwrap();
+                    timeout(&mut session, turn.get(), now).unwrap();
+                }
+            }
+            assert_eq!(
+                *session.state().phase(),
+                Phase::Finished {
+                    winners: vec![PlayerId::new(u64::from(count))]
+                },
+                "last survivor wins despite the forfeiter's higher score"
+            );
+            assert_eq!(
+                scores(&session)[0],
+                frozen_score,
+                "completion must not deduct a forfeiter's rack"
+            );
+            assert_eq!(
+                session.player_snapshot(PlayerId::new(P1)).unwrap().own_rack,
+                frozen_rack
+            );
+            assert_eq!(clock(&session).2, None);
+            session.state().verify_tile_conservation().unwrap();
+            let finished = evidence(&session);
+            assert!(at(&mut session, P1, 3, first_turn, Command::Pass {}, u64::MAX).is_err());
+            assert_eq!(evidence(&session), finished);
+        }
     }
-    assert_eq!(evidence(&session), before);
-    playing(&session, P1, 2);
+}
 
-    let mut session = lobby(timed(per_turn(20_000, ExpiryConsequence::Forfeit), 6), 3);
+#[test]
+fn scoreless_completion_cannot_deduct_a_forfeited_rack_or_make_a_forfeiter_win() {
+    let mut rules = timed(per_turn(1_000, ExpiryConsequence::Forfeit), 6);
+    rules.maximum_players = 3;
+    let mut session = lobby(rules, 3);
+    session
+        .add_player(PlayerId::new(3), "Third".into())
+        .unwrap();
     at(&mut session, P1, 1, 0, Command::Start {}, 0).unwrap();
-    let before = evidence(&session);
-    assert_eq!(
-        timeout(&mut session, 0, 20_000),
-        Err(clock_error(ClockError::ForfeitUnavailable))
+    let placements = opening(&session, P1);
+    at(&mut session, P1, 2, 0, Command::Commit { placements }, 100).unwrap();
+    at(&mut session, P2, 1, 1, Command::Pass {}, 100).unwrap();
+    at(&mut session, 3, 1, 2, Command::Pass {}, 100).unwrap();
+    timeout(&mut session, 3, 1_100).unwrap();
+    let rack = session.player_snapshot(PlayerId::new(P1)).unwrap().own_rack;
+    let score = scores(&session)[0];
+    let mut sequences = [0, 3, 2, 2];
+    while let Phase::Playing {
+        active_player,
+        turn,
+    } = *session.state().phase()
+    {
+        assert_ne!(active_player, PlayerId::new(P1));
+        let id = active_player.get();
+        at(
+            &mut session,
+            id,
+            sequences[id as usize],
+            turn.get(),
+            Command::Pass {},
+            1_100,
+        )
+        .unwrap();
+        sequences[id as usize] += 1;
+    }
+    let Phase::Finished { winners } = session.state().phase() else {
+        panic!("scoreless limit completes the match")
+    };
+    assert!(
+        !winners.contains(&PlayerId::new(P1)),
+        "forfeiter ranks below every survivor regardless of score"
     );
-    assert_eq!(evidence(&session), before);
+    assert_eq!(scores(&session)[0], score);
+    assert_eq!(
+        session.player_snapshot(PlayerId::new(P1)).unwrap().own_rack,
+        rack
+    );
+    session.state().verify_tile_conservation().unwrap();
+}
+
+#[test]
+fn going_out_transfers_only_live_opponents_rack_values_after_a_forfeit() {
+    let mut rules = timed(per_turn(1_000, ExpiryConsequence::Forfeit), 100);
+    rules.maximum_players = 3;
+    rules.tiles[0].count = 8;
+    let mut session = lobby(rules, 3);
+    session
+        .add_player(PlayerId::new(3), "Third".into())
+        .unwrap();
+    at(&mut session, P1, 1, 0, Command::Start {}, 0).unwrap();
+    let placements = opening(&session, P1);
+    at(&mut session, P1, 2, 0, Command::Commit { placements }, 100).unwrap();
+    assert_eq!(session.public_snapshot().remaining_tiles, 0);
+    at(&mut session, P2, 1, 1, Command::Pass {}, 100).unwrap();
+    at(&mut session, 3, 1, 2, Command::Pass {}, 100).unwrap();
+    timeout(&mut session, 3, 1_100).unwrap();
+    let rack = session.player_snapshot(PlayerId::new(P1)).unwrap().own_rack;
+    let placements = placements_at(&session, P2, 8, 7);
+    at(
+        &mut session,
+        P2,
+        2,
+        4,
+        Command::Commit { placements },
+        1_200,
+    )
+    .unwrap();
+    assert_eq!(
+        *session.state().phase(),
+        Phase::Finished {
+            winners: vec![PlayerId::new(P2)]
+        }
+    );
+    assert_eq!(
+        scores(&session),
+        vec![2, 8, -2],
+        "only the live third player's rack transfers to the player going out"
+    );
+    assert_eq!(
+        session.player_snapshot(PlayerId::new(P1)).unwrap().own_rack,
+        rack
+    );
+    session.state().verify_tile_conservation().unwrap();
 }
 
 enum Step {
@@ -861,7 +1085,7 @@ fn timed_match_serializes_reconstructs_and_replays_canonically() {
     assert_eq!(replay.public_snapshot(), original.public_snapshot());
     replay.state().verify_tile_conservation().unwrap();
 
-    // Public snapshot: model, remaining times and expiry only; no private data.
+    // Public snapshot: model, remaining times, expiry and public timeout evidence; no private data.
     let snapshot = original.public_snapshot();
     assert_eq!(snapshot.configuration.time_control, Some(control));
     assert_eq!(
@@ -879,6 +1103,11 @@ fn timed_match_serializes_reconstructs_and_replays_canonically() {
             ],
             turn_started_at_ms: Some(72_500),
             expires_at_ms: Some(143_500),
+            last_timeout: Some(ClockTimeout {
+                player_id: PlayerId::new(P2),
+                turn: TurnId::new(1),
+                consequence: ExpiryConsequence::Pass,
+            }),
         })
     );
     let value = serde_json::to_value(&snapshot).unwrap();
@@ -889,7 +1118,28 @@ fn timed_match_serializes_reconstructs_and_replays_canonically() {
         .cloned()
         .collect();
     keys.sort();
-    assert_eq!(keys, ["expires_at_ms", "players", "turn_started_at_ms"]);
+    assert_eq!(
+        keys,
+        [
+            "expires_at_ms",
+            "last_timeout",
+            "players",
+            "turn_started_at_ms"
+        ]
+    );
+    assert_eq!(
+        value["clock"]["last_timeout"],
+        serde_json::json!({
+            "player_id": "2", "turn": "1", "consequence": "pass",
+        })
+    );
+    assert!(
+        evidence_json["clock"].get("last_timeout").is_none(),
+        "display metadata is replay-derived without changing canonical engine clock evidence"
+    );
+    let mut private_timeout = value["clock"].clone();
+    private_timeout["last_timeout"]["rack"] = serde_json::json!([]);
+    assert!(serde_json::from_value::<PublicClock>(private_timeout).is_err());
     for entry in value["clock"]["players"].as_array().unwrap() {
         let mut keys: Vec<_> = entry.as_object().unwrap().keys().cloned().collect();
         keys.sort();
@@ -905,6 +1155,55 @@ fn timed_match_serializes_reconstructs_and_replays_canonically() {
     assert_eq!(
         original.player_snapshot(PlayerId::new(P1)).unwrap().public,
         snapshot
+    );
+}
+
+#[test]
+fn public_timeout_metadata_is_absent_for_chosen_pass_and_unchanged_by_later_manual_turns() {
+    let mut session = lobby(timed(per_turn(1_000, ExpiryConsequence::Pass), 100), 3);
+    for snapshot in [
+        session.public_snapshot(),
+        session.player_snapshot(PlayerId::new(P1)).unwrap().public,
+    ] {
+        assert!(
+            serde_json::to_value(snapshot).unwrap()["clock"]
+                .get("last_timeout")
+                .is_none()
+        );
+    }
+    at(&mut session, P1, 1, 0, Command::Start {}, 0).unwrap();
+    at(&mut session, P1, 2, 0, Command::Pass {}, 100).unwrap();
+    assert!(
+        serde_json::to_value(session.public_snapshot()).unwrap()["clock"]
+            .get("last_timeout")
+            .is_none()
+    );
+    assert!(
+        session
+            .public_snapshot()
+            .players
+            .iter()
+            .all(|player| !player.forfeited)
+    );
+    timeout(&mut session, 1, 1_100).unwrap();
+    let marker = Some(ClockTimeout {
+        player_id: PlayerId::new(P2),
+        turn: TurnId::new(1),
+        consequence: ExpiryConsequence::Pass,
+    });
+    assert_eq!(
+        session.public_snapshot().clock.unwrap().last_timeout,
+        marker
+    );
+    at(&mut session, P1, 3, 2, Command::Pass {}, 1_200).unwrap();
+    assert_eq!(
+        session.public_snapshot().clock.unwrap().last_timeout,
+        marker,
+        "a later chosen pass must not be mislabelled as a timeout"
+    );
+    assert_eq!(
+        session.player_snapshot(PlayerId::new(P1)).unwrap().public,
+        session.public_snapshot()
     );
 }
 

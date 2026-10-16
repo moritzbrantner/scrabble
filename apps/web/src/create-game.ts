@@ -3,6 +3,7 @@ import { z } from "zod";
 import { copy, translate, type Copy, type CopyKey } from "./copy";
 import { matchSettings, profileSelection } from "./profile-model";
 import { id } from "./public-state";
+import { timeControl } from "./time-control";
 import { matchUrl } from "./transport/browser-match";
 
 const creationIntent = z.strictObject({
@@ -16,6 +17,7 @@ const createRequest = z.discriminatedUnion("version", [
     version: z.literal(3),
     selection: profileSelection,
     rules: matchSettings,
+    timeControl: timeControl.optional(),
   }),
 ]);
 export type CreateRequest = z.infer<typeof createRequest>;
@@ -132,6 +134,9 @@ export async function createGame(
       if (body.version === 3 && (response.status === 400 || response.status === 409)) {
         const failure = z.object({ error: z.string() }).safeParse(await readResponse(response));
         const code = failure.success ? failure.data.error : "invalid-request";
+        if (code === "invalid-time-control") {
+          throw new CreationError("clock.invalid", false);
+        }
         if (code === "unknown-profile") {
           throw new CreationError("profiles.unknown", false);
         }

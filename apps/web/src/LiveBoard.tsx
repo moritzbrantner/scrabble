@@ -16,6 +16,7 @@ import { matchRules, requireMatchRules } from "./match-rules";
 import { PlayerInvite } from "./PlayerInvite";
 import { useCopy } from "./preferences";
 import { type PublicSnapshot, type Ruleset } from "./public-state";
+import { type ClockObservation } from "./MatchClocks";
 import { SharedBoard } from "./SharedBoard";
 import { BrowserMatch, matchUrl, type ConnectionState } from "./transport/browser-match";
 import { readBoardSession, saveBoardSession } from "./transport/resume-capability";
@@ -46,6 +47,7 @@ export function LiveBoard({
   const separateBoard = matchId.startsWith("b_") || matchId.startsWith("p_");
   const [state, setState] = useState<ConnectionState>({ kind: "idle" });
   const [snapshot, setSnapshot] = useState<PublicSnapshot>();
+  const [clockObservation, setClockObservation] = useState<ClockObservation>();
   const [rules, setRules] = useState<Ruleset>(fixtures.ruleset);
   const client = useRef<BrowserMatch>(undefined);
   const running = useRef<Promise<void>>(undefined);
@@ -57,6 +59,7 @@ export function LiveBoard({
   useEffect(() => {
     let mounted = true;
     let playerId: string | undefined;
+    let tickHz: number | undefined;
     let match: BrowserMatch | undefined;
     let claimSent = false;
     let ownershipReported = false;
@@ -89,6 +92,7 @@ export function LiveBoard({
           }
           if (next.kind === "connected" || next.kind === "synchronizing") {
             playerId = next.admission.playerId;
+            tickHz = next.admission.tickHz;
           }
           if (next.kind === "synchronizing") {
             claimSent = false;
@@ -163,6 +167,12 @@ export function LiveBoard({
             }
           }
           setSnapshot(current);
+          if (current.clock && tickHz !== undefined) {
+            setClockObservation({
+              serverMs: (Number(frame.tick) * 1000) / tickHz,
+              receivedAt: performance.now(),
+            });
+          }
           if (current.phase.kind !== "lobby") {
             clearTimeout(timeout.current);
             setStart({ kind: "idle" });
@@ -327,7 +337,13 @@ export function LiveBoard({
             <p>{t("rematch.originalBoard")}</p>
           ))}
       </header>
-      {snapshot !== undefined && <SharedBoard snapshot={snapshot} rules={rules} />}
+      {snapshot !== undefined && (
+        <SharedBoard
+          snapshot={snapshot}
+          rules={rules}
+          {...(clockObservation === undefined ? {} : { clockObservation })}
+        />
+      )}
     </>
   );
 }

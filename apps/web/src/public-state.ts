@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { timeControl } from "./time-control";
+
 export const id = z
   .string()
   .max(20)
@@ -125,6 +127,7 @@ const placementEvaluation = z.discriminatedUnion("status", [
   }),
 ]);
 export const turnAction = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("forfeit") }),
   z.strictObject({
     kind: z.literal("commit"),
     words: z
@@ -199,6 +202,7 @@ export const ruleset = z
     bingo_bonus: z.int().min(0).max(65535),
     exchange_minimum_bag: z.int().min(0).max(65535),
     scoreless_turn_limit: z.int().min(1).max(65535),
+    time_control: timeControl.optional(),
     minimum_players: z.int().min(2).max(4),
     maximum_players: z.int().min(2).max(4),
   })
@@ -256,9 +260,27 @@ const snapshotFields = z.strictObject({
         score: z.int().min(-2147483648).max(2147483647),
         rack_count: z.int().min(0).max(15),
         connected: z.boolean().optional(),
+        forfeited: z.boolean().optional(),
       }),
     )
     .max(4),
+  clock: z
+    .strictObject({
+      players: z
+        .array(
+          z.strictObject({
+            player_id: id,
+            remaining_ms: z.int().min(0).max(Number.MAX_SAFE_INTEGER),
+          }),
+        )
+        .max(4),
+      turn_started_at_ms: z.int().min(0).max(Number.MAX_SAFE_INTEGER).nullable(),
+      expires_at_ms: z.int().min(0).max(Number.MAX_SAFE_INTEGER).nullable(),
+      last_timeout: z
+        .strictObject({ player_id: id, turn: id, consequence: z.enum(["pass", "forfeit"]) })
+        .optional(),
+    })
+    .optional(),
   remaining_tiles: z.int().min(0).max(65535),
   history: z.array(publicTurn).max(24),
   host: z.strictObject({ id: id.nullable() }).optional(),

@@ -15,6 +15,7 @@ import {
   type SubmittedTurnAction,
 } from "./game-protocol";
 import { matchRules, requireMatchRules } from "./match-rules";
+import { MatchClocks, type ClockObservation } from "./MatchClocks";
 import { TurnHistory } from "./TurnHistory";
 import { MoveEditor } from "./MoveEditor";
 import { PlayerRack } from "./PlayerRack";
@@ -78,6 +79,7 @@ export function PlayerPhone({
   const [intent, setIntent] = useState<Intent>();
   const [connection, setConnection] = useState<ConnectionState>({ kind: "idle" });
   const [snapshot, setSnapshot] = useState<PlayerSnapshot>();
+  const [clockObservation, setClockObservation] = useState<ClockObservation>();
   const [rules, setRules] = useState<Ruleset>(fixtures.ruleset);
   // Rejection decoding runs in long-lived transport callbacks; read the current match rules.
   const rulesRef = useRef(rules);
@@ -110,6 +112,7 @@ export function PlayerPhone({
     let active = true;
     let client: BrowserMatch | undefined;
     let playerId: string | undefined;
+    let tickHz: number | undefined;
     let nameSent = false;
     let selectedRules: Ruleset | undefined;
     let savedFailed = false;
@@ -179,6 +182,7 @@ export function PlayerPhone({
             setConnection(next);
             if (next.kind === "connected" || next.kind === "synchronizing") {
               playerId = next.admission.playerId;
+              tickHz = next.admission.tickHz;
             }
             if (next.kind === "synchronizing") {
               nameSent = false;
@@ -241,6 +245,12 @@ export function PlayerPhone({
               return;
             }
             setSnapshot(current);
+            if (current.public.clock && tickHz !== undefined) {
+              setClockObservation({
+                serverMs: (Number(frame.tick) * 1000) / tickHz,
+                receivedAt: performance.now(),
+              });
+            }
             if (desiredName !== undefined && own?.display_name !== desiredName) {
               if (current.public.phase.kind !== "lobby") {
                 clearTimeout(nameTimeout);
@@ -379,6 +389,14 @@ export function PlayerPhone({
     const text = faceText(tile.face);
     return text === null ? sum : sum + (values.get(text) ?? 0);
   }, 0);
+  let rackSummary = t("phone.wentOut");
+  if (own?.forfeited) {
+    rackSummary = t("clock.frozenRack");
+  } else if (snapshot?.own_rack.tiles.length !== 0) {
+    rackSummary = t(unplayed === 1 ? "phone.unplayedOne" : "phone.unplayedOther", {
+      count: unplayed,
+    });
+  }
   const canAct =
     state.kind === "joined" &&
     connection.kind === "connected" &&
@@ -425,6 +443,10 @@ export function PlayerPhone({
             {t("phone.identity", { player: snapshot.own_rack.player_id })}
           </p>
           <ConnectionStatus state={connection} />
+          <MatchClocks
+            snapshot={snapshot.public}
+            {...(clockObservation === undefined ? {} : { observation: clockObservation })}
+          />
           {phase?.kind === "lobby" && <p>{t("phone.waitHost")}</p>}
           {phase?.kind === "playing" && (
             <p role="status" aria-live="polite">
@@ -437,16 +459,11 @@ export function PlayerPhone({
                   })}
             </p>
           )}
+          {own?.forfeited && <p role="status">{t("clock.eliminated")}</p>}
           {phase?.kind === "finished" && (
             <>
               <p>{t("phone.finished")}</p>
-              <p>
-                {snapshot.own_rack.tiles.length === 0
-                  ? t("phone.wentOut")
-                  : t(unplayed === 1 ? "phone.unplayedOne" : "phone.unplayedOther", {
-                      count: unplayed,
-                    })}
-              </p>
+              <p>{rackSummary}</p>
               {rematch !== undefined && onFollowRematch !== undefined && own !== undefined && (
                 <Button onClick={() => onFollowRematch(rematch, own.display_name)}>
                   {t("rematch.join")}
@@ -456,7 +473,7 @@ export function PlayerPhone({
           )}
           {own !== undefined && phase?.kind !== "lobby" && (
             <>
-              {phase?.kind === "playing" ? (
+              {phase?.kind === "playing" && !own.forfeited ? (
                 <MoveEditor
                   snapshot={snapshot}
                   rules={rules}
@@ -516,23 +533,33 @@ export function PlayerPhone({
                 <PlayerRack rack={snapshot.own_rack} rules={rules} canAct={false} />
               )}
               <ol className="phone-scores" aria-label={t("board.players")}>
-                {snapshot.public.players.map((player) => (
-                  <li
-                    key={player.id}
-                    className={
-                      phase?.kind === "playing" && phase.active_player === player.id
-                        ? "active-player"
-                        : ""
-                    }
-                  >
-                    <span>{player.display_name}</span>
-                    <strong aria-label={t("score.points", { count: player.score })}>
-                      {number(player.score)}
-                    </strong>
-                  </li>
-                ))}
+                {[...snapshot.public.players]
+                  .sort(
+                    (left, right) =>
+                      Number(Boolean(left.forfeited)) - Number(Boolean(right.forfeited)),
+                  )
+                  .map((player) => (
+                    <li
+                      key={player.id}
+                      className={
+                        phase?.kind === "playing" && phase.active_player === player.id
+                          ? "active-player"
+                          : ""
+                      }
+                    >
+                      <span>
+                        {player.display_name}
+                        {player.forfeited && <small> · {t("clock.forfeited")}</small>}
+                      </span>
+                      <strong aria-label={t("score.points", { count: player.score })}>
+                        {number(player.score)}
+                      </strong>
+                    </li>
+                  ))}
               </ol>
-              {rules.board_shape === "hexagon" && <TurnHistory snapshot={snapshot.public} />}
+              {(rules.board_shape === "hexagon" || snapshot.public.clock !== undefined) && (
+                <TurnHistory snapshot={snapshot.public} />
+              )}
             </>
           )}
         </>

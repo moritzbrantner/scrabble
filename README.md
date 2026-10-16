@@ -21,6 +21,14 @@ For a playable local game, prepare the English dictionary once, then run `bun ru
 
 `bun run check` checks formatting, TypeScript, lint, Rust tests, browser rendering, the static production build, and Chromium layout and real loopback WebTransport checks. `bun run format` applies formatting. Dependency changes use `bun install` and commit `bun.lock`; Rust dependency changes include `Cargo.lock`.
 
+Match setup starts untimed. Enable clocks explicitly to choose cumulative per-player
+or fresh per-turn time, exact durations, and automatic pass or forfeit on expiry.
+Cumulative automatic pass requires a positive turn-start increment. The server
+owns expiration; board and controller display the selected rules and remaining
+time. A forfeiter keeps a frozen score/rack below remaining players in the standings,
+and the last remaining player wins. No manual pause is available. See the
+[clock contract](docs/specs/match-clock.md) and [presentation boundary](docs/adr/0011-match-clock-presentation-and-forfeits.md).
+
 ## Hosting
 
 The GitHub Pages client connects to the authoritative Scrabble service on the Hetzner server at `moenarch.com`. `multiplayer-setup-service` is a signaling service and is not required by this transport. Local hosting remains available.
