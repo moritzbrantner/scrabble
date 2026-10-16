@@ -54,10 +54,7 @@
 //!
 //! Share withdrawal (Decision 1.35) and account linking (Question 1.44, #132)
 //! are successor scope and deliberately not asserted here.
-use game_server::{
-    GameSimulation, LiveMatchHost, MatchHost, MatchHostWebTransportConfig,
-    RejectMatchControlService, serve_live_match_host_with_control_and_shutdown,
-};
+use game_server::GameSimulation;
 use scrabble_game::{
     identity::{Coordinate, PlayerId, ProtocolVersion, TurnId},
     protocol::{Command, CommandEnvelope, Phase, Placement, PlayerSnapshot},
@@ -66,19 +63,18 @@ use scrabble_game::{
 use scrabble_server::{
     config::ServerConfig,
     factory::{self, MatchFactory},
-    game_api,
-    games::{Games, unix_seconds},
+    games::unix_seconds,
+    hosting,
     simulation::ScrabbleSimulation,
 };
 use serde_json::{Value, json};
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
-    sync::Arc,
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, TcpStream},
+    net::TcpStream,
     task::JoinHandle,
 };
 
@@ -114,84 +110,100 @@ fn config(root: &Path) -> ServerConfig {
         .expect("#101 requires the durable guest layout library key SCRABBLE_BOARD_LAYOUT_DIR")
 }
 
-/// Real HTTP API + live host + WebTransport serving, restartable on one directory.
+/// The production server (`hosting::serve`: recovery-prepared live host, HTTP
+/// API, WebTransport and status) on free local ports. `stop` is a graceful
+/// shutdown that persists recovery images, so `start` on the same directory is
+/// a real restart.
 struct Api {
     port: u16,
-    task: JoinHandle<std::io::Result<()>>,
-    transport: JoinHandle<()>,
-    _shutdown: tokio::sync::mpsc::Sender<()>,
+    task: Option<JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>>>,
+    shutdown: tokio::sync::mpsc::Sender<()>,
 }
 impl Drop for Api {
     fn drop(&mut self) {
-        self.task.abort();
-        self.transport.abort();
+        if let Some(task) = &self.task {
+            task.abort();
+        }
     }
+}
+fn free_tcp_port() -> u16 {
+    std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port()
 }
 impl Api {
     async fn start(root: &Path) -> Self {
-        let config = config(root);
-        let host = LiveMatchHost::new(MatchHost::new(8).unwrap());
-        let games = Arc::new(Games::new(
-            host.clone(),
-            MatchFactory::new(&config).unwrap(),
-            config.route_prefix.clone(),
-            1200,
-        ));
-        let identity = wtransport::Identity::self_signed(["localhost", "127.0.0.1"]).unwrap();
         let certificate = root.join("cert.pem");
         let key = root.join("key.pem");
-        let _ = std::fs::remove_file(&certificate);
-        let _ = std::fs::remove_file(&key);
-        identity
-            .certificate_chain()
-            .store_pemfile(&certificate)
-            .await
-            .unwrap();
-        identity
-            .private_key()
-            .store_secret_pemfile(&key)
-            .await
-            .unwrap();
+        if !certificate.exists() {
+            let identity = wtransport::Identity::self_signed(["localhost", "127.0.0.1"]).unwrap();
+            identity
+                .certificate_chain()
+                .store_pemfile(&certificate)
+                .await
+                .unwrap();
+            identity
+                .private_key()
+                .store_secret_pemfile(&key)
+                .await
+                .unwrap();
+        }
+        let udp = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+        let transport_port = udp.local_addr().unwrap().port();
+        drop(udp);
+        let (port, status_port) = (free_tcp_port(), free_tcp_port());
+        let mut values = values(root);
+        for (name, value) in [
+            ("SCRABBLE_PORT", transport_port.to_string()),
+            ("SCRABBLE_API_PORT", port.to_string()),
+            ("SCRABBLE_STATUS_PORT", status_port.to_string()),
+            ("SCRABBLE_MAX_MATCHES", "8".into()),
+            ("SCRABBLE_CERT_PEM", certificate.to_str().unwrap().into()),
+            ("SCRABBLE_KEY_PEM", key.to_str().unwrap().into()),
+        ] {
+            values.insert(name.into(), value);
+        }
+        let config = ServerConfig::from_values(&values)
+            .expect("#101 requires the durable guest layout library key SCRABBLE_BOARD_LAYOUT_DIR");
         let (shutdown, receiver) = tokio::sync::mpsc::channel(1);
-        let serving = host.clone();
-        let prefix = config.route_prefix.clone();
-        let transport = tokio::spawn(async move {
-            serve_live_match_host_with_control_and_shutdown(
-                serving,
-                RejectMatchControlService,
-                MatchHostWebTransportConfig {
-                    port: 0,
-                    certificate_pem: certificate,
-                    private_key_pem: key,
-                    route_prefix: prefix,
-                    allowed_origins: None,
-                    drain_grace: std::time::Duration::ZERO,
-                },
-                receiver,
-            )
-            .await
-            .unwrap();
-        });
-        tokio::time::timeout(std::time::Duration::from_secs(5), async {
-            while !host.is_serving() {
-                tokio::task::yield_now().await;
+        let task = tokio::spawn(hosting::serve(config, receiver));
+        let api = Self {
+            port,
+            task: Some(task),
+            shutdown,
+        };
+        // Ready only when the recovery-prepared host serves and the API answers.
+        let status = Self {
+            port: status_port,
+            task: None,
+            shutdown: api.shutdown.clone(),
+        };
+        tokio::time::timeout(std::time::Duration::from_secs(20), async {
+            loop {
+                if TcpStream::connect(("127.0.0.1", status_port)).await.is_ok()
+                    && status.raw("GET", "/readyz", "").await.0 == 200
+                    && TcpStream::connect(("127.0.0.1", port)).await.is_ok()
+                {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(25)).await;
             }
         })
         .await
-        .unwrap();
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let port = listener.local_addr().unwrap().port();
-        let task = tokio::spawn(game_api::serve(listener, games, config.board_origin));
-        Self {
-            port,
-            task,
-            transport,
-            _shutdown: shutdown,
-        }
+        .expect("server became ready");
+        api
     }
-    async fn stop(self) {
-        drop(self);
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    /// Graceful shutdown; recovery images are written before this returns.
+    async fn stop(mut self) {
+        let _ = self.shutdown.send(()).await;
+        let task = self.task.take().unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(30), task)
+            .await
+            .expect("graceful shutdown")
+            .unwrap()
+            .expect("server shut down cleanly");
     }
     async fn raw(&self, method: &str, path: &str, body: &str) -> (u16, Value) {
         let mut stream = TcpStream::connect(("127.0.0.1", self.port)).await.unwrap();
@@ -1139,4 +1151,27 @@ async fn started_matches_keep_their_layout_version_after_edit_delete_and_restart
         3 * (values[0] + values[1]) as i32,
         "the pinned v1 centre premium still scores after edit, delete and restart"
     );
+}
+
+/// Harness self-check: the restart helper is a real recovery restart, so an
+/// ordinary catalog-board match is still hosted afterwards.
+#[tokio::test]
+async fn restart_helper_recovers_a_catalog_board_match() {
+    let root = tempfile::tempdir().unwrap();
+    let api = Api::start(root.path()).await;
+    let catalog = api.catalog().await;
+    let board = catalog["defaults"]["selection"]["board"].clone();
+    let (status, join, _) = api
+        .create_match(&catalog, "acceptance-legacy-words", &board)
+        .await;
+    assert_eq!(status, 200, "{join}");
+    let match_id = join["matchId"].as_str().unwrap().to_owned();
+    api.stop().await;
+    let api = Api::start(root.path()).await;
+    let (status, body) = api.get(&format!("/games/{match_id}")).await;
+    assert_eq!(
+        status, 200,
+        "a recovered match is hosted after restart: {body}"
+    );
+    api.stop().await;
 }
