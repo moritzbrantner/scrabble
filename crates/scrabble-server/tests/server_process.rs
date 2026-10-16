@@ -1772,3 +1772,203 @@ async fn timed_board_match_auto_passes_from_the_real_tick_loop_and_freezes_acros
     drop(players);
     server.stop().await;
 }
+
+/// #121 independent invariant: adding an opt-in preset cannot change v2 creation.
+#[tokio::test]
+async fn builtin_multiletter_preset_preserves_untouched_classic_v2_creation() {
+    let mut server = Server::new().await;
+    server
+        .values
+        .insert("SCRABBLE_MATCH_IDS".into(), String::new());
+    server.start().await;
+    let origin = "http://localhost:5173";
+    let (status, catalog) = server.api("GET", "/profiles/hex", None, origin).await;
+    assert_eq!(status, 200);
+    assert_eq!(catalog["defaults"]["legacyCompatible"], true);
+    let default_tile = &catalog["defaults"]["selection"]["tile"];
+    let classic = catalog["tileProfiles"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| &row["identity"] == default_tile)
+        .unwrap();
+    assert_eq!(
+        classic["tiles"],
+        serde_json::to_value(scrabble_game::ruleset::english_fixture().tiles).unwrap()
+    );
+    let request = serde_json::json!({"version":2,"requestId":"c1".repeat(16),"requestedAt":scrabble_server::games::unix_seconds().unwrap()});
+    let join = server.api("POST", "/games", Some(&request), origin).await;
+    assert_eq!(join.0, 200);
+    let client = server.client();
+    let (connection, _) = server
+        .connect(&client, join.1["matchPath"].as_str().unwrap())
+        .await;
+    let view = snapshot(&connection, |_| true).await;
+    assert_eq!(
+        view.public.configuration,
+        scrabble_game::ruleset::english_fixture()
+    );
+    server.stop().await;
+}
+
+/// Required release acceptance, explicitly invoked with prepared, hash-pinned SCOWL.
+/// This uses the executable's real no-operator-catalog fallback, not the browser fixture.
+#[tokio::test]
+#[ignore = "requires SCRABBLE_ACCEPTANCE_SCOWL_FILE from scripts/prepare-dictionary.ts; required for #121 release"]
+async fn builtin_multiletter_preset_real_scowl_cli_catalog_and_creation() {
+    use scrabble_game::{
+        dictionary::WordList,
+        ruleset::{ContentIdentity, TileDefinition},
+    };
+    use scrabble_server::profiles::{
+        BoardProfile, MatchRules, TileProfile, WordListProfile, compose_profiles,
+    };
+    let file = std::env::var("SCRABBLE_ACCEPTANCE_SCOWL_FILE")
+        .expect("provide prepared SCOWL words.txt; never substitute fixture words");
+    let bytes = fs::read(&file).unwrap();
+    let hash: String = ring::digest::digest(&ring::digest::SHA256, &bytes)
+        .as_ref()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    assert_eq!(
+        hash,
+        "3e8c1a3f17f6d1a2fbad509b4454908d5edb9bf86e8ab8595a029e14418c0ad6"
+    );
+    let text = std::str::from_utf8(&bytes).unwrap();
+    assert_eq!(text.lines().count(), 78026);
+    assert!(text.lines().any(|word| word == "CHAT"));
+    let mut server = Server::new().await;
+    server
+        .values
+        .insert("SCRABBLE_MATCH_IDS".into(), String::new());
+    server
+        .values
+        .insert("SCRABBLE_DICTIONARY_FILE".into(), file);
+    server
+        .values
+        .insert("SCRABBLE_DICTIONARY_NAME".into(), "scowl-en-us-60".into());
+    server.values.insert(
+        "SCRABBLE_DICTIONARY_REVISION".into(),
+        "2026.02.25-recipe1".into(),
+    );
+    assert!(!server.values.contains_key("SCRABBLE_PROFILE_CATALOG_FILE"));
+    server.start().await;
+    let origin = "http://localhost:5173";
+    let (status, catalog) = server.api("GET", "/profiles/hex", None, origin).await;
+    assert_eq!(status, 200);
+    assert_eq!(catalog["defaults"]["legacyCompatible"], true);
+    if let Ok(output) = std::env::var("SCRABBLE_ACCEPTANCE_CATALOG_OUTPUT") {
+        fs::write(output, serde_json::to_vec_pretty(&catalog).unwrap()).unwrap();
+    }
+    let samples: Vec<_> = catalog["tileProfiles"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|row| {
+            row["tiles"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|tile| tile["face"]["kind"] == "letters")
+        })
+        .collect();
+    assert_eq!(
+        samples.len(),
+        1,
+        "real fallback must offer one additional English CH/SCH preset"
+    );
+    let sample = samples[0];
+    assert_ne!(sample["identity"], catalog["defaults"]["selection"]["tile"]);
+    assert!(
+        sample["label"]
+            .as_str()
+            .is_some_and(|label| !label.trim().is_empty())
+    );
+    let definitions: Vec<TileDefinition> = serde_json::from_value(sample["tiles"].clone()).unwrap();
+    for expected in ["CH", "SCH"] {
+        assert_eq!(
+            definitions
+                .iter()
+                .filter(|tile| tile.face.spelled().as_deref() == Some(expected) && tile.count > 0)
+                .count(),
+            1
+        );
+    }
+    for classic in scrabble_game::ruleset::english_fixture().tiles {
+        assert!(
+            definitions
+                .iter()
+                .any(|tile| tile.face == classic.face && tile.count > 0),
+            "ordinary English faces including blanks must remain available"
+        );
+    }
+    let sample_identity: ContentIdentity =
+        serde_json::from_value(sample["identity"].clone()).unwrap();
+    let tiles = TileProfile::new(sample_identity, definitions.clone()).unwrap();
+    let original = scrabble_game::ruleset::english_fixture();
+    let board = BoardProfile::new(
+        original.identity.clone(),
+        original.board_size,
+        original.premiums,
+    )
+    .unwrap();
+    let rules: MatchRules = serde_json::from_value(catalog["defaults"]["rules"].clone()).unwrap();
+    let unsupported = WordListProfile::new(
+        WordList::from_text(
+            ContentIdentity {
+                name: "unsupported-acceptance".into(),
+                revision: "1".into(),
+            },
+            "ÖL\n",
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(
+        matches!(
+            compose_profiles(&unsupported, &tiles, &board, rules),
+            Err(scrabble_server::profiles::ProfileError::UnsupportedLetters { .. })
+        ),
+        "actual preset cannot silently admit an incompatible alphabet"
+    );
+    // Every supplied board, including all four hex policy/metric modes, composes
+    // with the same English dictionary and sample without changing other choices.
+    let client = server.client();
+    for (index, board) in catalog["boardProfiles"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .enumerate()
+    {
+        let mut request = profile_request(&catalog, 0xd0 + u8::try_from(index).unwrap());
+        request["selection"]["tile"] = sample["identity"].clone();
+        request["selection"]["board"] = board["identity"].clone();
+        let join = server.api("POST", "/games", Some(&request), origin).await;
+        assert_eq!(join.0, 200, "{}: {:?}", board["label"], join.1);
+        let (connection, _) = server
+            .connect(&client, join.1["matchPath"].as_str().unwrap())
+            .await;
+        let view = snapshot(&connection, |_| true).await;
+        assert_eq!(view.public.configuration.tiles, definitions);
+        assert_eq!(view.public.configuration.dictionary.name, "scowl-en-us-60");
+        assert_eq!(
+            serde_json::to_value(view.public.configuration.board_size).unwrap(),
+            board["boardSize"]
+        );
+        assert_eq!(
+            request["selection"]["wordList"],
+            catalog["defaults"]["selection"]["wordList"]
+        );
+        connection.close(0_u32.into(), b"acceptance complete");
+    }
+    let mut stale = profile_request(&catalog, 0xef);
+    stale["selection"]["tile"] = sample["identity"].clone();
+    stale["selection"]["tile"]["revision"] = "stale".into();
+    let before = hosted_profiles(&server).await;
+    let rejected = server.api("POST", "/games", Some(&stale), origin).await;
+    assert_eq!(rejected.0, 400);
+    assert_eq!(rejected.1["error"], "unknown-profile");
+    assert_eq!(hosted_profiles(&server).await, before);
+    server.stop().await;
+}

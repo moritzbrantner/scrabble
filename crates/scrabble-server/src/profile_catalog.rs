@@ -9,8 +9,8 @@ use crate::{
 use scrabble_game::{
     dictionary::WordList,
     ruleset::{
-        BoardShape, ContentIdentity, Premium, PremiumPolicy, Ruleset, TileDefinition,
-        WordLengthMetric,
+        BoardShape, ContentIdentity, Premium, PremiumPolicy, Ruleset, TileDefinition, TileFace,
+        WordLengthMetric, english_fixture,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -296,15 +296,42 @@ impl ProfileCatalog {
                 tile: tiles.identity().name.clone(),
                 board: legacy.identity.name.clone(),
             };
+            let mut tile_profiles = vec![Named {
+                label: "Default tiles".into(),
+                profile: tiles,
+            }];
+            // This preset extends the known English distribution, never an operator's
+            // custom alphabet. Its immutable identity covers all counts and values.
+            let multiletter_name = "builtin-english-ch-sch";
+            if legacy.tiles == english_fixture().tiles && legacy.identity.name != multiletter_name {
+                let mut tiles = legacy.tiles.clone();
+                // Rare combined faces retain the summed value of their ordinary letters.
+                for (letters, count, value) in [("CH", 2, 7), ("SCH", 1, 8)] {
+                    tiles.push(TileDefinition {
+                        face: TileFace::Letters {
+                            letters: letters.into(),
+                        },
+                        count,
+                        value,
+                    });
+                }
+                tile_profiles.push(Named {
+                    label: "English + CH / SCH".into(),
+                    profile: TileProfile::new(
+                        ContentIdentity {
+                            name: multiletter_name.into(),
+                            revision: "1".into(),
+                        },
+                        tiles,
+                    )?,
+                });
+            }
             (
                 vec![Named {
                     label: dictionary.identity().name.clone(),
                     profile: words,
                 }],
-                vec![Named {
-                    label: "Default tiles".into(),
-                    profile: tiles,
-                }],
+                tile_profiles,
                 boards,
                 names,
             )

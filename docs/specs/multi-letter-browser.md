@@ -29,6 +29,12 @@ The hexagonal `letters`/`tiles` main-word metric (Decision 1.23) belongs to
 
 ### Production (public Pages server)
 
+Atlas 1.41 subsequently chose the English CH/SCH sample. Issue #121 adds it to
+the actual fallback catalog as described in [server-executable.md](server-executable.md#independent-predefined-match-setup),
+with independent acceptance in [public-multi-letter-preset.md](public-multi-letter-preset.md).
+The original contract and fixture chronology below remain historical acceptance;
+implementation does not establish deployment or hosted gameplay.
+
 The game server used by the public Pages client must offer, through
 `GET /profiles`:
 
@@ -42,10 +48,11 @@ The host selects these with the existing three selectors. Untouched defaults do
 not change: an untouched deployment keeps `legacyCompatible: true` and its
 version-2 creation. Selecting the sample uses version-3 creation.
 
-The production server runs without a catalog today:
+At this contract's original #98 authoring baseline, the production server ran
+without a catalog:
 `deploy/hetzner.env.example` sets no `SCRABBLE_PROFILE_CATALOG_FILE`, so
-`ProfileCatalog::load` uses its built-in single-profile fallback. The sample
-must therefore come from one of two places, and **which one is an
+`ProfileCatalog::load` used its built-in single-profile fallback. The sample
+therefore had to come from one of two places, and **which one is an
 implementation choice**:
 
 - an **additive built-in entry** in that fallback. PR #118 uses the same pattern
@@ -274,12 +281,13 @@ Fixture results do not count as public success.
 
 ## Open questions
 
-1. **Public sample.** Which multi-letter sample does the owner expect on the
+1. **Public sample (resolved by Atlas 1.41: English CH/SCH).** The original
+   question was: which multi-letter sample does the owner expect on the
    public site? The routine default above is the English tiles plus CH and SCH,
    with the existing English word list. The alternative is a German sample with
    a German word list (the issue's CH/SCH example is German). The repository has
    no public German word list, so that would mean choosing a new list and its
-   licence. This is not decided here.
+   licence. Atlas 1.41 chose the English sample without acquiring a German word list.
 2. **Spellability** (inherited from multi-letter-tiles.md). The sample relies
    on composition checking face letters only, so a word list may contain words
    that no face segmentation can spell. The contract does not require rejecting
