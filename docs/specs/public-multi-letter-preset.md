@@ -127,3 +127,17 @@ run during this acceptance handoff.
 
 Shared convention resolution `sourceRevision`:
 `5ad0db36974c8b0e5f9812c90ee34a4f227852c3`.
+
+## Pages selection correction
+
+The first focused Pages invocation at `6f563b1` failed with `Error: No tests
+found.`: the Pages configuration's explicit `testMatch` omitted the existing
+multi-letter spec. Its raw output remains at
+`/tmp/scrabble121-implementation-browser-pages.log`. This is missing execution
+evidence, not a product failure or a passing browser gate. The independent
+parent context inspected the real fixture, Pages build mode and both configs,
+then included that existing spec in the Pages selection without changing its
+inputs, assertions, timeouts or retries. The partial completion run at `6f563b1`
+was intentionally canceled before this edit; its output and cancellation identity
+remain separate. The focused Pages journey and full gate must now execute against
+the corrected selection.
