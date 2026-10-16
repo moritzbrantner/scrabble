@@ -9,6 +9,27 @@ import { join } from "node:path";
 import { z } from "zod";
 const pages = Bun.argv.includes("--pages");
 const testArgs = Bun.argv.slice(2).filter((argument) => argument !== "--pages");
+// Completed matches retire after five minutes. Verify the hex replay journeys
+// in their own bounded fixture lifetime instead of waiting for unrelated tests.
+if (testArgs.length === 0 && process.env.SCRABBLE_BROWSER_SUITE === undefined) {
+  for (const suite of ["other", "hex"]) {
+    const task = Bun.spawn([process.execPath, ...Bun.argv.slice(1)], {
+      env: { ...process.env, SCRABBLE_BROWSER_SUITE: suite },
+      stdout: "inherit",
+      stderr: "inherit",
+    });
+    const stopTask = () => task.kill("SIGTERM");
+    process.once("SIGINT", stopTask);
+    process.once("SIGTERM", stopTask);
+    const status = await task.exited;
+    process.removeListener("SIGINT", stopTask);
+    process.removeListener("SIGTERM", stopTask);
+    if (status !== 0) {
+      process.exit(status);
+    }
+  }
+  process.exit(0);
+}
 const server = createServer();
 await new Promise<void>((resolve, reject) => {
   server.once("error", reject);
@@ -75,7 +96,7 @@ try {
   fixture.kill("SIGINT");
   games.kill("SIGINT");
   await Promise.all([fixture.exited, games.exited]);
-  await rm(fixtureDirectory, { recursive: true });
+  console.error(`Browser fixture startup evidence retained at ${fixtureDirectory}`);
   throw error;
 }
 const taskEnv: NodeJS.ProcessEnv = {
@@ -203,6 +224,7 @@ process.once("SIGTERM", stop);
 try {
   await run();
 } finally {
+  let verified = false;
   fixture.kill("SIGINT");
   games.kill("SIGINT");
   try {
@@ -213,10 +235,15 @@ try {
       "native game fixture must finish graceful recovery persistence",
     );
     await verifyCompletedHexReplays();
+    verified = process.exitCode === 0;
   } finally {
     // Preserve an already nonzero browser result; replay errors also fail the
     // command, and cleanup runs even when verification or shutdown fails.
-    await rm(fixtureDirectory, { recursive: true });
+    if (verified) {
+      await rm(fixtureDirectory, { recursive: true });
+    } else {
+      console.error(`Private browser fixture failure evidence retained at ${fixtureDirectory}`);
+    }
     process.removeListener("SIGINT", stop);
     process.removeListener("SIGTERM", stop);
   }

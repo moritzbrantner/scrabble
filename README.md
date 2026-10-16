@@ -21,6 +21,8 @@ For a playable local game, prepare the English dictionary once, then run `bun ru
 
 `bun run check` checks formatting, TypeScript, lint, Rust tests, browser rendering, the static production build, and Chromium layout and real loopback WebTransport checks. `bun run format` applies formatting. Dependency changes use `bun install` and commit `bun.lock`; Rust dependency changes include `Cargo.lock`.
 
+The full browser gate runs hex journeys in a separate fixture lifetime capped at four minutes, so graceful shutdown verifies their canonical replay before completed matches retire. Focused arguments to `scripts/test-browser.ts` retain their normal Playwright selection. Failed runs retain private fixture inputs at the path printed in the error output; keep those files private because they include recovery capabilities.
+
 Match setup starts untimed. Enable clocks explicitly to choose cumulative per-player
 or fresh per-turn time, exact durations, and automatic pass or forfeit on expiry.
 Cumulative automatic pass requires a positive turn-start increment. The server

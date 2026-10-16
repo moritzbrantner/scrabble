@@ -4,20 +4,26 @@ import { defineConfig } from "@playwright/test";
 
 import development from "./playwright.config";
 const port = process.env.SCRABBLE_BROWSER_PORT;
+const suite = process.env.SCRABBLE_BROWSER_SUITE;
 export default defineConfig({
   ...development,
-  testIgnore: [],
-  testMatch: [
-    "**/playable-loop.spec.ts",
-    "**/production-configuration.spec.ts",
-    "**/performance-budgets.spec.ts",
-    "**/rematch.spec.ts",
-    "**/profile-creation.spec.ts",
-    "**/multi-letter-tiles.spec.ts",
-    "**/hexagonal-board.spec.ts",
-    "**/match-clock.spec.ts",
-  ],
-  outputDir: "../../test-results/pages-browser",
+  testIgnore: suite === "other" ? ["**/hexagonal-board.spec.ts"] : [],
+  testMatch:
+    suite === "hex"
+      ? ["**/hexagonal-board.spec.ts"]
+      : [
+          "**/playable-loop.spec.ts",
+          "**/production-configuration.spec.ts",
+          "**/performance-budgets.spec.ts",
+          "**/rematch.spec.ts",
+          "**/profile-creation.spec.ts",
+          "**/multi-letter-tiles.spec.ts",
+          "**/hexagonal-board.spec.ts",
+          "**/match-clock.spec.ts",
+        ],
+  outputDir: suite
+    ? `../../test-results/pages-browser-${suite}`
+    : "../../test-results/pages-browser",
   webServer: {
     cwd: fileURLToPath(new URL("../..", import.meta.url)),
     command: `bunx vite preview --config apps/web/vite.config.ts --outDir ../../test-results/pages-build --host 127.0.0.1 --port ${port} --strictPort`,
