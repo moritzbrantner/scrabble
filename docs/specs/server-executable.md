@@ -89,6 +89,22 @@ word paths resolve beside that file. Without a catalog, the existing deployment
 configuration remains available, including unchanged untouched v2 creation.
 Explicit edits use configured v3 creation and an opaque `p_` match ID.
 
+When no operator catalog is configured and the deployment tiles exactly match
+`english_fixture()`'s ordinary English distribution, the fallback additionally
+offers `builtin-english-ch-sch` revision `1`, labeled **English + CH / SCH**.
+It preserves all 100 ordinary tiles and blanks and adds two CH tiles worth 7
+points and one SCH tile worth 8 points (the sums of their constituent values),
+for 103 physical tiles. The existing SCOWL English dictionary is compatible;
+the server still validates every selected combination. A deployment default
+already named `builtin-english-ch-sch` retains that name without adding a
+conflicting preset. Other custom tile distributions receive no added sample.
+The classic default and its v2/`legacyCompatible` behavior remain unchanged;
+operator catalogs are used exactly as supplied, without injecting this preset.
+
+This implements Atlas 1.41's optional English sample, not proof of public
+availability. Publish and verify the CH/SCH-capable frontend before exposing the
+new server catalog, then complete the [actual hosted acceptance journey](public-multi-letter-preset.md).
+
 `SCRABBLE_MATCH_CONFIGURATION_DIR` defaults to `configurations/` beside the seed.
 In production use an absolute durable directory separate from runtime recovery.
 Preserve it with the seed and recovery during upgrades. It holds authenticated
