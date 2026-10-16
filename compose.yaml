@@ -19,6 +19,7 @@ services:
       SCRABBLE_KEY_PEM: /tls/key.pem
       SCRABBLE_SEED_FILE: /state/seed
       SCRABBLE_RECOVERY_DIR: /state/recovery
+      SCRABBLE_BOARD_LAYOUT_DIR: /state/layouts
       SCRABBLE_ROUTE_PREFIX: /game
       SCRABBLE_MATCH_IDS: ""
       SCRABBLE_MAX_MATCHES: "16"

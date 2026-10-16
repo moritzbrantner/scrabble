@@ -91,12 +91,12 @@ fn seed(config: &ServerConfig) -> ErrorResult<[u8; 32]> {
             Ok(seed)
         }
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            let non_empty = |directory: &Path| -> io::Result<bool> {
+                Ok(directory.exists() && fs::read_dir(directory)?.next().transpose()?.is_some())
+            };
             if config.recovery_directory.exists()
-                || (config.match_configuration_directory.exists()
-                    && fs::read_dir(&config.match_configuration_directory)?
-                        .next()
-                        .transpose()?
-                        .is_some())
+                || non_empty(&config.match_configuration_directory)?
+                || non_empty(&config.board_layout_directory)?
             {
                 return Err(
                     "recovery exists without its initialization seed; refusing new initialization"
@@ -124,6 +124,7 @@ pub struct MatchFactory {
     key: hmac::Key,
     rules: Ruleset,
     dictionary: Arc<dyn Dictionary>,
+    layouts: Arc<crate::layout_library::LayoutLibrary>,
 }
 impl MatchFactory {
     pub fn new(config: &ServerConfig) -> ErrorResult<Self> {
@@ -143,7 +144,12 @@ impl MatchFactory {
             &dictionary,
         )?;
         let key = hmac::Key::new(hmac::HMAC_SHA256, &seed(config)?);
+        let layouts = Arc::new(crate::layout_library::LayoutLibrary::open(
+            config.board_layout_directory.clone(),
+            &key,
+        )?);
         Ok(Self {
+            layouts,
             catalog: Arc::new(catalog),
             store: Arc::new(crate::configuration_store::ConfigurationStore::new(
                 config.match_configuration_directory.clone(),
@@ -237,7 +243,22 @@ impl MatchFactory {
         time_control: Option<scrabble_game::ruleset::TimeControl>,
     ) -> Result<crate::profile_catalog::PreparedConfiguration, crate::profile_catalog::SelectionError>
     {
-        self.catalog.resolve_timed(selection, rules, time_control)
+        match self.catalog.resolve_timed(selection, rules, time_control) {
+            // Guest library versions resolve only after the operator catalog misses, and
+            // compose with the catalog's word list and tiles under the same validation.
+            Err(crate::profile_catalog::SelectionError::Unknown("board")) => {
+                let board = self
+                    .layouts
+                    .board(&selection.board)
+                    .ok_or(crate::profile_catalog::SelectionError::Unknown("board"))?;
+                self.catalog
+                    .resolve_with_board(selection, &board, rules, time_control)
+            }
+            result => result,
+        }
+    }
+    pub(crate) fn layouts(&self) -> &crate::layout_library::LayoutLibrary {
+        &self.layouts
     }
     pub(crate) fn initialize(
         &self,
