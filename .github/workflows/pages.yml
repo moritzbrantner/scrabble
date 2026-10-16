@@ -16,7 +16,6 @@ jobs:
     uses: moritzbrantner/reusable-workflows/.github/workflows/deploy-pages.yml@b3f0eb95962e8f6642e170bf373a33a8bd80ca0f # main
     with:
       bun_version: 1.4.2
-      pre_command: rustup toolchain install && cargo fetch --locked && bunx playwright install --with-deps chromium
       build_command: bun scripts/build-pages.ts
       artifact_path: dist
       concurrency_group: pages
