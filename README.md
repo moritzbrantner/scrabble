@@ -19,7 +19,7 @@ For a playable local game, prepare the English dictionary once, then run `bun ru
 
 `bun run dev` opens the browser development server alone. `bun run dev:tls` and `bun run dev:server` remain available for native development. See [server setup and configuration](docs/specs/server-executable.md) for local ports, production requirements, and graceful restart.
 
-`bun run check` checks formatting, TypeScript, lint, Rust tests, browser rendering, the static production build, and Chromium layout and real loopback WebTransport checks. `bun run format` applies formatting. Dependency changes use `bun install` and commit `bun.lock`; Rust dependency changes include `Cargo.lock`.
+`bun run check` checks formatting, TypeScript, lint, Rust tests, browser rendering, the static production build, and Chromium layout and real loopback WebTransport checks. Ready-PR validation runs that full gate; Pages deployment instead validates the public endpoint configuration and builds the production bundle without rerunning the test suite. `bun run format` applies formatting. Dependency changes use `bun install` and commit `bun.lock`; Rust dependency changes include `Cargo.lock`.
 
 The full browser gate runs hex journeys in a separate fixture lifetime capped at four minutes, so graceful shutdown verifies their canonical replay before completed matches retire. Focused arguments to `scripts/test-browser.ts` retain their normal Playwright selection. Failed runs retain private fixture inputs at the path printed in the error output; keep those files private because they include recovery capabilities.
 
