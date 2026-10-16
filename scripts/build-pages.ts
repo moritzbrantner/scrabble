@@ -24,7 +24,8 @@ if (settings.kind === "unavailable" && settings.message === "create.invalidConne
 const environment = Object.fromEntries(
   Object.entries(process.env).filter(([name]) => !name.startsWith("VITE_")),
 );
-const child = Bun.spawn(["bun", "run", "check"], {
+// PR validation owns the full Rust/browser gate; deployment only builds the public bundle.
+const child = Bun.spawn(["bun", "run", "build"], {
   cwd: fileURLToPath(new URL("..", import.meta.url)),
   env: {
     ...environment,
