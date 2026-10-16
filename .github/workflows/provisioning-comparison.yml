@@ -2,15 +2,10 @@ name: Scrabble Provisioning Comparison
 
 # Non-required experiment for #81: identical `bun run check` on the same runner class with
 # conventional provisioning versus the locked Nix development shell. Every sample is cold:
-# a fresh runner with no restored Actions caches. It also runs on pull requests that change
-# the experiment itself, so its evidence is collected before merge.
+# a fresh runner with no restored Actions caches. Opt in when collecting benchmark
+# evidence; routine PRs must not trigger this ten-job experiment.
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - flake.nix
-      - flake.lock
-      - .github/workflows/provisioning-comparison.yml
 
 permissions:
   contents: read
