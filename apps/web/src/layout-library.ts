@@ -319,8 +319,9 @@ export function cells(shape: "square" | "hexagon", size: number) {
   }
   return result;
 }
-export function validSize(size: number) {
-  return Number.isInteger(size) && size % 2 === 1 && size >= 3 && size <= 15;
+export function validSize(size: number, shape: "square" | "hexagon") {
+  const minimum = shape === "square" ? 1 : 3;
+  return Number.isInteger(size) && size % 2 === 1 && size >= minimum && size <= 15;
 }
 /** Re-centres premiums onto another complete regular grid; new cells are normal. */
 export function reshape(

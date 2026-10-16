@@ -358,8 +358,8 @@ export const en = {
   "editor.square": "Square",
   "editor.hexagon": "Hexagon",
   "editor.size": "Board size",
-  "editor.sizeHelp": "An odd number from 3 to 15, so the board has one centre cell.",
-  "editor.sizeInvalid": "Board size must be an odd number from 3 to 15.",
+  "editor.sizeHelp": "An odd number: 1–15 for squares, 3–15 for hexagons, with one centre cell.",
+  "editor.sizeInvalid": "Board size must be odd: 1–15 for squares, 3–15 for hexagons.",
   "editor.nameInvalid":
     "Enter a layout name of 1 to 64 characters without leading or trailing spaces.",
   "editor.premiumType": "Premium type",
@@ -765,8 +765,9 @@ const de: Record<CopyKey, string> = {
   "editor.square": "Quadrat",
   "editor.hexagon": "Sechseck",
   "editor.size": "Brettgröße",
-  "editor.sizeHelp": "Eine ungerade Zahl von 3 bis 15, damit das Brett genau ein Mittelfeld hat.",
-  "editor.sizeInvalid": "Die Brettgröße muss eine ungerade Zahl von 3 bis 15 sein.",
+  "editor.sizeHelp":
+    "Eine ungerade Zahl: 1–15 für Quadrate, 3–15 für Sechsecke, mit genau einem Mittelfeld.",
+  "editor.sizeInvalid": "Die Brettgröße muss ungerade sein: 1–15 für Quadrate, 3–15 für Sechsecke.",
   "editor.nameInvalid":
     "Gib einen Layoutnamen mit 1 bis 64 Zeichen ohne Leerzeichen am Anfang oder Ende ein.",
   "editor.premiumType": "Bonustyp",
@@ -1157,8 +1158,9 @@ const es: Record<CopyKey, string> = {
   "editor.hexagon": "Hexágono",
   "editor.size": "Tamaño del tablero",
   "editor.sizeHelp":
-    "Un número impar de 3 a 15, para que el tablero tenga una sola casilla central.",
-  "editor.sizeInvalid": "El tamaño del tablero debe ser un número impar de 3 a 15.",
+    "Un número impar: de 1 a 15 para cuadrados y de 3 a 15 para hexágonos, con una sola casilla central.",
+  "editor.sizeInvalid":
+    "El tamaño debe ser impar: de 1 a 15 para cuadrados y de 3 a 15 para hexágonos.",
   "editor.nameInvalid":
     "Escribe un nombre de 1 a 64 caracteres sin espacios al principio ni al final.",
   "editor.premiumType": "Tipo de bonificación",

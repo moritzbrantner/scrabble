@@ -6,8 +6,9 @@ test("editor geometry keeps complete regular grids and re-centres premiums on re
   expect(cells("square", 9)).toHaveLength(81);
   expect(cells("hexagon", 7)).toHaveLength(37);
   expect(cells("hexagon", 15)).toHaveLength(169);
-  expect([8, 1, 17].map(validSize)).toEqual([false, false, false]);
-  expect([3, 7, 15].map(validSize)).toEqual([true, true, true]);
+  expect([8, 1, 17].map((size) => validSize(size, "hexagon"))).toEqual([false, false, false]);
+  expect([1, 3, 7, 15].map((size) => validSize(size, "square"))).toEqual([true, true, true, true]);
+  expect([3, 7, 15].map((size) => validSize(size, "hexagon"))).toEqual([true, true, true]);
   const hex7 = cells("hexagon", 7).map((cell) =>
     cell.row === 3 && cell.column === 3 ? "triple_word" : "normal",
   );

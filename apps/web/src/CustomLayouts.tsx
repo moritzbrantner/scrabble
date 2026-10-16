@@ -310,7 +310,7 @@ export function LayoutEditor({
   });
   const buttons = useRef(new Map<string, HTMLButtonElement>());
   const sizeNumber = Number(draft.sizeText);
-  const sizeValid = draft.sizeText.trim() !== "" && validSize(sizeNumber);
+  const sizeValid = draft.sizeText.trim() !== "" && validSize(sizeNumber, draft.shape);
   const nameValid =
     draft.name.length > 0 &&
     draft.name.trim() === draft.name &&
@@ -335,21 +335,22 @@ export function LayoutEditor({
   }
   function regrid(shape: Shape, sizeText: string) {
     const size = Number(sizeText);
-    if (sizeText.trim() !== "" && validSize(size)) {
-      const premiums = reshape(
-        { shape: draft.shape, size: draft.size, premiums: draft.premiums },
-        shape,
-        size,
-      );
-      const middle = Math.floor(size / 2);
-      if (size !== draft.size || shape !== draft.shape) {
-        setFocus({ row: middle, column: middle });
-      }
-      update({ ...draft, shape, sizeText, size, premiums });
-    } else {
-      update({ ...draft, shape, sizeText });
+    const valid = sizeText.trim() !== "" && validSize(size, shape);
+    // Keep the rendered geometry and premiums aligned even while the text is invalid.
+    // Switching to hex from a 1-cell square needs its smallest supported grid.
+    const renderedSize = valid ? size : Math.max(draft.size, shape === "square" ? 1 : 3);
+    const premiums = reshape(
+      { shape: draft.shape, size: draft.size, premiums: draft.premiums },
+      shape,
+      renderedSize,
+    );
+    if (renderedSize !== draft.size || shape !== draft.shape) {
+      const middle = Math.floor(renderedSize / 2);
+      setFocus({ row: middle, column: middle });
     }
+    update({ ...draft, shape, sizeText, size: renderedSize, premiums });
   }
+
   function paint(index: number, row: number, column: number) {
     setFocus({ row, column });
     const premiums = [...draft.premiums];
@@ -430,7 +431,7 @@ export function LayoutEditor({
         {t("editor.size")}
         <input
           type="number"
-          min={3}
+          min={draft.shape === "square" ? 1 : 3}
           max={15}
           step={2}
           value={draft.sizeText}
