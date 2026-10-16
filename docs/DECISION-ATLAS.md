@@ -252,6 +252,10 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
   Status: owner-approved 2026-10-13. Answers 3.10 (choice A).  
   Every newly opened match-creation flow **initially has clocks disabled**. The host must **explicitly enable time controls** before choosing a timed mode and its valid parameters; creating a match without enabling them keeps it untimed. Do not silently preselect a timed preset or automatically restore a previously used timed setup as the next match's selection. This is the **initial selection of the create-match form**, not a prohibition on configuring either cumulative or per-turn clocks under Decisions 3.1 and 3.4–3.9. Preserve the host's current explicit choice while they edit the same pending match form, and clearly indicate whether that match is timed. The user has not selected default durations, increments, a timed model, or a timeout consequence for newly enabled clocks.
 
+- **3.12 Forfeit removes the expired player while the match continues.**  
+  Status: owner-approved 2026-10-16. Answers 3.2 (forfeit participation and completion detail under 3.4, choice A).  
+  A player whose clock expires under **forfeit** leaves play and the turn rotation. Their score and rack freeze; their rack tiles stay out of play. They rank **below every remaining player**, regardless of score. The remaining players continue, and the **last remaining player wins**. This applies to two-, three- and four-player matches; a forfeit does not immediately end a match that still has multiple participating players. Historical Question 3.2 and Decision 3.4 retain their IDs and intent. Source: owner's explicit answer in the interactive work-loop session, “Remove them from play, freeze their score and rack, rank them below remaining players, and continue; the last remaining player wins.” See the [existing forfeit question](https://github.com/moritzbrantner/scrabble/issues/99#issuecomment-6187318391) and [issue #99 preflight](https://github.com/moritzbrantner/scrabble/issues/99#issuecomment-6209848612).
+
 ## 4. Current execution priority
 
 - **4.1 Prioritize approved hexagonal-board or match-clock journeys.**
