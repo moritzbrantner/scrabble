@@ -486,7 +486,8 @@ async fn guest_saves_square_and_hex_originals_owned_only_by_a_private_capability
 async fn bounded_validation_rejects_irregular_holed_out_of_bounds_and_centerless_layouts() {
     let root = tempfile::tempdir().unwrap();
     let api = Api::start(root.path()).await;
-    // Established maxima and the smallest hex are accepted (no new bounds invented).
+    // Established maxima and shape-specific minima are accepted (no new bounds invented).
+    api.save("Min square", square(1, &[])).await;
     api.save("Max square", square(15, &[(7, 7, Premium::DoubleWord)]))
         .await;
     api.save(

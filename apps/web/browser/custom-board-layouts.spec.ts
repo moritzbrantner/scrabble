@@ -610,3 +610,44 @@ test("a recipient in an independent browser uses and copies a shared square layo
     await recipientContext.close();
   }
 });
+
+// Retrospective independent acceptance for Decision 1.37's established bounds
+// and premium preservation while an unfinished size edit changes geometry.
+test("the editor respects shape-specific minimum sizes", async ({ page }) => {
+  await page.goto(`./?${query}`);
+  await libraryRegion(page).getByRole("button", { name: "New custom board", exact: true }).click();
+  const editor = editorRegion(page);
+  await editor.getByRole("textbox", { name: "Layout name", exact: true }).fill("Small square");
+  const size = editor.getByRole("spinbutton", { name: "Board size", exact: true });
+  const save = editor.getByRole("button", { name: "Save layout", exact: true });
+  await size.fill("1");
+  await expect(editorCells(page)).toHaveCount(1);
+  await expect(save).toBeEnabled();
+  await editor.getByRole("radio", { name: "Hexagon", exact: true }).check();
+  await expect(editor.getByRole("alert")).toBeVisible();
+  await expect(save).toBeDisabled();
+  await editor.getByRole("radio", { name: "Square", exact: true }).check();
+  await expect(editorCells(page)).toHaveCount(1);
+  await expect(editor.getByRole("alert")).toHaveCount(0);
+  await expect(save).toBeEnabled();
+  await saveLayout(page);
+});
+
+test("changing shape during an invalid size edit preserves the centered premium", async ({
+  page,
+}) => {
+  await page.goto(`./?${query}`);
+  await libraryRegion(page).getByRole("button", { name: "New custom board", exact: true }).click();
+  const editor = editorRegion(page);
+  await editor.getByRole("textbox", { name: "Layout name", exact: true }).fill("Preserved center");
+  const size = editor.getByRole("spinbutton", { name: "Board size", exact: true });
+  await size.fill("9");
+  await paintWithPointer(page, "Triple word", 4, 4);
+  await size.fill("8");
+  await editor.getByRole("radio", { name: "Hexagon", exact: true }).check();
+  await expect(editor.getByRole("button", { name: "Save layout", exact: true })).toBeDisabled();
+  await size.fill("7");
+  await expect(editorCells(page)).toHaveCount(37);
+  await expect(editorCell(page, 3, 3)).toHaveAccessibleName(/Row 4, column 4: .*Triple word$/);
+  await saveLayout(page, true);
+});
