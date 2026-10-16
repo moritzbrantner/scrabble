@@ -1516,15 +1516,6 @@ async fn timed_creation_validates_time_controls_without_allocation_and_conflicts
         ),
         (per_turn_clock(0, "pass"), "invalid-duration"),
         (per_turn_clock(max + 1, "pass"), "invalid-duration"),
-        (
-            json!({"clock":{"kind":"cumulative","initial_ms":60000},"on_expiry":"forfeit"}),
-            "forfeit-unavailable",
-        ),
-        (
-            json!({"clock":{"kind":"cumulative","initial_ms":60000,"increment_ms":5000},"on_expiry":"forfeit"}),
-            "forfeit-unavailable",
-        ),
-        (per_turn_clock(20_000, "forfeit"), "forfeit-unavailable"),
     ];
     for (index, (time_control, reason)) in rejected.into_iter().enumerate() {
         let body = timed_request(&catalog, 0x80 + u8::try_from(index).unwrap(), time_control);
@@ -1970,5 +1961,42 @@ async fn builtin_multiletter_preset_real_scowl_cli_catalog_and_creation() {
     assert_eq!(rejected.0, 400);
     assert_eq!(rejected.1["error"], "unknown-profile");
     assert_eq!(hosted_profiles(&server).await, before);
+    server.stop().await;
+}
+
+// Independent #99 extension: actual hosted creation must admit each approved forfeit model.
+#[tokio::test]
+async fn timed_forfeit_creation_is_valid_and_the_real_server_finishes_once() {
+    use serde_json::json;
+    let mut server = profile_server(false, false).await;
+    let origin = "http://localhost:5173";
+    let (_, catalog) = server.api("GET", "/profiles", None, origin).await;
+    for (index, control) in [
+        per_turn_clock(2_000, "forfeit"),
+        json!({"clock":{"kind":"cumulative","initial_ms":2000},"on_expiry":"forfeit"}),
+        json!({"clock":{"kind":"cumulative","initial_ms":1500,"increment_ms":500},"on_expiry":"forfeit"}),
+    ].into_iter().enumerate() {
+        let request = timed_request(&catalog, 0xd0 + index as u8, control.clone());
+        let join = server.api("POST", "/games", Some(&request), origin).await;
+        assert_eq!(join.0, 200, "approved forfeit configuration must create: {}", join.1);
+        assert_eq!(server.api("POST", "/games", Some(&request), origin).await, join);
+        let client = server.client();
+        let players = start_profile_match(&server, &client, &join.1, request["requestId"].as_str().unwrap()).await;
+        let started = snapshot(&players.phones[0].0, |s| matches!(s.public.phase, Phase::Playing { .. })).await;
+        assert_eq!(serde_json::to_value(started.public.configuration.time_control).unwrap(), control);
+        let rack = started.own_rack;
+        let expired = snapshot(&players.phones[0].0, |s| matches!(s.public.phase, Phase::Finished { .. })).await;
+        assert_eq!(expired.public.history.len(), 1);
+        let Phase::Playing { active_player, .. } = started.public.phase else { unreachable!() };
+        let Phase::Finished { winners } = &expired.public.phase else { unreachable!() };
+        assert_eq!(winners.len(), 1);
+        assert_ne!(winners[0], active_player);
+        assert_eq!(expired.own_rack, rack);
+        assert!(expired.public.players.iter().all(|player| player.score == 0));
+        assert_eq!(snapshot(&players.board.0, |s| matches!(s.public.phase, Phase::Finished { .. })).await.public, expired.public);
+        let again = snapshot(&players.phones[0].0, |s| matches!(s.public.phase, Phase::Finished { .. })).await;
+        assert_eq!(again.public, expired.public);
+        assert!(again.public.clock.unwrap().expires_at_ms.is_none());
+    }
     server.stop().await;
 }

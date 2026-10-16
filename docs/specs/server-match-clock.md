@@ -3,7 +3,7 @@
 This headless server enabler of #99 (issue #114) runs **timed matches** in
 `crates/scrabble-server` on top of the merged engine clock
 ([match-clock.md](match-clock.md), #112). It implements Atlas Decisions 3.1,
-3.4 (automatic pass only, forfeit stays blocked), 3.5–3.9 and 3.11 at the
+3.4, 3.5–3.9 and 3.11–3.12 at the
 authoritative server. Browser creation controls, countdown UI, forfeit outcomes
 and public acceptance stay in #99.
 
@@ -122,20 +122,14 @@ introduced. Recovery restores the state after the pass, so a restart never
 applies a second pass for the same turn. This holds even when the recovery
 image is taken on the expiry tick itself.
 
-## Forfeit stays blocked
+## Forfeit
 
-Until the owner decides #99's forfeit semantics:
-
-- the creation API rejects any `on_expiry: "forfeit"` (below), so a hosted
-  match can never be forfeit-configured;
-- a forfeit-configured `ScrabbleSimulation` built directly (for example in
-  tests) stays safe. At or after expiry `timeout_at` returns
-  `ForfeitUnavailable`. `advance_tick` still succeeds and changes nothing else.
-  Moves are rejected with `clock_expired`. The match can't progress past that
-  expiry, as the engine contract requires.
-
-Any other error from `timeout_at` fails the tick atomically. With tick-derived
-time this can't happen.
+Atlas 3.12 settles elimination and continued multiplayer play. Valid forfeit
+creation must be accepted. The hosted expiry loop applies the engine's forfeit
+transition once on the first tick reaching expiry, publishes the result to public
+board and private controllers, and preserves elimination through replay/recovery.
+Player disconnect does not prevent expiry; a real server outage freezes time.
+The historical #114 `forfeit-unavailable` rejection is superseded by #99.
 
 ## Creation request
 
@@ -174,16 +168,15 @@ Validation happens before any initialization or allocation. Every rejection
 leaves the hosted-match count unchanged and binds nothing to the creation key.
 A later valid request with the same `requestId` succeeds.
 
-| Request                                                                | Response                                                              |
-| ---------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| malformed `timeControl` (unknown kind/field, wrong type, negative)     | `400 {"error":"invalid-request"}`                                     |
-| any duration `0` (including `increment_ms: 0`) or above `MAX_CLOCK_MS` | `400 {"error":"invalid-time-control","reason":"invalid-duration"}`    |
-| `cumulative` + `pass` without `increment_ms` (Decision 3.8)            | `400 {"error":"invalid-time-control","reason":"missing-increment"}`   |
-| any `on_expiry: "forfeit"` that is otherwise valid                     | `400 {"error":"invalid-time-control","reason":"forfeit-unavailable"}` |
+| Request                                                                | Response                                                            |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| malformed `timeControl` (unknown kind/field, wrong type, negative)     | `400 {"error":"invalid-request"}`                                   |
+| any duration `0` (including `increment_ms: 0`) or above `MAX_CLOCK_MS` | `400 {"error":"invalid-time-control","reason":"invalid-duration"}`  |
+| `cumulative` + `pass` without `increment_ms` (Decision 3.8)            | `400 {"error":"invalid-time-control","reason":"missing-increment"}` |
+| any valid `on_expiry: "forfeit"`                                       | Accepted under Atlas 3.12 (#99)                                     |
 
-The checks run in this order: duration, then 3.8, then forfeit. A cumulative
-forfeit clock without increment is valid under 3.8, so it is rejected only as
-`forfeit-unavailable`.
+The checks validate duration and then Decision 3.8. A cumulative forfeit clock
+without increment is valid; both models support forfeit under Atlas 3.12.
 
 Idempotent retries compare the time control like any other effective setting.
 An identical retry returns the same `JoinInformation`. Reusing the key with a
@@ -233,7 +226,7 @@ The existing `scrabble-server` suites stay green. The full gate is
 
 ## Open questions (owner)
 
-1. **Forfeit semantics** (#99). Creation rejects forfeit until answered.
+1. **Forfeit semantics** (#99). Resolved by Atlas 3.12; see the acceptance handoff below.
 2. **Distinct automatic-pass marker** (match-clock.md, open question 2). The
    automatic pass publishes an ordinary `TurnAction::Pass {}`.
 3. **Tick granularity.** Expiry is applied at 50 ms tick boundaries, so a
@@ -243,3 +236,108 @@ The existing `scrabble-server` suites stay green. The full gate is
 4. **Deployment ruleset clocks.** A `SCRABBLE_RULESET_FILE` containing
    `time_control` would make every v1/v2 match timed. This contract does not
    cover it. It is treated as unsupported operator input until decided.
+
+## Issue 99 independent acceptance handoff
+
+Authority is `docs/DECISION-ATLAS.md` Decisions **3.1, 3.4–3.9, 3.11–3.12**, priority
+**4.1**, at baseline **d7012663714d79c17f173de11ebdd70564ba2235**; #99 retains the
+complete product scope. A distinct acceptance agent authored this contract before
+production changes and without an implementation patch. Shared policy
+`sourceRevision`: **5ad0db36974c8b0e5f9812c90ee34a4f227852c3**.
+
+Every named new or reused suite below is required at the final PR head. There is
+no verified complete impact graph, so run the full applicable `bun run check`
+before merge, then published-service acceptance after documented deployment.
+
+- **Explicit setup and fresh untimed creation (3.1/3.11):**
+  `apps/web/browser/match-clock.spec.ts` starts with clocks off, checks newly
+  enabled model/consequence/durations have no invented selections, creates timed
+  then fresh untimed in the same browser, and checks actual request payloads.
+  Enabling cumulative automatic pass with absent/zero increment visibly rejects
+  before any POST (3.8). Existing `profile-creation.spec.ts` preserves independent
+  profiles/advanced gameplay settings; clocks remain separate from preferences.
+- **Both models and both outcomes (3.4/3.5):** the four browser cases use the
+  actual React host form, separate player contexts, native service and real time;
+  board/controller show the selected rules and clocks. The active accessible timer
+  changes while the inactive timer stays fixed. Actual timeout changes the legal
+  turn or produces the last-survivor result, with a visible timeout history result.
+  These tests add no browser clock override or fake native game. Inputs 2+1 seconds
+  cumulative / 3 seconds per turn are test data, not approved defaults.
+- **Transitions, cumulative carry, first/zero-bank grants, per-turn reset,
+  accepted commit/pass/exchange, invalid/rejected commands, exact boundary and
+  timeout race/retry:** reuse **all** `scrabble-game/tests/match_clock.rs` cases,
+  including independent #112 cases already present on baseline d701266; the
+  provisional forfeit case is replaced under 3.12. Instant injection stays at the
+  existing public native seam and establishes deterministic ordering without
+  wall-clock CI assumptions.
+- **2–4-player forfeit and completion (3.12):** new engine cases exercise both
+  clock models, a forfeiter with a higher score, frozen private rack/score, bag
+  conservation, skipped seats after a full live rotation, continued multiplayer
+  play, duplicate rejection and last-survivor win. Separate cases cover scoreless
+  completion and going-out transfers excluding forfeited racks. Replay from the
+  same initial seed/events matches canonical elimination evidence.
+- **Authoritative boundary and immutable identity (3.1/3.8):** reuse/update
+  `server_process.rs::timed_creation_validates_time_controls_without_allocation_and_conflicts_on_retry`
+  for impossible settings, malformed input, no allocation, same-key retry and
+  conflict. New `timed_forfeit_creation_is_valid_and_the_real_server_finishes_once`
+  creates per-turn and cumulative forfeit (with/without increment), observes real
+  hosted expiry, frozen rack/scores and identical board/controller result.
+- **Disconnect/outage, retry and replay (3.6/3.7):** reuse **all**
+  `scrabble-server/tests/match_clock_server.rs` and the real process
+  `timed_board_match_auto_passes_from_the_real_tick_loop_and_freezes_across_restart`.
+  New native forfeit cases verify 2-player result and 3–4-player continued rotation,
+  canonical replay, recovery of elimination without duplication, continued clocks
+  for disconnected survivors, and stale player commands. Browser cases reload the
+  expired controller and retain the authoritative outcome. No pause control is
+  exposed (3.9); no new pause command is authorized.
+- **Privacy/compatibility:** reuse clock suite public/private projections and
+  pinned untimed byte-identity cases, existing `private_boundaries.rs`, v1/v2 strict
+  creation cases and browser creation/reconnect suites. New browser cases inspect
+  actual datagrams through the existing observer, prove the board rack is empty,
+  and retain private player racks across expiry/reload.
+- **Accessibility/layout/performance:** new browser cases run axe on board and
+  phone and attach desktop/390px phone screenshots. Reuse existing accessibility,
+  preferences, playable-loop and performance-budget contracts, including the 50ms
+  interaction requirement. `match-clock.spec.ts` is explicitly included in the
+  production-like Pages browser selection as well as the development selection.
+- **Architecture/resource ownership:** existing server tick, replay, private
+  projection and strict protocol contracts remain required. Independent source
+  review before merge must verify Rust owns authoritative clock transitions,
+  React only presents authoritative time, settings cannot mutate mid-match, no
+  manual pause command/UI exists, and no unbounded timer/polling per unrelated
+  match was added. Those source-review obligations are not claimed as executed
+  architecture tests.
+- **Publication and physical devices:** after local/full gates, use the documented
+  native Hetzner publisher before Pages where needed, preserve active games, then
+  inspect the actual https://moritzbrantner.github.io/scrabble/ route against the
+  reachable authoritative service: untimed after timed creation, both modes and
+  both outcomes, independent devices, remaining time and legal completion. No
+  test-only duration override is evidence of product defaults. Desktop/phone
+  Playwright are browser evidence; physical-device testing remains a separate
+  release obligation under Atlas 4.1 and #32/#34. Missing hosting/device access
+  must be recorded explicitly; none is claimed complete in this handoff.
+
+### Initial evidence
+
+Focused baseline commands ran with the disposable target wrapper
+`python3 ~/.local/share/coding-agent/disk-maintenance.py run -- …`:
+
+- `cargo test -p scrabble-game --test match_clock forfeit --locked`: **exit 101**,
+  two executed new forfeit cases fail at `ForfeitUnavailable`.
+- `cargo test -p scrabble-server --test match_clock_server forfeit --locked`:
+  **exit 101**, expected Finished(last survivor), observed Playing(first player).
+- `cargo test -p scrabble-server --test server_process timed_forfeit_creation --locked`:
+  **exit 101**, real API returns 400 `forfeit-unavailable`, expected successful creation.
+- `bun scripts/test-browser.ts match-clock.spec.ts --grep 'each fresh creation'`:
+  **exit 1**, actual served frontend has no accessible Enable clocks checkbox;
+  screenshot/trace retained in `test-results/match-clock-each-fresh-cre-5561a-invents-no-timed-selections/`.
+- `bun run typecheck` and `bun run lint:web`: passed for the authored browser contract.
+
+Full baseline transcript: `/tmp/scrabble99-acceptance-red.log` (local, disposable
+supporting evidence). The final going-out and multiplayer native recovery
+extensions were added after those focused red runs and have **not yet executed**;
+all four timed browser cases, Pages run, full suites, publication and devices are
+also **pending**. Earlier #112/#114 evidence is historical, not a new pass claimed
+by this handoff. Required final commands include both complete native clock suites,
+all `server_process` cases, the complete browser clock file in both development and
+Pages configurations, and the repository full gate.
