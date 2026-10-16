@@ -1204,3 +1204,122 @@ async fn invalid_unicode_layout_fields_are_rejected_without_interrupting_the_api
     assert_eq!(status, 200, "API still accepts valid requests: {body}");
     api.stop().await;
 }
+
+/// Independent #136 replay boundary: initialization is required even when a
+/// recoverable custom match and its canonical input log still exist.
+#[tokio::test]
+async fn custom_layout_replay_rejects_missing_or_mismatched_initialization() {
+    let root = tempfile::tempdir().unwrap();
+    let api = Api::start(root.path()).await;
+    let catalog = api.catalog().await;
+    let square = api.save("Replay square", square(7, &[])).await;
+    let hex = api.save("Replay hex", hex(7, &[], "main_word_only")).await;
+    let (status, square_match, _) = api
+        .create_match(&catalog, "acceptance-pairs", &square.board)
+        .await;
+    assert_eq!(status, 200);
+    let (status, hex_match, _) = api
+        .create_match(&catalog, "acceptance-pairs", &hex.board)
+        .await;
+    assert_eq!(status, 200);
+    api.stop().await;
+    let square_id = square_match["matchId"].as_str().unwrap();
+    let hex_id = hex_match["matchId"].as_str().unwrap();
+    let square_path = root
+        .path()
+        .join("configurations")
+        .join(format!("{square_id}.json"));
+    let hex_path = root
+        .path()
+        .join("configurations")
+        .join(format!("{hex_id}.json"));
+    let square_bytes = std::fs::read(&square_path).unwrap();
+    let hex_bytes = std::fs::read(&hex_path).unwrap();
+    for (match_id, path, original, foreign) in [
+        (
+            square_id,
+            square_path,
+            square_bytes.clone(),
+            hex_bytes.clone(),
+        ),
+        (hex_id, hex_path, hex_bytes, square_bytes),
+    ] {
+        let id = game_server::MatchId::new(match_id.to_owned()).unwrap();
+        let factory = MatchFactory::new(&config(root.path())).unwrap();
+        let image = std::fs::read_dir(root.path().join("recovery"))
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter_map(|entry| game_server::RecoveryImage::read_file(&entry.path()).ok())
+            .find(|image| scrabble_server::replay::inspect_replay(&factory, &id, image).is_ok())
+            .expect("the exact custom match has a verifiable native recovery image");
+        let report = scrabble_server::replay::inspect_replay(&factory, &id, &image).unwrap();
+        assert!(report.records_verified > 0 && report.checkpoints_verified > 0);
+        std::fs::remove_file(&path).unwrap();
+        let factory = MatchFactory::new(&config(root.path())).unwrap();
+        assert!(
+            scrabble_server::replay::inspect_replay(&factory, &id, &image).is_err(),
+            "missing initialization must never fall back to default board rules"
+        );
+        std::fs::write(&path, foreign).unwrap();
+        let factory = MatchFactory::new(&config(root.path())).unwrap();
+        assert!(
+            scrabble_server::replay::inspect_replay(&factory, &id, &image).is_err(),
+            "another custom match's initialization must not verify this replay"
+        );
+        std::fs::write(&path, original).unwrap();
+        let factory = MatchFactory::new(&config(root.path())).unwrap();
+        assert!(scrabble_server::replay::inspect_replay(&factory, &id, &image).is_ok());
+    }
+}
+
+/// The offline report must expose full immutable configuration and public
+/// results from VERIFIED canonical state, without private racks or credentials.
+#[tokio::test]
+async fn custom_layout_replay_report_retains_configuration_and_public_results() {
+    let root = tempfile::tempdir().unwrap();
+    let api = Api::start(root.path()).await;
+    let catalog = api.catalog().await;
+    let saved = api
+        .save("Replay report", square(7, &[(3, 3, Premium::TripleWord)]))
+        .await;
+    let (status, created, _) = api
+        .create_match(&catalog, "acceptance-pairs", &saved.board)
+        .await;
+    assert_eq!(status, 200);
+    let id = game_server::MatchId::new(created["matchId"].as_str().unwrap().to_owned()).unwrap();
+    api.stop().await;
+    let factory = MatchFactory::new(&config(root.path())).unwrap();
+    let mut simulation = factory.create(&id).unwrap();
+    simulation.add_player(1).unwrap();
+    let expected: PlayerSnapshot =
+        serde_json::from_slice(&simulation.snapshot_for(1).unwrap().payload).unwrap();
+    let image = std::fs::read_dir(root.path().join("recovery"))
+        .unwrap()
+        .filter_map(Result::ok)
+        .filter_map(|entry| game_server::RecoveryImage::read_file(&entry.path()).ok())
+        .find(|image| scrabble_server::replay::inspect_replay(&factory, &id, image).is_ok())
+        .expect("the exact custom match has a native replay");
+    let report = scrabble_server::replay::inspect_replay(&factory, &id, &image).unwrap();
+    assert!(report.records_verified > 0 && report.checkpoints_verified > 0);
+    let report = serde_json::to_value(report).unwrap();
+    assert_eq!(
+        report["configuration"],
+        serde_json::to_value(&expected.public.configuration).unwrap(),
+        "native report must retain the complete immutable custom configuration"
+    );
+    assert_eq!(
+        report["game"]["players"],
+        serde_json::to_value(&expected.public.players).unwrap(),
+        "native report must retain all canonical public result fields"
+    );
+    let players = report["game"]["players"].as_array().unwrap();
+    for player in players {
+        assert!(
+            player.as_object().unwrap().keys().all(|key| matches!(
+                key.as_str(),
+                "id" | "display_name" | "score" | "rack_count" | "forfeited"
+            )),
+            "canonical result must not expose private rack tiles or runtime connection state"
+        );
+    }
+}
