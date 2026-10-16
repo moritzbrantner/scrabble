@@ -536,8 +536,7 @@ export function PlayerPhone({
                 {[...snapshot.public.players]
                   .sort(
                     (left, right) =>
-                      Number(Boolean(left.forfeited)) - Number(Boolean(right.forfeited)) ||
-                      (phase?.kind === "finished" ? right.score - left.score : 0),
+                      Number(Boolean(left.forfeited)) - Number(Boolean(right.forfeited)),
                   )
                   .map((player) => (
                     <li
