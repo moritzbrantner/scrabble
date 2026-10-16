@@ -8,7 +8,10 @@ use crate::{
 };
 use scrabble_game::{
     dictionary::WordList,
-    ruleset::{ContentIdentity, Premium, Ruleset, TileDefinition},
+    ruleset::{
+        BoardShape, ContentIdentity, Premium, PremiumPolicy, Ruleset, TileDefinition,
+        WordLengthMetric,
+    },
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, fs::File, io::Read, path::Path};
@@ -79,6 +82,12 @@ struct BoardSource {
     label: String,
     board_size: u8,
     premiums: Vec<Premium>,
+    #[serde(default)]
+    board_shape: BoardShape,
+    #[serde(default)]
+    premium_policy: PremiumPolicy,
+    #[serde(default)]
+    main_word_length: WordLengthMetric,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -135,6 +144,7 @@ pub(crate) struct ProfileCatalog {
     tiles: Vec<Named<TileProfile>>,
     boards: Vec<Named<BoardProfile>>,
     public: serde_json::Value,
+    legacy_public: Option<serde_json::Value>,
 }
 impl ProfileCatalog {
     pub fn load(path: Option<&Path>, legacy: &Ruleset, dictionary: &WordList) -> ErrorResult<Self> {
@@ -191,7 +201,14 @@ impl ProfileCatalog {
                 .map(|r| {
                     Ok(Named {
                         label: r.label,
-                        profile: BoardProfile::new(r.identity, r.board_size, r.premiums)?,
+                        profile: BoardProfile::with_geometry(
+                            r.identity,
+                            r.board_size,
+                            r.premiums,
+                            r.board_shape,
+                            r.premium_policy,
+                            r.main_word_length,
+                        )?,
                     })
                 })
                 .collect::<ErrorResult<Vec<_>>>()?;
@@ -237,6 +254,43 @@ impl ProfileCatalog {
                     legacy.premiums.clone(),
                 )?,
             });
+            for (name, label, policy) in [
+                (
+                    "builtin-hex-all-word",
+                    "Hex all-word",
+                    PremiumPolicy::AllWord,
+                ),
+                (
+                    "builtin-hex-main-word",
+                    "Hex main-word-only",
+                    PremiumPolicy::MainWordOnly,
+                ),
+            ] {
+                for (suffix, metric_label, metric) in [
+                    ("", "tiles", WordLengthMetric::Tiles),
+                    ("-letters", "letters", WordLengthMetric::Letters),
+                ] {
+                    let mut premiums = vec![Premium::Normal; 37];
+                    // Row-major on-board cells of the radius-three board.
+                    premiums[18] = Premium::DoubleWord;
+                    // Interior (3, 2) remains available for a later crossing-word premium.
+                    premiums[17] = Premium::DoubleWord;
+                    boards.push(Named {
+                        label: format!("{label} ({metric_label})"),
+                        profile: BoardProfile::with_geometry(
+                            ContentIdentity {
+                                name: format!("{name}{suffix}"),
+                                revision: "1".into(),
+                            },
+                            7,
+                            premiums,
+                            BoardShape::Hexagon,
+                            policy,
+                            metric,
+                        )?,
+                    });
+                }
+            }
             let names = DefaultNames {
                 word_list: words.identity().name.clone(),
                 tile: tiles.identity().name.clone(),
@@ -283,26 +337,73 @@ impl ProfileCatalog {
             tiles,
             boards,
             public: serde_json::Value::Null,
+            legacy_public: None,
         };
         let prepared = catalog
             .resolve(&selection, MatchRules::from(legacy))
             .map_err(|_| "default profile combination is invalid")?;
-        let composed = &prepared.composed;
-        let legacy_compatible = composed.rules.tiles == legacy.tiles
-            && composed.rules.board_size == legacy.board_size
-            && composed.rules.premiums == legacy.premiums
-            && composed.dictionary.words().eq(dictionary.words());
+        let legacy_compatible = |composed: &ComposedRuleset| {
+            composed.rules.tiles == legacy.tiles
+                && composed.rules.board_shape == BoardShape::Square
+                && composed.rules.board_size == legacy.board_size
+                && composed.rules.premiums == legacy.premiums
+                && composed.dictionary.words().eq(dictionary.words())
+        };
+        let square_selection = catalog
+            .boards
+            .iter()
+            .find(|row| {
+                row.profile.shape() == BoardShape::Square
+                    && row.profile.identity() == &selection.board
+            })
+            .or_else(|| {
+                catalog
+                    .boards
+                    .iter()
+                    .find(|row| row.profile.shape() == BoardShape::Square)
+            })
+            .map(|row| Selection {
+                board: row.profile.identity().clone(),
+                ..selection.clone()
+            });
         catalog.public = serde_json::json!({"version":1,
             "wordLists":catalog.words.iter().map(|r|serde_json::json!({"identity":r.profile.identity(),"label":r.label})).collect::<Vec<_>>(),
             "tileProfiles":catalog.tiles.iter().map(|r|serde_json::json!({"identity":r.profile.identity(),"label":r.label,"tiles":r.profile.tiles()})).collect::<Vec<_>>(),
-            "boardProfiles":catalog.boards.iter().map(|r|serde_json::json!({"identity":r.profile.identity(),"label":r.label,"boardSize":r.profile.size(),"premiums":r.profile.premiums()})).collect::<Vec<_>>(),
-            "defaults":{"selection":selection,"rules":MatchRules::from(legacy),"legacyCompatible":legacy_compatible}});
+            "boardProfiles":catalog.boards.iter().map(|r| {
+                let mut row = serde_json::json!({"identity":r.profile.identity(),"label":r.label,"boardSize":r.profile.size(),"premiums":r.profile.premiums()});
+                if r.profile.shape() == BoardShape::Hexagon {
+                    row["boardShape"] = serde_json::json!(r.profile.shape());
+                    row["premiumPolicy"] = serde_json::json!(r.profile.policy());
+                    row["mainWordLength"] = serde_json::json!(r.profile.metric());
+                }
+                row
+            }).collect::<Vec<_>>(),
+            "defaults":{"selection":selection,"rules":MatchRules::from(legacy),"legacyCompatible":legacy_compatible(&prepared.composed)}});
+        if let Some(square_selection) = square_selection {
+            let square = catalog
+                .resolve(&square_selection, MatchRules::from(legacy))
+                .map_err(|_| "legacy square profile combination is invalid")?;
+            let mut projection = catalog.public.clone();
+            projection["boardProfiles"]
+                .as_array_mut()
+                .ok_or("invalid public board profiles")?
+                .retain(|row| row.get("boardShape").is_none());
+            projection["defaults"] = serde_json::json!({
+                "selection": square_selection,
+                "rules": MatchRules::from(legacy),
+                "legacyCompatible": legacy_compatible(&square.composed),
+            });
+            catalog.legacy_public = Some(projection);
+        }
         if serde_json::to_vec(&catalog.public)?.len() > 128 * 1024 {
             return Err("public profile catalog exceeds 128 KiB".into());
         }
         Ok(catalog)
     }
-    pub fn public(&self) -> serde_json::Value {
+    pub fn public(&self) -> Option<serde_json::Value> {
+        self.legacy_public.clone()
+    }
+    pub fn public_hex(&self) -> serde_json::Value {
         self.public.clone()
     }
     pub fn resolve(
@@ -369,7 +470,7 @@ mod board_size_tests {
         let original = english_fixture();
         let dictionary = WordList::from_text(original.dictionary.clone(), "CAT\nAT\n").unwrap();
         let catalog = ProfileCatalog::load(None, &original, &dictionary).unwrap();
-        let public = catalog.public();
+        let public = catalog.public().unwrap();
         assert_eq!(public["defaults"]["legacyCompatible"], true);
         let boards = public["boardProfiles"].as_array().unwrap();
         let sizes: Vec<u64> = boards
@@ -399,6 +500,81 @@ mod board_size_tests {
                     );
                 }
             }
+        }
+    }
+    /// Retrospective #96 sample acceptance: policy choices must have a usable
+    /// crossing-word premium after the mandatory centre-covering opening.
+    /// Existing native tests prove the scoring rules; this checks REAL fallback
+    /// catalog profiles rather than acceptance-only authored board layouts.
+    #[test]
+    fn builtin_hex_samples_keep_classic_defaults_and_have_reusable_policy_demonstrations() {
+        let original = english_fixture();
+        let dictionary = WordList::from_text(original.dictionary.clone(), "CAT\nAT\n").unwrap();
+        let catalog = ProfileCatalog::load(None, &original, &dictionary).unwrap();
+        let legacy = catalog.public().unwrap();
+        let extended = catalog.public_hex();
+        assert_eq!(extended["defaults"], legacy["defaults"]);
+        assert_eq!(legacy["defaults"]["legacyCompatible"], true);
+        let defaults: Selection =
+            serde_json::from_value(legacy["defaults"]["selection"].clone()).unwrap();
+        let classic = catalog
+            .resolve(&defaults, MatchRules::from(&original))
+            .unwrap()
+            .composed
+            .rules;
+        assert_eq!(classic.board_shape, BoardShape::Square);
+        assert_eq!(classic.board_size, original.board_size);
+        assert_eq!(classic.premiums, original.premiums);
+
+        let hex: Vec<_> = extended["boardProfiles"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|row| row["boardShape"] == "hexagon")
+            .collect();
+        assert_eq!(hex.len(), 4);
+        let mut selected = Vec::new();
+        for profile in hex {
+            let mut selection = defaults.clone();
+            selection.board = serde_json::from_value(profile["identity"].clone()).unwrap();
+            let rules = catalog
+                .resolve(&selection, MatchRules::from(&original))
+                .unwrap()
+                .composed
+                .rules;
+            assert_eq!(rules.board_shape, BoardShape::Hexagon);
+            selected.push(rules);
+        }
+        for policy in [PremiumPolicy::AllWord, PremiumPolicy::MainWordOnly] {
+            for metric in [WordLengthMetric::Tiles, WordLengthMetric::Letters] {
+                assert_eq!(
+                    selected
+                        .iter()
+                        .filter(|rules| rules.premium_policy == policy
+                            && rules.main_word_length == metric)
+                        .count(),
+                    1
+                );
+            }
+        }
+        for rules in &selected {
+            assert_eq!(rules.board_size, selected[0].board_size);
+            assert_eq!(rules.premiums, selected[0].premiums);
+            let center = rules.board_size / 2;
+            assert_eq!(rules.premium_at(center, center), Some(Premium::DoubleWord));
+            let usable = (1..rules.board_size-1).any(|row| (1..rules.board_size-1).any(|column| {
+                (row, column) != (center, center)
+                    && matches!(rules.premium_at(row, column), Some(Premium::DoubleWord | Premium::TripleWord))
+                    // A complete interior neighbourhood supports genuine
+                    // intersecting words along all three native Hex axes.
+                    && [(0_i16,1_i16),(0,-1),(1,0),(-1,0),(1,-1),(-1,1)].iter().all(|&(dr,dc)|
+                        rules.contains((i16::from(row)+dr) as u8, (i16::from(column)+dc) as u8))
+            }));
+            assert!(
+                usable,
+                "{} has only opening-consumed word premiums; its policy cannot change a later crossing-word score",
+                rules.identity.name
+            );
         }
     }
 }

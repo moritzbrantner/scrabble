@@ -55,6 +55,21 @@ pub(crate) fn apply_with_dictionary_at(
     dictionary: &dyn Dictionary,
     now_ms: Option<u64>,
 ) -> Result<MoveScore, CommitError> {
+    let (candidate, score) =
+        prepare_with_dictionary_at(state, player, placements, dictionary, now_ms)?;
+    *state = candidate;
+    Ok(score)
+}
+
+/// Prepare the complete transaction without publishing any mutation. Preview and
+/// commit share every admission, score, draw, clock and final-turn check.
+pub(crate) fn prepare_with_dictionary_at(
+    state: &GameState,
+    player: PlayerId,
+    placements: &[Placement],
+    dictionary: &dyn Dictionary,
+    now_ms: Option<u64>,
+) -> Result<(GameState, MoveScore), CommitError> {
     if !matches!(state.phase(), Phase::Playing { active_player, .. } if *active_player == player) {
         return Err(CommitError::NotActive);
     }
@@ -98,11 +113,15 @@ pub(crate) fn apply_with_dictionary_at(
             },
         )
         .map_err(CommitError::State)?;
+    if state.ruleset().board_shape == crate::ruleset::BoardShape::Hexagon {
+        candidate
+            .record_analysis(score.history_analysis(state.ruleset().main_word_length))
+            .map_err(CommitError::State)?;
+    }
     if let Some(now) = now_ms {
         candidate
             .begin_clock_turn(now)
             .map_err(CommitError::State)?;
     }
-    *state = candidate;
-    Ok(score)
+    Ok((candidate, score))
 }

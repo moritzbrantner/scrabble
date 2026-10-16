@@ -90,6 +90,40 @@ const phase = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("playing"), active_player: id, turn: id }),
   z.strictObject({ kind: z.literal("finished"), winners: z.array(id) }),
 ]);
+export const moveAnalysis = z.strictObject({
+  words: z
+    .array(
+      z.strictObject({
+        text: z.string().min(1).max(60),
+        direction: z.enum(["horizontal", "vertical", "diagonal"]),
+        score: z.int().min(0).max(4294967295),
+      }),
+    )
+    .min(1)
+    .max(31),
+  length_metric: z.enum(["tiles", "letters"]),
+  bingo_bonus: z.int().min(0).max(4294967295),
+  total: z.int().min(0).max(4294967295),
+});
+export type MoveAnalysis = z.infer<typeof moveAnalysis>;
+const placementEvaluation = z.discriminatedUnion("status", [
+  z.strictObject({ status: z.literal("valid"), analysis: moveAnalysis }),
+  z.strictObject({
+    status: z.literal("invalid"),
+    problem: z.enum([
+      "center",
+      "not_line",
+      "gap",
+      "disconnected",
+      "no_word",
+      "unavailable",
+      "invalid_words",
+      "dictionary",
+      "score_overflow",
+    ]),
+    words: z.array(z.string().min(1).max(60)).max(31),
+  }),
+]);
 export const turnAction = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("commit"),
@@ -103,27 +137,45 @@ export const turnAction = z.discriminatedUnion("kind", [
           .max(60)
           .refine((word) => Array.from(word).length <= 15 * MAX_FACE_BYTES),
       )
-      .max(16),
+      .max(31),
     move_score: z.int().min(0).max(4294967295),
     blank_count: z.int().min(0).max(15),
   }),
   z.strictObject({ kind: z.literal("pass") }),
   z.strictObject({ kind: z.literal("exchange"), tile_count: z.int().min(1).max(15) }),
 ]);
-const publicTurn = z.strictObject({
-  turn: id,
-  player_id: id,
-  action: turnAction,
-  scores: z
+const historyAnalysis = z.strictObject({
+  word_scores: z
     .array(
-      z.strictObject({
-        player_id: id,
-        delta: z.int().min(-4294967295).max(4294967295),
-        score: z.int().min(-2147483648).max(2147483647),
-      }),
+      z.tuple([z.enum(["horizontal", "vertical", "diagonal"]), z.int().min(0).max(4294967295)]),
     )
-    .max(4),
+    .min(1)
+    .max(31),
+  length_metric: z.enum(["tiles", "letters"]),
+  bingo_bonus: z.int().min(0).max(4294967295),
 });
+const publicTurn = z
+  .strictObject({
+    turn: id,
+    player_id: id,
+    action: turnAction,
+    analysis: historyAnalysis.optional(),
+    scores: z
+      .array(
+        z.strictObject({
+          player_id: id,
+          delta: z.int().min(-4294967295).max(4294967295),
+          score: z.int().min(-2147483648).max(2147483647),
+        }),
+      )
+      .max(4),
+  })
+  .refine(
+    (turn) =>
+      !turn.analysis ||
+      (turn.action.kind === "commit" &&
+        turn.analysis.word_scores.length === turn.action.words.length),
+  );
 export const ruleset = z
   .strictObject({
     identity,
@@ -139,6 +191,9 @@ export const ruleset = z
       .min(1)
       .max(64),
     board_size: z.int().min(1).max(15),
+    board_shape: z.enum(["square", "hexagon"]).optional(),
+    premium_policy: z.enum(["all_word", "main_word_only"]).optional(),
+    main_word_length: z.enum(["tiles", "letters"]).optional(),
     premiums: z.array(premium).max(225),
     rack_size: z.int().min(1).max(15),
     bingo_bonus: z.int().min(0).max(65535),
@@ -150,7 +205,14 @@ export const ruleset = z
   .refine(
     (value) =>
       value.board_size % 2 === 1 &&
-      value.premiums.length === value.board_size ** 2 &&
+      value.premiums.length ===
+        (value.board_shape === "hexagon"
+          ? 3 * Math.floor(value.board_size / 2) * (Math.floor(value.board_size / 2) + 1) + 1
+          : value.board_size ** 2) &&
+      (value.board_shape === "hexagon"
+        ? value.board_size >= 3
+        : (value.premium_policy ?? "all_word") === "all_word" &&
+          (value.main_word_length ?? "tiles") === "tiles") &&
       value.minimum_players <= value.maximum_players,
   )
   .refine((value) => {
@@ -200,14 +262,22 @@ const snapshotFields = z.strictObject({
   remaining_tiles: z.int().min(0).max(65535),
   history: z.array(publicTurn).max(24),
   host: z.strictObject({ id: id.nullable() }).optional(),
-  preview: z.strictObject({ player_id: id, turn: id, tiles: z.array(tile).max(15) }).nullable(),
+  preview: z
+    .strictObject({
+      player_id: id,
+      turn: id,
+      tiles: z.array(tile).max(15),
+      evaluation: placementEvaluation.optional(),
+    })
+    .nullable(),
 });
 export const publicSnapshot = snapshotFields.refine((snapshot) => {
   const bound = maxWordLength(snapshot.configuration);
   return snapshot.history.every(
     (turn) =>
       turn.action.kind !== "commit" ||
-      turn.action.words.every((word) => Array.from(word).length <= bound),
+      (turn.action.words.length <= (snapshot.configuration.board_shape === "hexagon" ? 31 : 16) &&
+        turn.action.words.every((word) => Array.from(word).length <= bound)),
   );
 });
 export type PublicSnapshot = z.infer<typeof publicSnapshot>;

@@ -2,6 +2,9 @@ import { Button } from "@moritzbrantner/ui/client";
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 
 import { copy, type Copy, type CopyKey } from "./copy";
+import { boardCells, containsCell, hexCellStyle, hexBoardStyle } from "./board-geometry";
+import { draftEvaluation } from "./hex-preview";
+import { MoveAnalysis } from "./MoveAnalysis";
 import { boardCommands } from "./editor-commands";
 import { type CommandEnvelope, type TurnRejection } from "./game-protocol";
 import { useTouchInput } from "./input-capability";
@@ -111,6 +114,8 @@ export function MoveEditor({
   }, [exchanging, enabled]);
   const passButton = useRef<HTMLButtonElement>(null);
   const problem = draftProblem(snapshot, rules, current);
+  const evaluation = canAct ? draftEvaluation(snapshot, current) : undefined;
+  const awaitingAnalysis = rules.board_shape === "hexagon" && evaluation?.status !== "valid";
   const previewCallback = useRef(onPreview);
   const previewPaused = useRef(false);
   useEffect(() => {
@@ -187,7 +192,8 @@ export function MoveEditor({
   async function submit(kind: "commit" | "pass" | "exchange") {
     if (
       !enabled ||
-      (kind === "commit" && (problem !== undefined || current.placements.length === 0)) ||
+      (kind === "commit" &&
+        (problem !== undefined || awaitingAnalysis || current.placements.length === 0)) ||
       (kind === "pass" && state.confirmPass !== true) ||
       (kind === "exchange" &&
         (!canExchange ||
@@ -235,7 +241,7 @@ export function MoveEditor({
   const proposed = new Map(
     current.placements.map((tile) => [`${tile.coordinate.row},${tile.coordinate.column}`, tile]),
   );
-  const indices = Array.from({ length: rules.board_size }, (_, index) => index);
+
   let feedback = state.message ?? copy(problem === undefined ? "editor.ready" : `draft.${problem}`);
   const ownTurn =
     snapshot.public.phase.kind === "playing" &&
@@ -264,7 +270,10 @@ export function MoveEditor({
   function moveFocus(key: string, index: number): boolean {
     const command = boardCommands.find((entry) => entry.key === key);
     const next = command?.target(index, rules.board_size);
-    if (next === undefined) {
+    if (
+      next === undefined ||
+      !containsCell(rules, Math.floor(next / rules.board_size), next % rules.board_size)
+    ) {
       return false;
     }
     setFocusSquare(next);
@@ -329,75 +338,88 @@ export function MoveEditor({
         aria-label={t("editor.board")}
       >
         <div
-          className="phone-board-grid"
+          className={`phone-board-grid${rules.board_shape === "hexagon" ? " hex-editor-grid" : ""}`}
           role="group"
           aria-label={t("editor.chooseSquare")}
           aria-describedby={keyboardHelp}
-          style={{ gridTemplateColumns: `repeat(${rules.board_size}, 44px)` }}
+          style={
+            rules.board_shape === "hexagon"
+              ? { ...hexBoardStyle(rules.board_size), maxWidth: "none" }
+              : { gridTemplateColumns: `repeat(${rules.board_size}, 44px)` }
+          }
         >
-          {indices.flatMap((row) =>
-            indices.map((column) => {
-              const key = `${row},${column}`;
-              const fixed = committed.get(key);
-              const draft = proposed.get(key);
-              const rackTile = snapshot.own_rack.tiles.find((tile) => tile.id === draft?.tile_id);
-              const letter =
-                fixed?.letter ??
-                draft?.blank_as ??
-                (rackTile === undefined ? undefined : (faceText(rackTile.face) ?? undefined));
-              const premium = rules.premiums[row * rules.board_size + column] ?? "normal";
-              const center =
-                row === Math.floor(rules.board_size / 2) &&
-                column === Math.floor(rules.board_size / 2);
-              let squareKey: CopyKey = center ? "editor.squareCenter" : "editor.squareEmpty";
-              if (draft !== undefined) {
-                squareKey = "editor.squareDraft";
-              }
-              if (fixed !== undefined) {
-                squareKey = "editor.squareFixed";
-              }
-              const label = t(squareKey, {
-                row: row + 1,
-                column: column + 1,
-                letter: letter ?? "",
-              });
-              return (
-                <Button
-                  key={key}
-                  className={`phone-square premium-${premium.replaceAll("_", "-")}${draft ? " tentative-square" : ""}${fixed ? " committed-square" : ""}`}
-                  data-center={center}
-                  data-square-index={row * rules.board_size + column}
-                  tabIndex={row * rules.board_size + column === focusSquare ? 0 : -1}
-                  onFocus={() => setFocusSquare(row * rules.board_size + column)}
-                  onKeyDown={(event: KeyboardEvent<HTMLButtonElement>) => {
-                    if (moveFocus(event.key, row * rules.board_size + column)) {
-                      event.preventDefault();
-                    }
-                  }}
-                  aria-label={label}
-                  aria-description={t(`premium.${premium}`)}
-                  aria-pressed={draft !== undefined && selected === draft.tile_id}
-                  disabled={!enabled || exchanging}
-                  aria-disabled={fixed !== undefined}
-                  onClick={() => {
-                    if (fixed === undefined) {
-                      square(row, column);
-                    }
-                  }}
-                >
-                  <small className="square-reference" aria-hidden="true">
-                    {String.fromCharCode(65 + column)}
-                    {row + 1}
-                  </small>
-                  <span aria-hidden="true" className={letter && faceClass(letter)}>
-                    {letter ?? (center ? "★" : t(`premiumShort.${premium}`) || "·")}
-                  </span>
-                </Button>
-              );
-            }),
-          )}
+          {boardCells(rules).map(({ row, column, premiumIndex }) => {
+            const key = `${row},${column}`;
+            const fixed = committed.get(key);
+            const draft = proposed.get(key);
+            const rackTile = snapshot.own_rack.tiles.find((tile) => tile.id === draft?.tile_id);
+            const letter =
+              fixed?.letter ??
+              draft?.blank_as ??
+              (rackTile === undefined ? undefined : (faceText(rackTile.face) ?? undefined));
+            const premium = rules.premiums[premiumIndex] ?? "normal";
+            const center =
+              row === Math.floor(rules.board_size / 2) &&
+              column === Math.floor(rules.board_size / 2);
+            let squareKey: CopyKey = center ? "editor.squareCenter" : "editor.squareEmpty";
+            if (draft !== undefined) {
+              squareKey = "editor.squareDraft";
+            }
+            if (fixed !== undefined) {
+              squareKey = "editor.squareFixed";
+            }
+            const label = t(squareKey, {
+              row: row + 1,
+              column: column + 1,
+              letter: letter ?? "",
+            });
+            return (
+              <Button
+                key={key}
+                className={`phone-square premium-${premium.replaceAll("_", "-")}${draft ? " tentative-square" : ""}${fixed ? " committed-square" : ""}`}
+                style={
+                  rules.board_shape === "hexagon"
+                    ? hexCellStyle(rules.board_size, row, column)
+                    : undefined
+                }
+                data-center={center}
+                data-square-index={row * rules.board_size + column}
+                tabIndex={row * rules.board_size + column === focusSquare ? 0 : -1}
+                onFocus={() => setFocusSquare(row * rules.board_size + column)}
+                onKeyDown={(event: KeyboardEvent<HTMLButtonElement>) => {
+                  if (moveFocus(event.key, row * rules.board_size + column)) {
+                    event.preventDefault();
+                  }
+                }}
+                aria-label={label}
+                aria-description={t(`premium.${premium}`)}
+                aria-pressed={draft !== undefined && selected === draft.tile_id}
+                disabled={!enabled || exchanging}
+                aria-disabled={fixed !== undefined}
+                onClick={() => {
+                  if (fixed === undefined) {
+                    square(row, column);
+                  }
+                }}
+              >
+                <small className="square-reference" aria-hidden="true">
+                  {String.fromCharCode(65 + column)}
+                  {row + 1}
+                </small>
+                <span aria-hidden="true" className={letter && faceClass(letter)}>
+                  {letter ?? (center ? "★" : t(`premiumShort.${premium}`) || "·")}
+                </span>
+              </Button>
+            );
+          })}
         </div>
       </div>
+      {evaluation?.status === "valid" && <MoveAnalysis analysis={evaluation.analysis} preview />}
+      {evaluation?.status === "invalid" && (
+        <p role="status">
+          {t(`hex.error.${evaluation.problem}`, { words: evaluation.words.join(", ") })}
+        </p>
+      )}
       <details className={touch ? "sr-only keyboard-help" : "keyboard-help"}>
         <summary>{t("command.help")}</summary>
         <p id={keyboardHelp}>{t("editor.keyboard")}</p>
@@ -486,7 +508,13 @@ export function MoveEditor({
           {t("editor.cancel")}
         </Button>
         <Button
-          disabled={!enabled || exchanging || problem !== undefined || blank !== undefined}
+          disabled={
+            !enabled ||
+            exchanging ||
+            problem !== undefined ||
+            awaitingAnalysis ||
+            blank !== undefined
+          }
           onClick={() => void submit("commit")}
         >
           {t("editor.commit")}

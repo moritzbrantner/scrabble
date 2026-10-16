@@ -13,6 +13,7 @@ export default defineConfig({
     "**/performance-budgets.spec.ts",
     "**/rematch.spec.ts",
     "**/profile-creation.spec.ts",
+    "**/hexagonal-board.spec.ts",
   ],
   outputDir: "../../test-results/pages-browser",
   webServer: {

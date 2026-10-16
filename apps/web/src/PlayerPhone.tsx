@@ -15,6 +15,7 @@ import {
   type SubmittedTurnAction,
 } from "./game-protocol";
 import { matchRules, requireMatchRules } from "./match-rules";
+import { TurnHistory } from "./TurnHistory";
 import { MoveEditor } from "./MoveEditor";
 import { PlayerRack } from "./PlayerRack";
 import { useCopy } from "./preferences";
@@ -531,6 +532,7 @@ export function PlayerPhone({
                   </li>
                 ))}
               </ol>
+              {rules.board_shape === "hexagon" && <TurnHistory snapshot={snapshot.public} />}
             </>
           )}
         </>

@@ -75,9 +75,10 @@ does not make cells adjacent. `Horizontal` and `Vertical` words keep the square
 reading order: increasing column, then increasing row. On a pointy-top
 rendering, the `Vertical` axis runs down-right and keeps both the
 left-to-right and top-to-bottom conventions. The `Diagonal` axis runs down-left.
-Its tiles are **provisionally** ordered by increasing row (top to bottom), but
-see open question 1. The acceptance tests do not depend on the `Diagonal`
-reading direction.
+Its tiles are ordered by increasing row (top to bottom), as approved by Atlas
+1.43 (Answers 1.42). Down-left words therefore read from top-right toward
+bottom-left. The reverse spelling is not accepted merely because it appears in
+the dictionary. Independent non-palindromic acceptance pins this direction.
 
 ## Hex placement validation
 
@@ -179,13 +180,11 @@ covers:
 The existing `scrabble-game` suites stay green. The full gate is
 `bun run check`.
 
-## Open questions (owner)
+## Resolved owner direction and integrated continuation
 
-1. **Reading direction on the down-left (`Diagonal`) axis.** Decision 1.10
-   allows words along all three axes but does not say which end a word starts
-   from. On a pointy-top board, the square conventions conflict on the
-   down-left axis: left-to-right reading goes bottom-left to top-right, and
-   top-to-bottom reading goes top-right to bottom-left. The choice decides which
-   words are legal. The engine provisionally reads top-to-bottom (increasing
-   row). The acceptance tests deliberately do not pin it. An owner Decision is
-   needed before #96 exposes hex play publicly.
+Atlas 1.43 resolves historical Question 1.42: diagonal words read top to bottom.
+`diagonal_reads_top_to_bottom_and_never_substitutes_the_reverse_word` pins the
+non-palindromic spelling under both premium policies and either input order.
+
+The independent #96 integration contract is [hexagonal-browser.md](hexagonal-browser.md).
+The completed headless engine does not establish catalog, browser or public acceptance.

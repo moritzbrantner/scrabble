@@ -1,3 +1,4 @@
+import { MoveAnalysis } from "./MoveAnalysis";
 import { useCopy } from "./preferences";
 import { type PublicSnapshot } from "./public-state";
 
@@ -42,6 +43,19 @@ export function TurnHistory({ snapshot }: { snapshot: PublicSnapshot }) {
                   count: turn.action.tile_count,
                 })}
               </span>
+            )}
+            {turn.analysis && turn.action.kind === "commit" && (
+              <MoveAnalysis
+                analysis={{
+                  words: turn.action.words.flatMap((text, index) => {
+                    const score = turn.analysis?.word_scores[index];
+                    return score ? [{ text, direction: score[0], score: score[1] }] : [];
+                  }),
+                  length_metric: turn.analysis.length_metric,
+                  bingo_bonus: turn.analysis.bingo_bonus,
+                  total: turn.action.move_score,
+                }}
+              />
             )}
             <span className="turn-scores">
               {turn.scores

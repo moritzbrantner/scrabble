@@ -125,6 +125,56 @@ pub struct PublicPreview {
     pub player_id: PlayerId,
     pub turn: TurnId,
     pub tiles: Vec<PreviewTile>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evaluation: Option<PlacementEvaluation>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AnalysedWord {
+    pub text: String,
+    pub direction: crate::placement::Direction,
+    pub score: u32,
+}
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MoveAnalysis {
+    pub words: Vec<AnalysedWord>,
+    pub length_metric: crate::ruleset::WordLengthMetric,
+    pub bingo_bonus: u32,
+    pub total: u32,
+}
+/// Scores reference `TurnAction::Commit.words` by order; do not duplicate long spellings.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HistoryAnalysis {
+    pub word_scores: Vec<(crate::placement::Direction, u32)>,
+    pub length_metric: crate::ruleset::WordLengthMetric,
+    pub bingo_bonus: u32,
+}
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case", deny_unknown_fields)]
+pub enum PlacementEvaluation {
+    Valid {
+        analysis: MoveAnalysis,
+    },
+    Invalid {
+        problem: EvaluationProblem,
+        words: Vec<String>,
+    },
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EvaluationProblem {
+    Center,
+    NotLine,
+    Gap,
+    Disconnected,
+    NoWord,
+    Unavailable,
+    InvalidWords,
+    Dictionary,
+    ScoreOverflow,
 }
 /// Bounded projection; the complete accepted commands remain in native replay evidence.
 pub const MAX_HISTORY_TURNS: usize = 24;
@@ -157,6 +207,8 @@ pub struct PublicTurn {
     pub player_id: PlayerId,
     pub action: TurnAction,
     pub scores: Vec<ScoreChange>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub analysis: Option<HistoryAnalysis>,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

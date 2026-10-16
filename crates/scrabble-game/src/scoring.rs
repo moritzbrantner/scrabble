@@ -42,6 +42,39 @@ pub struct MoveScore {
     total: u32,
 }
 impl MoveScore {
+    pub fn analysis(
+        &self,
+        length_metric: crate::ruleset::WordLengthMetric,
+    ) -> crate::protocol::MoveAnalysis {
+        crate::protocol::MoveAnalysis {
+            words: self
+                .words
+                .iter()
+                .map(|word| crate::protocol::AnalysedWord {
+                    text: word.text.clone(),
+                    direction: word.direction,
+                    score: word.score,
+                })
+                .collect(),
+            length_metric,
+            bingo_bonus: self.bingo_bonus,
+            total: self.total,
+        }
+    }
+    pub fn history_analysis(
+        &self,
+        length_metric: crate::ruleset::WordLengthMetric,
+    ) -> crate::protocol::HistoryAnalysis {
+        crate::protocol::HistoryAnalysis {
+            word_scores: self
+                .words
+                .iter()
+                .map(|word| (word.direction, word.score))
+                .collect(),
+            length_metric,
+            bingo_bonus: self.bingo_bonus,
+        }
+    }
     pub fn word_scores(&self) -> &[u32] {
         &self.word_scores
     }

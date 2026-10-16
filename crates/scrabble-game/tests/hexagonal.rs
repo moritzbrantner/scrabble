@@ -360,6 +360,48 @@ fn words_extend_along_each_of_the_three_hex_axes() {
     }
 }
 
+/// Atlas 1.43: down-left reads from top-right to bottom-left, never whichever spelling
+/// happens to be in the dictionary. Non-palindromic input pins the owner decision.
+#[test]
+fn diagonal_reads_top_to_bottom_and_never_substitutes_the_reverse_word() {
+    let cells = [(2, 4, 'B'), (3, 3, 'A'), (4, 2, 'A')];
+    for policy in [PremiumPolicy::AllWord, PremiumPolicy::MainWordOnly] {
+        for reverse_input in [false, true] {
+            let mut state = game(hex_rules(policy, &[]), (2, 1), (0, 0));
+            let mut placements = tiles(&state, 1, &cells);
+            if reverse_input {
+                placements.reverse();
+            }
+            let before = state.canonical_bytes().unwrap();
+            // A valid reverse spelling cannot rescue the invalid actual top-to-bottom word.
+            assert_eq!(
+                commit::apply_with_dictionary(
+                    &mut state,
+                    PlayerId::new(1),
+                    &placements,
+                    &dictionary(&["AAB"]),
+                ),
+                Err(CommitError::Dictionary(DictionaryError::InvalidWords {
+                    words: vec!["BAA".into()],
+                })),
+            );
+            assert_eq!(state.canonical_bytes().unwrap(), before);
+            let result = commit::apply_with_dictionary(
+                &mut state,
+                PlayerId::new(1),
+                &placements,
+                &dictionary(&["BAA"]),
+            )
+            .unwrap();
+            assert_eq!(result.main_word().text(), "BAA");
+            assert_eq!(result.main_word().direction(), Direction::Diagonal);
+            assert_eq!(result.total(), B_VALUE + 2 * A_VALUE);
+            assert_eq!(last_commit_words(&state), ["BAA"]);
+            state.verify_tile_conservation().unwrap();
+        }
+    }
+}
+
 #[test]
 fn bent_square_diagonal_gapped_and_disconnected_placements_are_rejected() {
     let mut state = game(hex_rules(PremiumPolicy::AllWord, &[]), (3, 0), (2, 0));
@@ -844,4 +886,41 @@ fn square_rulesets_states_and_snapshots_stay_byte_identical() {
         (snapshot.len(), fnv1a(&snapshot)),
         (4847, 0x89fc_1cd4_4238_0b7a)
     );
+}
+
+/// Fifteen new cells can form one main plus two crossing words per tile.
+/// This pins the geometry-dependent 31-word wire bound without browser state injection.
+#[test]
+fn fifteen_tile_hex_placement_can_form_thirty_one_words() {
+    let mut rules = hex_rules(PremiumPolicy::AllWord, &[]);
+    rules.board_size = 15;
+    rules.premiums = hex_premiums(7, &[]);
+    rules.rack_size = 15;
+    rules.tiles = vec![scrabble_game::ruleset::TileDefinition {
+        face: TileFace::Letter { letter: 'A' },
+        count: 200,
+        value: 1,
+    }];
+    let mut state = GameState::new(GameId::new(1), rules, [1; 32]).unwrap();
+    for id in 1..=3 {
+        state
+            .add_player(PlayerId::new(id), format!("Player {id}"))
+            .unwrap();
+    }
+    state.deal_initial_racks().unwrap();
+    let lower: Vec<_> = (0..14).map(|column| (8, column, 'A')).collect();
+    let lower = tiles(&state, 2, &lower);
+    state.place_tiles(PlayerId::new(2), &lower).unwrap();
+    let upper = tiles(&state, 3, &[(6, 1, 'A'), (6, 14, 'A')]);
+    state.place_tiles(PlayerId::new(3), &upper).unwrap();
+    let main: Vec<_> = (0..15).map(|column| (7, column, 'A')).collect();
+    let placement = tiles(&state, 1, &main);
+    let words: Vec<String> = (2..=15).map(|length| "A".repeat(length)).collect();
+    let dictionary = WordList::from_text(words_identity(), &words.join("\n")).unwrap();
+    let result =
+        commit::apply_with_dictionary(&mut state, PlayerId::new(1), &placement, &dictionary)
+            .unwrap();
+    assert_eq!(result.words().len(), 31);
+    assert_eq!(last_commit_words(&state).len(), 31);
+    state.verify_tile_conservation().unwrap();
 }

@@ -1,5 +1,7 @@
+import { HexBoard } from "./HexBoard";
+import { MoveAnalysis } from "./MoveAnalysis";
 import { useCopy } from "./preferences";
-import { faceValues, type PublicSnapshot, type Ruleset } from "./public-state";
+import { faceValues, type Premium, type PublicSnapshot, type Ruleset } from "./public-state";
 import { faceClass } from "./tile-face";
 import { TurnHistory } from "./TurnHistory";
 
@@ -18,6 +20,20 @@ export function SharedBoard({ snapshot, rules }: { snapshot: PublicSnapshot; rul
     preview?.tiles.map((tile) => [`${tile.coordinate.row},${tile.coordinate.column}`, tile]) ?? [],
   );
   const values = faceValues(rules);
+  const tileDescription = (
+    tile: Pick<PublicSnapshot["board"][number], "letter" | "is_blank"> | undefined,
+    pending: boolean,
+    premium: Premium,
+  ) => {
+    if (tile === undefined) {
+      return t(`premium.${premium}`);
+    }
+    const key = pending ? "board.preview" : "board.committed";
+    return t(tile.is_blank ? `${key}Blank` : key, {
+      letter: tile.letter,
+      points: tile.is_blank ? 0 : (values.get(tile.letter) ?? t("score.unknown")),
+    });
+  };
   const indices = Array.from({ length: rules.board_size }, (_, index) => index);
   const active = snapshot.phase.kind === "playing" ? snapshot.phase.active_player : null;
   const finished = snapshot.phase.kind === "finished";
@@ -54,71 +70,107 @@ export function SharedBoard({ snapshot, rules }: { snapshot: PublicSnapshot; rul
   return (
     <main className="shared-board">
       <h1 className="sr-only">Scrabble</h1>
-      <table className="board" aria-label={t("board.title")}>
-        <caption className="sr-only">
-          {t("board.dimensions", { rows: rules.board_size, columns: rules.board_size })}
-        </caption>
-        <thead>
-          <tr>
-            <th aria-label={t("board.coordinates")}>
-              <span className="sr-only">{t("board.coordinates")}</span>
-            </th>
-            {indices.map((column) => (
-              <th scope="col" key={column}>
-                {String.fromCharCode(65 + column)}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {indices.map((row) => (
-            <tr key={row}>
-              <th scope="row">{number(row + 1)}</th>
-              {indices.map((column) => {
-                const kind = rules.premiums[row * rules.board_size + column] ?? "normal";
-                const committed = cells.get(`${row},${column}`);
-                const pending =
-                  committed === undefined ? tentative.get(`${row},${column}`) : undefined;
-                const tile = committed ?? pending;
-                const value = tile?.is_blank ? 0 : values.get(tile?.letter ?? "");
-                let description = t(`premium.${kind}`);
-                if (tile !== undefined) {
-                  const key = pending === undefined ? "board.committed" : "board.preview";
-                  description = t(tile.is_blank ? `${key}Blank` : key, {
-                    letter: tile.letter,
-                    points: value ?? t("score.unknown"),
-                  });
-                }
-                return (
-                  <td
-                    key={column}
-                    aria-label={t("board.square", {
-                      row: row + 1,
-                      column: column + 1,
-                      description,
-                    })}
+      {rules.board_shape === "hexagon" ? (
+        <HexBoard
+          size={rules.board_size}
+          label={t("board.title")}
+          className="board"
+          style={{ width: "100%" }}
+          cellLabel={(row, column, index) => {
+            const committed = cells.get(`${row},${column}`);
+            const tile = committed ?? tentative.get(`${row},${column}`);
+            return t("board.square", {
+              row: row + 1,
+              column: column + 1,
+              description: tileDescription(
+                tile,
+                committed === undefined,
+                rules.premiums[index] ?? "normal",
+              ),
+            });
+          }}
+          renderCell={(row, column, index) => {
+            const committed = cells.get(`${row},${column}`);
+            const tile = committed ?? tentative.get(`${row},${column}`);
+            const premium = rules.premiums[index] ?? "normal";
+            return (
+              <div className={`board-cell premium-${premium.replaceAll("_", "-")}`}>
+                <span className="premium-mark" aria-hidden="true">
+                  {t(`premiumShort.${premium}`)}
+                </span>
+                {tile && (
+                  <span
+                    className={`letter-tile${tile.is_blank ? " blank-tile" : ""}${committed ? "" : " tentative-tile"}`}
+                    aria-hidden="true"
                   >
-                    <div className={`board-cell premium-${kind.replaceAll("_", "-")}`}>
-                      <span className="premium-mark" aria-hidden="true">
-                        {t(`premiumShort.${kind}`)}
-                      </span>
-                      {tile && (
-                        <span
-                          className={`letter-tile${tile.is_blank ? " blank-tile" : ""}${pending === undefined ? "" : " tentative-tile"}`}
-                          aria-hidden="true"
-                        >
-                          <span className={faceClass(tile.letter)}>{tile.letter}</span>
-                          <small>{value === undefined ? "?" : number(value)}</small>
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                );
-              })}
+                    <span className={faceClass(tile.letter)}>{tile.letter}</span>
+                    <small>{number(tile.is_blank ? 0 : (values.get(tile.letter) ?? 0))}</small>
+                  </span>
+                )}
+              </div>
+            );
+          }}
+        />
+      ) : (
+        <table className="board" aria-label={t("board.title")}>
+          <caption className="sr-only">
+            {t("board.dimensions", { rows: rules.board_size, columns: rules.board_size })}
+          </caption>
+          <thead>
+            <tr>
+              <th aria-label={t("board.coordinates")}>
+                <span className="sr-only">{t("board.coordinates")}</span>
+              </th>
+              {indices.map((column) => (
+                <th scope="col" key={column}>
+                  {String.fromCharCode(65 + column)}
+                </th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {indices.map((row) => (
+              <tr key={row}>
+                <th scope="row">{number(row + 1)}</th>
+                {indices.map((column) => {
+                  const kind = rules.premiums[row * rules.board_size + column] ?? "normal";
+                  const committed = cells.get(`${row},${column}`);
+                  const pending =
+                    committed === undefined ? tentative.get(`${row},${column}`) : undefined;
+                  const tile = committed ?? pending;
+                  const value = tile?.is_blank ? 0 : values.get(tile?.letter ?? "");
+                  const description = tileDescription(tile, pending !== undefined, kind);
+                  return (
+                    <td
+                      key={column}
+                      aria-label={t("board.square", {
+                        row: row + 1,
+                        column: column + 1,
+                        description,
+                      })}
+                    >
+                      <div className={`board-cell premium-${kind.replaceAll("_", "-")}`}>
+                        <span className="premium-mark" aria-hidden="true">
+                          {t(`premiumShort.${kind}`)}
+                        </span>
+                        {tile && (
+                          <span
+                            className={`letter-tile${tile.is_blank ? " blank-tile" : ""}${pending === undefined ? "" : " tentative-tile"}`}
+                            aria-hidden="true"
+                          >
+                            <span className={faceClass(tile.letter)}>{tile.letter}</span>
+                            <small>{value === undefined ? "?" : number(value)}</small>
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
       <aside className="match-status" aria-label={t("board.status")}>
         <p role="status" className="turn-status">
           {status}
@@ -127,6 +179,9 @@ export function SharedBoard({ snapshot, rules }: { snapshot: PublicSnapshot; rul
           <p>{t("board.turnNumber", { turn: BigInt(snapshot.phase.turn) + 1n })}</p>
         )}
         {preview !== null && preview.tiles.length > 0 && <p>{t("board.tentative")}</p>}
+        {preview?.evaluation?.status === "valid" && (
+          <MoveAnalysis analysis={preview.evaluation.analysis} preview />
+        )}
         {snapshot.phase.kind === "finished" && <p>{t("board.finished")}</p>}
         {snapshot.players.length > 0 && (
           <ul aria-label={t(finished ? "board.standings" : "board.players")}>

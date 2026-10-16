@@ -204,6 +204,7 @@ fn widest_history() -> Vec<PublicTurn> {
         .map(|index| PublicTurn {
             turn: TurnId::new(u64::MAX - index as u64),
             player_id: PlayerId::new(u64::MAX),
+            analysis: None,
             action: TurnAction::Commit {
                 // 15 cells of four-byte faces.
                 words: vec!["ÀÁ".repeat(15); 16],
