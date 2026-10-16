@@ -45,6 +45,9 @@ export function layoutFailure(error: unknown): Copy {
     if (error.code === "full") {
       return { key: "layouts.full" };
     }
+    if (error.code === "storage") {
+      return { key: "layouts.storage" };
+    }
   }
   return { key: "layouts.failed" };
 }
@@ -68,14 +71,15 @@ export function CustomLayouts({
 
   useEffect(() => {
     let active = true;
-    const entries = ownedEntries();
+    const entries = ownedEntries(api);
     void Promise.all(
       entries.map(async (entry) => {
         try {
           return { entry, saved: await readLayout(api, entry) };
         } catch (error) {
           if (error instanceof LayoutError && error.code === "unknown") {
-            forget(entry.layoutId);
+            // Only the issuing API is ever asked, so its answer is authoritative.
+            forget(entry);
             return undefined;
           }
           if (active) {
@@ -114,7 +118,7 @@ export function CustomLayouts({
       current === undefined
         ? await createLayout(api, name, layout)
         : await updateLayout(api, current.entry, name, layout);
-    const entry = ownedEntries().find((row) => row.layoutId === saved.layoutId);
+    const entry = ownedEntries(api).find((row) => row.layoutId === saved.layoutId);
     if (entry) {
       setOwned((rows) =>
         current === undefined
@@ -134,7 +138,7 @@ export function CustomLayouts({
         setMessage({ text: "layouts.failed", alert: true });
         return;
       }
-      forget(row.entry.layoutId);
+      forget(row.entry);
     }
     setOwned((rows) => rows.filter((item) => item.saved.layoutId !== row.saved.layoutId));
     setEditing((value) => (value?.layoutId === row.saved.layoutId ? undefined : value));

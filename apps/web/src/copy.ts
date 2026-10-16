@@ -349,6 +349,8 @@ export const en = {
   "layouts.loadFailed": "Some saved layouts could not be loaded. Try again later.",
   "layouts.failed": "The layout request failed. Try again.",
   "layouts.full": "This server cannot store more layouts right now.",
+  "layouts.storage":
+    "This browser cannot store the private key for your layout, so nothing was saved. Allow site storage and try again.",
   "layouts.deleted": "Layout deleted.",
   "editor.region": "Board layout editor",
   "editor.name": "Layout name",
@@ -754,6 +756,8 @@ const de: Record<CopyKey, string> = {
     "Einige gespeicherte Layouts konnten nicht geladen werden. Versuche es später erneut.",
   "layouts.failed": "Die Layout-Anfrage ist fehlgeschlagen. Versuche es erneut.",
   "layouts.full": "Dieser Server kann gerade keine weiteren Layouts speichern.",
+  "layouts.storage":
+    "Dieser Browser kann den privaten Schlüssel deines Layouts nicht speichern, daher wurde nichts gespeichert. Erlaube Website-Speicher und versuche es erneut.",
   "layouts.deleted": "Layout gelöscht.",
   "editor.region": "Brettlayout-Editor",
   "editor.name": "Name des Layouts",
@@ -1143,6 +1147,8 @@ const es: Record<CopyKey, string> = {
   "layouts.loadFailed": "No se pudieron cargar algunos diseños guardados. Inténtalo más tarde.",
   "layouts.failed": "La solicitud del diseño falló. Inténtalo de nuevo.",
   "layouts.full": "Este servidor no puede guardar más diseños ahora.",
+  "layouts.storage":
+    "Este navegador no puede guardar la clave privada de tu diseño, así que no se guardó nada. Permite el almacenamiento del sitio e inténtalo de nuevo.",
   "layouts.deleted": "Diseño eliminado.",
   "editor.region": "Editor de diseño de tablero",
   "editor.name": "Nombre del diseño",

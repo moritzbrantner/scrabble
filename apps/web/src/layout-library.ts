@@ -46,7 +46,7 @@ export type SharedLayout = z.infer<typeof sharedLayout>;
 
 export class LayoutError extends Error {
   constructor(
-    readonly code: "invalid" | "owner" | "unknown" | "full" | "failed",
+    readonly code: "invalid" | "owner" | "unknown" | "full" | "storage" | "failed",
     readonly reason?: string,
   ) {
     super(code);
@@ -58,20 +58,50 @@ const ownerEntry = z.strictObject({
   version: z.literal(1),
   layoutId: z.string().regex(/^l_[0-9a-f]{32}$/),
   ownerCapability: z.string().regex(/^[0-9a-f]{64}$/),
+  /** Canonical game API that issued the capability; it is never sent anywhere else. */
+  api: z.string().optional(),
 });
-export type OwnerEntry = z.infer<typeof ownerEntry>;
+export type OwnerEntry = z.infer<typeof ownerEntry> & { api: string };
 
-/** Owned originals known to this browser. The capability never leaves localStorage except
- * in request bodies to the layout API. */
-export function ownedEntries(): OwnerEntry[] {
+/** Canonical identity of a game API base (scheme, host, port and path). */
+export function canonicalApi(api: string): string {
+  return gameApiUrl(api).href;
+}
+/** Entries stored without an issuing API (none were ever written by a released build) are
+ * attributed only to the production build's configured API, never to a dev URL parameter. */
+function legacyApi(): string | undefined {
+  const configured: unknown = import.meta.env?.PROD ? import.meta.env.VITE_SCRABBLE_API : undefined;
+  if (typeof configured !== "string" || configured === "") {
+    return undefined;
+  }
+  try {
+    return canonicalApi(configured);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Owned originals issued by `api` and known to this browser. The capability leaves
+ * localStorage only in request bodies to that same API. */
+export function ownedEntries(api: string): OwnerEntry[] {
   const entries: OwnerEntry[] = [];
+  let current: string;
+  try {
+    current = canonicalApi(api);
+  } catch {
+    return entries;
+  }
   try {
     for (let index = 0; index < localStorage.length; index += 1) {
       const key = localStorage.key(index);
       if (key?.startsWith(ownerPrefix)) {
         const parsed = ownerEntry.safeParse(JSON.parse(localStorage.getItem(key) ?? "null"));
-        if (parsed.success && key === ownerPrefix + parsed.data.layoutId) {
-          entries.push(parsed.data);
+        if (!parsed.success || key !== ownerPrefix + parsed.data.layoutId) {
+          continue;
+        }
+        const issuer = parsed.data.api ?? legacyApi();
+        if (issuer === current) {
+          entries.push({ ...parsed.data, api: issuer });
         }
       }
     }
@@ -80,12 +110,47 @@ export function ownedEntries(): OwnerEntry[] {
   }
   return entries.sort((a, b) => a.layoutId.localeCompare(b.layoutId));
 }
+function issuedBy(api: string, entry: OwnerEntry) {
+  if (entry.api !== canonicalApi(api)) {
+    throw new LayoutError("owner");
+  }
+}
+/** Fails before any server-side creation when this browser cannot keep a capability. */
+function storageAvailable() {
+  try {
+    const probe = `${ownerPrefix}probe`;
+    localStorage.setItem(probe, "1");
+    localStorage.removeItem(probe);
+  } catch {
+    throw new LayoutError("storage");
+  }
+}
 function remember(entry: OwnerEntry) {
   localStorage.setItem(ownerPrefix + entry.layoutId, JSON.stringify(entry));
 }
-export function forget(layoutId: string) {
+/** Stores a newly issued capability; if that fails, deletes the just-created original
+ * with the in-memory capability so no unmanageable layout is left behind. */
+async function keep(api: string, created: z.infer<typeof createdLayout>) {
+  const entry: OwnerEntry = {
+    version: 1,
+    layoutId: created.layoutId,
+    ownerCapability: created.ownerCapability,
+    api: canonicalApi(api),
+  };
   try {
-    localStorage.removeItem(ownerPrefix + layoutId);
+    remember(entry);
+  } catch {
+    await request(api, `/layouts/${entry.layoutId}/delete`, {
+      version: 1,
+      ownerCapability: entry.ownerCapability,
+    }).catch(() => undefined);
+    throw new LayoutError("storage");
+  }
+}
+/** Removes this browser's entry after its issuing API deleted or no longer knows it. */
+export function forget(entry: OwnerEntry) {
+  try {
+    localStorage.removeItem(ownerPrefix + entry.layoutId);
   } catch {
     // Storage may be unavailable; nothing else holds the capability.
   }
@@ -136,11 +201,13 @@ async function request(api: string, path: string, body?: unknown): Promise<unkno
 }
 
 export async function createLayout(api: string, name: string, layout: LayoutDocument) {
+  storageAvailable();
   const created = createdLayout.parse(await request(api, "/layouts", { version: 1, name, layout }));
-  remember({ version: 1, layoutId: created.layoutId, ownerCapability: created.ownerCapability });
+  await keep(api, created);
   return savedLayout.parse(created);
 }
 export async function readLayout(api: string, entry: OwnerEntry): Promise<SavedLayout> {
+  issuedBy(api, entry);
   return savedLayout.parse(
     await request(api, `/layouts/${entry.layoutId}/read`, {
       version: 1,
@@ -154,6 +221,7 @@ export async function updateLayout(
   name: string,
   layout: LayoutDocument,
 ): Promise<SavedLayout> {
+  issuedBy(api, entry);
   return savedLayout.parse(
     await request(api, `/layouts/${entry.layoutId}/update`, {
       version: 1,
@@ -164,13 +232,15 @@ export async function updateLayout(
   );
 }
 export async function deleteLayout(api: string, entry: OwnerEntry) {
+  issuedBy(api, entry);
   await request(api, `/layouts/${entry.layoutId}/delete`, {
     version: 1,
     ownerCapability: entry.ownerCapability,
   });
-  forget(entry.layoutId);
+  forget(entry);
 }
 export async function shareLayout(api: string, entry: OwnerEntry): Promise<string> {
+  issuedBy(api, entry);
   const shared = z
     .object({ version: z.literal(1), shareId: z.string().regex(/^s_[0-9a-f]{32}$/) })
     .parse(
@@ -188,10 +258,11 @@ export async function fetchShared(api: string, shareId: string): Promise<SharedL
   return sharedLayout.parse(await request(api, `/shared-layouts/${shareId}`));
 }
 export async function copyShared(api: string, shareId: string, name: string) {
+  storageAvailable();
   const created = createdLayout.parse(
     await request(api, `/shared-layouts/${shareId}/copy`, { version: 1, name }),
   );
-  remember({ version: 1, layoutId: created.layoutId, ownerCapability: created.ownerCapability });
+  await keep(api, created);
   return savedLayout.parse(created);
 }
 
