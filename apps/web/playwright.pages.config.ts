@@ -17,6 +17,7 @@ export default defineConfig({
           "**/performance-budgets.spec.ts",
           "**/rematch.spec.ts",
           "**/profile-creation.spec.ts",
+          "**/custom-board-layout-responsive.spec.ts",
           "**/multi-letter-tiles.spec.ts",
           "**/hexagonal-board.spec.ts",
           "**/match-clock.spec.ts",

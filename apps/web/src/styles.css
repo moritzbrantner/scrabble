@@ -872,6 +872,9 @@ body {
   gap: 0.75rem;
   max-width: 48rem;
 }
+.layout-editor {
+  grid-template-columns: minmax(0, 1fr);
+}
 .layout-list {
   list-style: none;
   padding: 0;
