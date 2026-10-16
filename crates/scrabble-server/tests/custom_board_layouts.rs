@@ -1176,3 +1176,31 @@ async fn restart_helper_recovers_a_catalog_board_match() {
     );
     api.stop().await;
 }
+
+/// Retrospective independent acceptance: arbitrary Unicode in an invalid
+/// document must produce a bounded validation error, not terminate serving.
+#[tokio::test]
+async fn invalid_unicode_layout_fields_are_rejected_without_interrupting_the_api() {
+    let root = tempfile::tempdir().unwrap();
+    let api = Api::start(root.path()).await;
+    let mut layout = square(3, &[]);
+    layout["é".repeat(150)] = json!(true);
+    let (status, body) = api
+        .post(
+            "/layouts",
+            json!({"version":1,"name":"Invalid Unicode field","layout":layout}),
+        )
+        .await;
+    assert_eq!(status, 400, "malformed layout must be rejected: {body}");
+    assert_eq!(body["error"], "invalid-layout");
+    assert!(
+        body["reason"]
+            .as_str()
+            .is_some_and(|reason| !reason.is_empty())
+    );
+    assert_eq!(file_count(&root.path().join("layouts")), 0);
+    let saved = api.save("Valid after rejection", square(3, &[])).await;
+    let (status, body) = api.read(&saved).await;
+    assert_eq!(status, 200, "API still accepts valid requests: {body}");
+    api.stop().await;
+}
