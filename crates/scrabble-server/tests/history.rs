@@ -284,6 +284,7 @@ fn largest_supported_public_history_stays_inside_native_snapshot_byte_limit() {
             display_name: letter.to_string().repeat(64),
             score: i32::MIN,
             rack_count: 15,
+            forfeited: false,
             connected: Some(false),
         })
         .collect();

@@ -171,6 +171,7 @@ fn match_time_is_the_simulation_tick_and_start_and_commands_use_it() {
             ],
             turn_started_at_ms: None,
             expires_at_ms: None,
+            last_timeout: None,
         }
     );
     advance(&mut runtime, 7);

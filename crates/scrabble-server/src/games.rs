@@ -62,7 +62,7 @@ pub enum ConfiguredError {
 }
 
 /// Validates a requested time control before any allocation: durations, then
-/// Decision 3.8, then the provisional forfeit block (#99).
+/// Decision 3.8. Both approved timeout consequences are supported.
 pub fn check_time_control(
     control: &scrabble_game::ruleset::TimeControl,
 ) -> Result<(), &'static str> {
@@ -87,9 +87,6 @@ pub fn check_time_control(
     ) && control.on_expiry == ExpiryConsequence::Pass
     {
         return Err("missing-increment");
-    }
-    if control.on_expiry == ExpiryConsequence::Forfeit {
-        return Err("forfeit-unavailable");
     }
     Ok(())
 }

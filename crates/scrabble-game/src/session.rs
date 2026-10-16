@@ -39,6 +39,8 @@ pub struct GameSession {
     dictionary: Arc<dyn Dictionary>,
     last_sequences: BTreeMap<PlayerId, u32>,
     preview: Option<PublicPreview>,
+    // Reconstructed by replay; excluded from canonical evidence to preserve existing pass logs.
+    last_timeout: Option<crate::protocol::ClockTimeout>,
 }
 impl GameSession {
     pub fn new(state: GameState) -> Self {
@@ -50,6 +52,7 @@ impl GameSession {
             dictionary,
             last_sequences: BTreeMap::new(),
             preview: None,
+            last_timeout: None,
         }
     }
     pub fn state(&self) -> &GameState {
@@ -66,11 +69,17 @@ impl GameSession {
     pub fn public_snapshot(&self) -> PublicSnapshot {
         let mut snapshot = self.state.public_snapshot();
         snapshot.preview = self.preview.clone();
+        if let Some(clock) = &mut snapshot.clock {
+            clock.last_timeout = self.last_timeout.clone();
+        }
         snapshot
     }
     pub fn player_snapshot(&self, player: PlayerId) -> Result<PlayerSnapshot, StateError> {
         let mut snapshot = self.state.player_snapshot(player)?;
         snapshot.public.preview = self.preview.clone();
+        if let Some(clock) = &mut snapshot.public.clock {
+            clock.last_timeout = self.last_timeout.clone();
+        }
         Ok(snapshot)
     }
     /// Transport supplies the authenticated player and sequence; payload claims must agree.
@@ -98,7 +107,11 @@ impl GameSession {
         let Some(control) = self.state.ruleset().time_control else {
             return Err(StateError::Clock(ClockError::Untimed).into());
         };
-        let Phase::Playing { turn, .. } = self.state.phase() else {
+        let Phase::Playing {
+            turn,
+            active_player,
+        } = self.state.phase()
+        else {
             return Err(StateError::WrongPhase.into());
         };
         if expected_turn != *turn {
@@ -109,14 +122,22 @@ impl GameSession {
             Err(error) => return Err(error.into()),
             Ok(()) => return Err(StateError::Clock(ClockError::NotExpired).into()),
         }
-        if control.on_expiry == ExpiryConsequence::Forfeit {
-            return Err(StateError::Clock(ClockError::ForfeitUnavailable).into());
-        }
+        let timeout = crate::protocol::ClockTimeout {
+            player_id: *active_player,
+            turn: *turn,
+            consequence: control.on_expiry,
+        };
         let mut candidate = self.state.clone();
         candidate.settle_clock_turn(now_ms, true)?;
-        candidate.finish_turn(&self.state, 0, TurnAction::Pass {})?;
+        match control.on_expiry {
+            ExpiryConsequence::Forfeit => candidate.forfeit_turn(&self.state)?,
+            ExpiryConsequence::Pass => {
+                candidate.finish_turn(&self.state, 0, TurnAction::Pass {})?
+            }
+        }
         candidate.begin_clock_turn(now_ms)?;
         self.state = candidate;
+        self.last_timeout = Some(timeout);
         self.preview = None;
         Ok(())
     }

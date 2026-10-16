@@ -6,6 +6,10 @@ use crate::ruleset::{ContentIdentity, Ruleset, TileFace};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
+pub(crate) fn is_false(value: &bool) -> bool {
+    !*value
+}
+
 pub const MAX_COMMAND_BYTES: usize = 16 * 1024;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -99,6 +103,9 @@ pub struct PublicPlayer {
     pub display_name: String,
     pub score: i32,
     pub rack_count: u8,
+    /// Eliminated by the immutable forfeit policy; omitted for existing matches.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub forfeited: bool,
     /// Runtime presentation evidence, excluded from canonical game state.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub connected: Option<bool>,
@@ -182,6 +189,7 @@ pub const MAX_HISTORY_TURNS: usize = 24;
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum TurnAction {
+    Forfeit {},
     Commit {
         words: Vec<String>,
         move_score: u32,
@@ -241,6 +249,16 @@ pub struct PublicClock {
     pub players: Vec<PlayerClock>,
     pub turn_started_at_ms: Option<u64>,
     pub expires_at_ms: Option<u64>,
+    /// Public projection reconstructed by authoritative timeout events; never a browser input.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_timeout: Option<ClockTimeout>,
+}
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ClockTimeout {
+    pub player_id: PlayerId,
+    pub turn: TurnId,
+    pub consequence: crate::ruleset::ExpiryConsequence,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

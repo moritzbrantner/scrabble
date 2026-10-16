@@ -127,8 +127,7 @@ fn error(error: impl std::fmt::Display) -> SimulationError {
 }
 
 impl ScrabbleSimulation {
-    /// Applies automatic pass once when the active clock has expired at this tick.
-    /// A blocked forfeit (#99) leaves the match unchanged and never fails the tick.
+    /// Applies the configured timeout consequence once at the authoritative expiry tick.
     /// Atomic: on error the session is unchanged (`timeout_at` publishes only on success).
     fn apply_clock_expiry(&mut self, tick: u64) -> Result<(), SimulationError> {
         let Phase::Playing { turn, .. } = self.session.state().phase() else {
@@ -142,13 +141,7 @@ impl ScrabbleSimulation {
         if now_ms < expires_at {
             return Ok(());
         }
-        match self.session.timeout_at(turn, now_ms) {
-            Ok(()) => {}
-            Err(CommandError::State(StateError::Clock(ClockError::ForfeitUnavailable))) => {
-                return Ok(());
-            }
-            Err(failure) => return Err(error(failure)),
-        }
+        self.session.timeout_at(turn, now_ms).map_err(error)?;
         if matches!(self.session.state().phase(), Phase::Finished { .. })
             && let Some(lifecycle) = &mut self.lifecycle
             && lifecycle.finished_at_tick.is_none()

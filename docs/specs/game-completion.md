@@ -6,6 +6,14 @@ A commit also ends the game when replacement draws leave the bag empty and the a
 
 At either ending, each player's score loses the sum of the values of their remaining rack tiles. Blanks contribute zero. When a player goes out, that player additionally receives the total rack value deducted from every opponent. A scoreless ending makes deductions without a transfer. Scores may be negative. Every player sharing the highest final score appears in `Phase::Finished.winners`, in stable seat order; ties have no arbitrary winner.
 
+Atlas Decision **3.12** adds timed forfeits: the expired player leaves the turn rotation,
+retains their frozen score and private rack, and ranks below every remaining player.
+Forfeited racks are excluded from final deductions and going-out transfers; their tiles
+stay out of play. Other players continue until the normal ending or until the last
+remaining participant wins. Forfeits record `TurnAction::Forfeit` and do not count as
+played scoreless turns. Public `forfeited: true` marks the retained seat; false is omitted
+for compatibility. The board and controller sort forfeited players below participants.
+
 All counter, revision, and score arithmetic is checked before final publication. Commits and exchanges run on a candidate state, so failure also preserves placement, replacement draws, exchange shuffle, and cumulative scoring. A failed pass preserves its counter and scores. Successful completion clears tentative previews and consumes the command sequence once. Finished sessions reject every gameplay command; duplicate commands cannot apply adjustments again.
 
 The public snapshot carries final scores, winner identities, board, bag count, rack counts, and bounded [public turn history](deterministic-history.md). Each phone retains its own private rack. The board displays the winner or tie; phones replace the move editor with their read-only rack and final scores. No rack history or bag order is published. The [completed-game summary and one-tap rematch](rematch.md) build on this finished state without changing it.

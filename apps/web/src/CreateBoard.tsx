@@ -9,6 +9,8 @@ import {
   type CreateRequest,
   type JoinInformation,
 } from "./create-game";
+import { ClockSetup } from "./ClockSetup";
+import { initialClockDraft, readTimeControl } from "./time-control";
 import { BoardLayoutPreview } from "./BoardLayoutPreview";
 import { ConnectedBoard } from "./ConnectedBoard";
 import { reportMoenarchMatch } from "./moenarch-launch";
@@ -59,6 +61,7 @@ export function CreateBoard({
   const [choices, setChoices] = useState({ wordList: "", tile: "", board: "" });
   const [edits, setEdits] = useState<DraftRules>();
   const [touched, setTouched] = useState(false);
+  const [clockDraft, setClockDraft] = useState(initialClockDraft);
   const request = useRef<CreateRequest>(undefined);
   const operation = useRef<AbortController>(undefined);
   const selectedBoard = catalog?.boardProfiles.find((row) => row.identity.name === choices.board);
@@ -109,7 +112,11 @@ export function CreateBoard({
         if (!catalog || !edits) {
           throw new CreationError("profiles.unavailable", false);
         }
-        if (!touched && catalog.defaults.legacyCompatible) {
+        const clock = readTimeControl(clockDraft);
+        if (clock.error) {
+          throw new CreationError(clock.error, false);
+        }
+        if (!touched && catalog.defaults.legacyCompatible && clock.control === undefined) {
           request.current = intent;
         } else {
           const rules = matchSettings.safeParse(
@@ -140,6 +147,7 @@ export function CreateBoard({
             version: 3,
             selection: { wordList, tile, board },
             rules: rules.data,
+            ...(clock.control === undefined ? {} : { timeControl: clock.control }),
           };
         }
       }
@@ -302,6 +310,13 @@ export function CreateBoard({
                   </ul>
                 </details>
               )}
+              <ClockSetup
+                draft={clockDraft}
+                onChange={(draft) => {
+                  change();
+                  setClockDraft(draft);
+                }}
+              />
               <details className="advanced-rules">
                 <summary>{t("profiles.advanced")}</summary>
                 <div className="advanced-match-rules">

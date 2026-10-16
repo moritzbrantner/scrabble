@@ -51,7 +51,7 @@ pub enum ClockError {
     NotExpired,
     /// A timeout on an untimed match.
     Untimed,
-    /// Provisional (#99): forfeit outcomes are not applied until the owner decides.
+    /// Reserved legacy rejection; approved forfeit transitions no longer emit this.
     ForfeitUnavailable,
 }
 impl fmt::Display for StateError {
@@ -128,6 +128,8 @@ struct Player {
     display_name: String,
     score: i32,
     rack: Vec<Tile>,
+    #[serde(skip_serializing_if = "crate::protocol::is_false")]
+    forfeited: bool,
 }
 
 /// Private clock state of a timed match. Balances are in seat order and are the
@@ -302,6 +304,7 @@ impl GameState {
             display_name: name.to_owned(),
             score: 0,
             rack: vec![],
+            forfeited: false,
         });
         self.revision = revision;
         Ok(())
@@ -687,6 +690,10 @@ impl GameState {
         let phase = if finished {
             let mut transfer = 0_i32;
             for player in &self.players {
+                if player.forfeited {
+                    scores.push(player.score);
+                    continue;
+                }
                 let remaining = player.rack.iter().try_fold(0_i32, |sum, tile| {
                     sum.checked_add(i32::from(tile.value))
                         .ok_or(StateError::ScoreOverflow)
@@ -706,18 +713,27 @@ impl GameState {
                     .checked_add(transfer)
                     .ok_or(StateError::ScoreOverflow)?;
             }
-            let highest = scores.iter().max().ok_or(StateError::InvariantViolation)?;
+            let highest = self
+                .players
+                .iter()
+                .zip(&scores)
+                .filter(|(player, _)| !player.forfeited)
+                .map(|(_, score)| score)
+                .max()
+                .ok_or(StateError::InvariantViolation)?;
             Phase::Finished {
                 winners: self
                     .players
                     .iter()
                     .zip(&scores)
-                    .filter_map(|(player, score)| (score == highest).then_some(player.id))
+                    .filter_map(|(player, score)| {
+                        (!player.forfeited && score == highest).then_some(player.id)
+                    })
                     .collect(),
             }
         } else {
             Phase::Playing {
-                active_player: self.players[(index + 1) % self.players.len()].id,
+                active_player: self.next_participant(index)?,
                 turn: TurnId::new(next_turn),
             }
         };
@@ -727,6 +743,57 @@ impl GameState {
         self.phase = phase;
         self.consecutive_scoreless_turns = scoreless;
         self.revision = revision;
+        Ok(())
+    }
+    fn next_participant(&self, index: usize) -> Result<PlayerId, StateError> {
+        (1..=self.players.len())
+            .map(|offset| &self.players[(index + offset) % self.players.len()])
+            .find(|player| !player.forfeited)
+            .map(|player| player.id)
+            .ok_or(StateError::InvariantViolation)
+    }
+    /// Atlas 3.12: retain the seat and private tiles, but remove it from play.
+    /// The caller stages this transition on a candidate before publishing it.
+    pub(crate) fn forfeit_turn(&mut self, previous: &Self) -> Result<(), StateError> {
+        let Phase::Playing {
+            active_player,
+            turn,
+        } = self.phase
+        else {
+            return Err(StateError::WrongPhase);
+        };
+        let index = self.active_index().ok_or(StateError::UnknownPlayer)?;
+        let revision = self.next_revision()?;
+        let next_turn = turn
+            .get()
+            .checked_add(1)
+            .ok_or(StateError::CounterExhausted)?;
+        self.players[index].forfeited = true;
+        let survivors: Vec<_> = self
+            .players
+            .iter()
+            .filter(|p| !p.forfeited)
+            .map(|p| p.id)
+            .collect();
+        self.phase = if survivors.len() == 1 {
+            Phase::Finished { winners: survivors }
+        } else {
+            Phase::Playing {
+                active_player: self.next_participant(index)?,
+                turn: TurnId::new(next_turn),
+            }
+        };
+        // A forfeit's participation change is not a played scoreless turn.
+        self.revision = revision;
+        self.record_turn(
+            previous,
+            crate::protocol::TurnAction::Forfeit {},
+            active_player,
+            turn,
+        );
+        if let Some(clock) = &mut self.clock {
+            clock.remaining_ms[index] = 0;
+        }
         Ok(())
     }
     /// Publish history only with the same successful candidate as the completed turn.
@@ -744,6 +811,16 @@ impl GameState {
             return Err(StateError::WrongPhase);
         };
         self.complete_turn(move_score)?;
+        self.record_turn(previous, action, active_player, turn);
+        Ok(())
+    }
+    fn record_turn(
+        &mut self,
+        previous: &Self,
+        action: crate::protocol::TurnAction,
+        active_player: PlayerId,
+        turn: TurnId,
+    ) {
         let scores = self
             .players
             .iter()
@@ -764,7 +841,6 @@ impl GameState {
             scores,
             analysis: None,
         });
-        Ok(())
     }
     pub(crate) fn record_analysis(
         &mut self,
@@ -839,6 +915,7 @@ impl GameState {
                     display_name: player.display_name.clone(),
                     score: player.score,
                     rack_count: player.rack.len() as u8,
+                    forfeited: player.forfeited,
                     connected: None,
                 })
                 .collect(),
@@ -863,6 +940,7 @@ impl GameState {
                 .collect(),
             turn_started_at_ms: clock.turn_started_at_ms,
             expires_at_ms: self.clock_expires_at(),
+            last_timeout: None,
         })
     }
     /// Trusted in-process projection; the transport adapter must select player using authenticated identity.

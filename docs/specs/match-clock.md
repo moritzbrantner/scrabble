@@ -226,16 +226,24 @@ pub struct PublicClock {
     pub players: Vec<PlayerClock>,         // seat order
     pub turn_started_at_ms: Option<u64>,   // Some only while Playing
     pub expires_at_ms: Option<u64>,        // == GameState::clock_expires_at()
+    // Optional public-only session projection; omitted when absent.
+    pub last_timeout: Option<ClockTimeout>,
 }
 #[serde(deny_unknown_fields)]
 pub struct PlayerClock { pub player_id: PlayerId, pub remaining_ms: u64 }
 ```
 
-Both derive `Clone, Debug, Eq, PartialEq, Serialize, Deserialize`. `clock` is
+`ClockTimeout` contains `player_id`, `turn` and `consequence` (`pass`/`forfeit`).
+It records the most recent successful timeout, remains through later chosen turns,
+and is reconstructed by replay. It is not stored in canonical engine evidence:
+existing automatic-pass journals therefore remain compatible. It is absent before
+any timeout and omitted when absent. See [ADR 0011](../adr/0011-match-clock-presentation-and-forfeits.md).
+
+The clock DTOs derive `Clone, Debug, Eq, PartialEq, Serialize, Deserialize`. `clock` is
 `None` for untimed matches, so their snapshot JSON is unchanged. For a timed
 match it is `Some` in every phase. In the lobby it lists the seated players with
 their starting balance and no instants. In `Finished` it keeps the final
-balances and has no instants. The option fields serialize as `null` when
+balances and has no instants. The instant fields serialize as `null` when
 absent. Clients compute a live countdown as `expires_at_ms − now`. The clock
 contains no rack, bag, seed or other private data. `player_snapshot().public`
 equals `public_snapshot()`.

@@ -15,6 +15,16 @@ export function TurnHistory({ snapshot }: { snapshot: PublicSnapshot }) {
       {snapshot.history[0]?.turn !== "0" && (
         <p>{t("history.latest", { count: snapshot.history.length })}</p>
       )}
+      {snapshot.clock?.last_timeout && (
+        <p role="status">
+          {t(
+            snapshot.clock.last_timeout.consequence === "pass"
+              ? "clock.timedOutPass"
+              : "clock.timedOutForfeit",
+            { name: name(snapshot.clock.last_timeout.player_id) },
+          )}
+        </p>
+      )}
       <ol>
         {snapshot.history.map((turn) => (
           <li key={turn.turn}>
@@ -36,6 +46,7 @@ export function TurnHistory({ snapshot }: { snapshot: PublicSnapshot }) {
                 )}
               </span>
             )}
+            {turn.action.kind === "forfeit" && <span>{t("clock.forfeited")}</span>}
             {turn.action.kind === "pass" && <span>{t("history.pass")}</span>}
             {turn.action.kind === "exchange" && (
               <span>
