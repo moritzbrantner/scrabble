@@ -9,8 +9,8 @@ use scrabble_game::{
     dictionary::WordList,
     identity::{Coordinate, GameId, PlayerId, ProtocolVersion, TileId, TurnId},
     protocol::{
-        Command, CommandEnvelope, Phase, Placement, PlayerClock, PublicClock, PublicSnapshot,
-        TurnAction,
+        ClockTimeout, Command, CommandEnvelope, Phase, Placement, PlayerClock, PublicClock,
+        PublicSnapshot, TurnAction,
     },
     ruleset::{
         ClockModel, ExpiryConsequence, MAX_CLOCK_MS, Premium, Ruleset, TileDefinition, TileFace,
@@ -496,6 +496,11 @@ fn expiry_applies_automatic_pass_exactly_once_and_rejects_later_moves() {
     );
     at(&mut session, P1, 1, 0, Command::Start {}, 0).unwrap();
     assert_eq!(session.state().clock_expires_at(), Some(65_000));
+    assert!(
+        serde_json::to_value(session.public_snapshot()).unwrap()["clock"]
+            .get("last_timeout")
+            .is_none()
+    );
     let placements = opening(&session, P1);
     at(
         &mut session,
@@ -560,6 +565,15 @@ fn expiry_applies_automatic_pass_exactly_once_and_rejects_later_moves() {
     assert_eq!(turn.turn, TurnId::new(0));
     assert_eq!(turn.player_id, PlayerId::new(P1));
     assert_eq!(turn.action, TurnAction::Pass {});
+    assert_eq!(
+        snapshot.clock.as_ref().unwrap().last_timeout,
+        Some(ClockTimeout {
+            player_id: PlayerId::new(P1),
+            turn: TurnId::new(0),
+            consequence: ExpiryConsequence::Pass,
+        }),
+        "public timeout evidence distinguishes the automatic pass from a chosen pass"
+    );
     assert!(
         turn.scores
             .iter()
@@ -581,6 +595,15 @@ fn expiry_applies_automatic_pass_exactly_once_and_rejects_later_moves() {
     timeout(&mut session, 1, 140_000).unwrap();
     playing(&session, P1, 2);
     assert_eq!(session.public_snapshot().history.len(), 2);
+    assert_eq!(
+        session.public_snapshot().clock.unwrap().last_timeout,
+        Some(ClockTimeout {
+            player_id: PlayerId::new(P2),
+            turn: TurnId::new(1),
+            consequence: ExpiryConsequence::Pass,
+        }),
+        "the marker identifies the latest accepted timeout"
+    );
     assert_eq!(
         clock(&session),
         (vec![(P1, 5_000), (P2, 0)], Some(140_000), Some(145_000))
@@ -798,6 +821,27 @@ fn forfeit_freezes_score_and_rack_skips_the_player_and_last_remaining_wins() {
             timeout(&mut session, first_turn, expiry)
                 .expect("approved forfeit must apply at expiry");
             let after = evidence(&session);
+            assert!(after.1.players[0].forfeited);
+            assert!(
+                after
+                    .1
+                    .players
+                    .iter()
+                    .skip(1)
+                    .all(|player| !player.forfeited)
+            );
+            assert_eq!(
+                after.1.history.last().unwrap().action,
+                TurnAction::Forfeit {}
+            );
+            assert_eq!(
+                after.1.clock.as_ref().unwrap().last_timeout,
+                Some(ClockTimeout {
+                    player_id: PlayerId::new(P1),
+                    turn: TurnId::new(first_turn),
+                    consequence: ExpiryConsequence::Forfeit,
+                })
+            );
             assert!(
                 timeout(&mut session, first_turn, expiry).is_err(),
                 "duplicate timeout cannot eliminate the next player"
@@ -1041,7 +1085,7 @@ fn timed_match_serializes_reconstructs_and_replays_canonically() {
     assert_eq!(replay.public_snapshot(), original.public_snapshot());
     replay.state().verify_tile_conservation().unwrap();
 
-    // Public snapshot: model, remaining times and expiry only; no private data.
+    // Public snapshot: model, remaining times, expiry and public timeout evidence; no private data.
     let snapshot = original.public_snapshot();
     assert_eq!(snapshot.configuration.time_control, Some(control));
     assert_eq!(
@@ -1059,6 +1103,11 @@ fn timed_match_serializes_reconstructs_and_replays_canonically() {
             ],
             turn_started_at_ms: Some(72_500),
             expires_at_ms: Some(143_500),
+            last_timeout: Some(ClockTimeout {
+                player_id: PlayerId::new(P2),
+                turn: TurnId::new(1),
+                consequence: ExpiryConsequence::Pass,
+            }),
         })
     );
     let value = serde_json::to_value(&snapshot).unwrap();
@@ -1069,7 +1118,28 @@ fn timed_match_serializes_reconstructs_and_replays_canonically() {
         .cloned()
         .collect();
     keys.sort();
-    assert_eq!(keys, ["expires_at_ms", "players", "turn_started_at_ms"]);
+    assert_eq!(
+        keys,
+        [
+            "expires_at_ms",
+            "last_timeout",
+            "players",
+            "turn_started_at_ms"
+        ]
+    );
+    assert_eq!(
+        value["clock"]["last_timeout"],
+        serde_json::json!({
+            "player_id": "2", "turn": "1", "consequence": "pass",
+        })
+    );
+    assert!(
+        evidence_json["clock"].get("last_timeout").is_none(),
+        "display metadata is replay-derived without changing canonical engine clock evidence"
+    );
+    let mut private_timeout = value["clock"].clone();
+    private_timeout["last_timeout"]["rack"] = serde_json::json!([]);
+    assert!(serde_json::from_value::<PublicClock>(private_timeout).is_err());
     for entry in value["clock"]["players"].as_array().unwrap() {
         let mut keys: Vec<_> = entry.as_object().unwrap().keys().cloned().collect();
         keys.sort();
@@ -1085,6 +1155,55 @@ fn timed_match_serializes_reconstructs_and_replays_canonically() {
     assert_eq!(
         original.player_snapshot(PlayerId::new(P1)).unwrap().public,
         snapshot
+    );
+}
+
+#[test]
+fn public_timeout_metadata_is_absent_for_chosen_pass_and_unchanged_by_later_manual_turns() {
+    let mut session = lobby(timed(per_turn(1_000, ExpiryConsequence::Pass), 100), 3);
+    for snapshot in [
+        session.public_snapshot(),
+        session.player_snapshot(PlayerId::new(P1)).unwrap().public,
+    ] {
+        assert!(
+            serde_json::to_value(snapshot).unwrap()["clock"]
+                .get("last_timeout")
+                .is_none()
+        );
+    }
+    at(&mut session, P1, 1, 0, Command::Start {}, 0).unwrap();
+    at(&mut session, P1, 2, 0, Command::Pass {}, 100).unwrap();
+    assert!(
+        serde_json::to_value(session.public_snapshot()).unwrap()["clock"]
+            .get("last_timeout")
+            .is_none()
+    );
+    assert!(
+        session
+            .public_snapshot()
+            .players
+            .iter()
+            .all(|player| !player.forfeited)
+    );
+    timeout(&mut session, 1, 1_100).unwrap();
+    let marker = Some(ClockTimeout {
+        player_id: PlayerId::new(P2),
+        turn: TurnId::new(1),
+        consequence: ExpiryConsequence::Pass,
+    });
+    assert_eq!(
+        session.public_snapshot().clock.unwrap().last_timeout,
+        marker
+    );
+    at(&mut session, P1, 3, 2, Command::Pass {}, 1_200).unwrap();
+    assert_eq!(
+        session.public_snapshot().clock.unwrap().last_timeout,
+        marker,
+        "a later chosen pass must not be mislabelled as a timeout"
+    );
+    assert_eq!(
+        session.player_snapshot(PlayerId::new(P1)).unwrap().public,
+        session.public_snapshot()
     );
 }
 
