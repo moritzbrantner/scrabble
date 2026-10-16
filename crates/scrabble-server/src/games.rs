@@ -215,6 +215,16 @@ impl Games {
         .map_err(|_| GameOperationError::Internal)?;
         self.place_created(&id, request.requested_at).await
     }
+    /// Runs one guest board-layout library operation off the async executor (#101).
+    pub async fn with_layouts<T: Send + 'static>(
+        &self,
+        operation: impl FnOnce(&crate::layout_library::LayoutLibrary) -> T + Send + 'static,
+    ) -> Result<T, GameOperationError> {
+        let factory = self.factory.clone();
+        tokio::task::spawn_blocking(move || operation(factory.layouts()))
+            .await
+            .map_err(|_| GameOperationError::Internal)
+    }
     pub fn hex_profiles(&self) -> serde_json::Value {
         self.factory.hex_profile_catalog()
     }

@@ -270,6 +270,16 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             .ok_or("invalid configuration path")?
             .into(),
     );
+    // #101 durable guest board-layout library (see tests/custom_board_layouts.rs).
+    values.insert(
+        "SCRABBLE_BOARD_LAYOUT_DIR".into(),
+        directory
+            .join("layouts")
+            .to_str()
+            .ok_or("invalid layout library path")?
+            .into(),
+    );
+    retain_backend_without_layout_library(&mut values);
     retain_legacy_backend_if_catalog_is_unavailable(&mut values)?;
     // Test-only paths and configuration let later tests select fresh real creation inputs.
     // The persisted derivation key remains in its private seed file and never reaches metadata.
@@ -298,6 +308,16 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     signal.abort();
     let _ = signal.await;
     result
+}
+
+/// Keep a pre-#101 backend runnable so unrelated suites still execute; the custom
+/// layout acceptance then fails on its real missing `/layouts` routes instead.
+fn retain_backend_without_layout_library(values: &mut std::collections::BTreeMap<String, String>) {
+    if let Err(error) = scrabble_server::config::ServerConfig::from_values(values)
+        && error.to_string() == "unknown server configuration key SCRABBLE_BOARD_LAYOUT_DIR"
+    {
+        values.remove("SCRABBLE_BOARD_LAYOUT_DIR");
+    }
 }
 
 /// Keep pre-feature executable fixtures runnable without pretending the new catalog works.

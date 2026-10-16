@@ -13,6 +13,7 @@ import { ClockSetup } from "./ClockSetup";
 import { initialClockDraft, readTimeControl } from "./time-control";
 import { BoardLayoutPreview } from "./BoardLayoutPreview";
 import { ConnectedBoard } from "./ConnectedBoard";
+import { CustomLayouts, type BoardChoice } from "./CustomLayouts";
 import { reportMoenarchMatch } from "./moenarch-launch";
 import { useCopy } from "./preferences";
 import { fetchProfiles } from "./profile-catalog";
@@ -48,10 +49,13 @@ export function CreateBoard({
   endpoint,
   api,
   certificateHash,
+  sharedBoard,
 }: {
   endpoint: string;
   api: string;
   certificateHash?: string;
+  /** A shared custom layout opened through its link (#101), offered as a board choice. */
+  sharedBoard?: BoardChoice;
 }) {
   const { t, number } = useCopy();
   const [state, setState] = useState<State>({ kind: "idle" });
@@ -64,7 +68,21 @@ export function CreateBoard({
   const [clockDraft, setClockDraft] = useState(initialClockDraft);
   const request = useRef<CreateRequest>(undefined);
   const operation = useRef<AbortController>(undefined);
-  const selectedBoard = catalog?.boardProfiles.find((row) => row.identity.name === choices.board);
+  const initialBoard = useRef(sharedBoard?.value);
+  const [customBoards, setCustomBoards] = useState<BoardChoice[]>([]);
+  const boardChoices: BoardChoice[] = [
+    ...(catalog?.boardProfiles.map((row) => ({ value: row.identity.name, row })) ?? []),
+    ...customBoards,
+    ...(sharedBoard ? [sharedBoard] : []),
+  ];
+  // A deleted custom layout falls back to the catalog default selection.
+  const selectedChoice =
+    boardChoices.find((choice) => choice.value === choices.board) ??
+    boardChoices.find((choice) => choice.value === catalog?.defaults.selection.board.name);
+  const selectedBoard = selectedChoice?.row;
+  const customSelected =
+    selectedChoice !== undefined &&
+    !catalog?.boardProfiles.some((row) => row.identity.name === selectedChoice.value);
   const selectedTiles = catalog?.tileProfiles.find((row) => row.identity.name === choices.tile);
   const boardSizes = catalog
     ? [...new Set(catalog.boardProfiles.map((row) => row.boardSize))].sort((a, b) => a - b)
@@ -82,7 +100,7 @@ export function CreateBoard({
         setChoices({
           wordList: value.defaults.selection.wordList.name,
           tile: value.defaults.selection.tile.name,
-          board: value.defaults.selection.board.name,
+          board: initialBoard.current ?? value.defaults.selection.board.name,
         });
         setEdits(initialRules(value.defaults.rules));
       })
@@ -116,7 +134,12 @@ export function CreateBoard({
         if (clock.error) {
           throw new CreationError(clock.error, false);
         }
-        if (!touched && catalog.defaults.legacyCompatible && clock.control === undefined) {
+        if (
+          !touched &&
+          !customSelected &&
+          catalog.defaults.legacyCompatible &&
+          clock.control === undefined
+        ) {
           request.current = intent;
         } else {
           const rules = matchSettings.safeParse(
@@ -133,9 +156,7 @@ export function CreateBoard({
           const tile = catalog.tileProfiles.find(
             (row) => row.identity.name === choices.tile,
           )?.identity;
-          const board = catalog.boardProfiles.find(
-            (row) => row.identity.name === choices.board,
-          )?.identity;
+          const board = selectedBoard?.identity;
           if (!rules.success) {
             throw new CreationError("profiles.invalidRules", false);
           }
@@ -275,15 +296,15 @@ export function CreateBoard({
                   {t("profiles.board")}
                   <NativeSelect
                     aria-label={t("profiles.board")}
-                    value={choices.board}
+                    value={selectedChoice?.value ?? ""}
                     onChange={(event: ChangeEvent<HTMLSelectElement>) => {
                       change();
                       setChoices({ ...choices, board: event.currentTarget.value });
                     }}
                   >
-                    {catalog.boardProfiles.map((row) => (
-                      <NativeSelectOption key={row.identity.name} value={row.identity.name}>
-                        {row.label}
+                    {boardChoices.map((choice) => (
+                      <NativeSelectOption key={choice.value} value={choice.value}>
+                        {choice.row.label}
                       </NativeSelectOption>
                     ))}
                   </NativeSelect>
@@ -352,6 +373,7 @@ export function CreateBoard({
       >
         {state.kind === "failed" && state.retryable ? t("create.retry") : t("create.action")}
       </Button>
+      <CustomLayouts api={api} onChoices={setCustomBoards} />
     </main>
   );
 }

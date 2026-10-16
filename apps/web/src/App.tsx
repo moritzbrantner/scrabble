@@ -8,6 +8,8 @@ import { JoinRoute } from "./JoinRoute";
 import { ConnectedBoard } from "./ConnectedBoard";
 import { useCopy } from "./preferences";
 import { SharedBoard } from "./SharedBoard";
+import { type BoardChoice } from "./CustomLayouts";
+import { SharedLayoutView } from "./SharedLayout";
 
 export function App() {
   const { t } = useCopy();
@@ -15,6 +17,7 @@ export function App() {
   const [connection] = useState(() =>
     typeof window === "undefined" ? null : new URLSearchParams(window.location.search),
   );
+  const [sharedUse, setSharedUse] = useState<BoardChoice>();
   const launch = moenarchLaunch(connection ?? new URLSearchParams());
   if (launch.kind === "invalid" || launch.kind === "unbound") {
     return (
@@ -76,8 +79,35 @@ export function App() {
       />
     );
   }
+  if (api && connection?.get("view") === "layout" && sharedUse === undefined) {
+    return (
+      <SharedLayoutView
+        api={api}
+        shareId={connection.get("share") ?? ""}
+        {...(endpoint
+          ? {
+              onUse: (choice: BoardChoice) => {
+                // Continue on the create page; the share stays a board choice only.
+                const location = new URL(window.location.href);
+                location.searchParams.delete("view");
+                location.searchParams.delete("share");
+                window.history.replaceState(null, "", location);
+                setSharedUse(choice);
+              },
+            }
+          : {})}
+      />
+    );
+  }
   if (endpoint && api) {
-    return <CreateBoard endpoint={endpoint} api={api} {...localTrust} />;
+    return (
+      <CreateBoard
+        endpoint={endpoint}
+        api={api}
+        {...localTrust}
+        {...(sharedUse ? { sharedBoard: sharedUse } : {})}
+      />
+    );
   }
   const selected = connection?.get("fixture");
   const fixture = selected === "playing" || selected === "finished" ? selected : "lobby";

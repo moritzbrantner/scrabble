@@ -22,6 +22,8 @@ pub struct ServerConfig {
     pub ruleset_file: Option<PathBuf>,
     pub profile_catalog_file: Option<PathBuf>,
     pub match_configuration_directory: PathBuf,
+    /// Durable private guest board-layout library (#101).
+    pub board_layout_directory: PathBuf,
     pub port: u16,
     pub status_port: u16,
     pub api_port: u16,
@@ -52,6 +54,7 @@ fn fail(message: impl Into<String>) -> ConfigError {
 const KEYS: &[&str] = &[
     "SCRABBLE_PROFILE_CATALOG_FILE",
     "SCRABBLE_MATCH_CONFIGURATION_DIR",
+    "SCRABBLE_BOARD_LAYOUT_DIR",
     "SCRABBLE_MODE",
     "SCRABBLE_RULESET_FILE",
     "SCRABBLE_DICTIONARY_FILE",
@@ -281,7 +284,15 @@ impl ServerConfig {
                 .unwrap_or(std::path::Path::new("."))
                 .join("configurations"),
         };
+        let board_layout_directory = match values.get("SCRABBLE_BOARD_LAYOUT_DIR") {
+            Some(_) => path(values, "SCRABBLE_BOARD_LAYOUT_DIR", "")?,
+            None => path(values, "SCRABBLE_SEED_FILE", ".local/server/seed")?
+                .parent()
+                .unwrap_or(std::path::Path::new("."))
+                .join("layouts"),
+        };
         let config = Self {
+            board_layout_directory,
             profile_catalog_file,
             match_configuration_directory,
             mode,
@@ -322,6 +333,7 @@ impl ServerConfig {
                 &config.seed_file,
                 &config.recovery_directory,
                 &config.match_configuration_directory,
+                &config.board_layout_directory,
             ]
             .iter()
             .any(|path| !path.is_absolute())
@@ -350,6 +362,19 @@ impl ServerConfig {
         {
             return Err(fail(
                 "match initialization must be separate from TLS, seed and runtime recovery",
+            ));
+        }
+        let layouts = &config.board_layout_directory;
+        if layouts == &config.seed_file
+            || layouts == &config.certificate
+            || layouts == &config.private_key
+            || layouts.starts_with(&config.recovery_directory)
+            || config.recovery_directory.starts_with(layouts)
+            || layouts.starts_with(&config.match_configuration_directory)
+            || config.match_configuration_directory.starts_with(layouts)
+        {
+            return Err(fail(
+                "board layout library must be separate from TLS, seed, recovery and match initialization",
             ));
         }
         if config.certificate == config.private_key {

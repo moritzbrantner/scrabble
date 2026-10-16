@@ -113,6 +113,23 @@ or command authority. Deleting/corrupting required inputs fails recovery closed.
 Source edits apply only to future selections. The existing v1 rematch API creates
 a new deployment-default v2 game; configured-profile carryover is not promised.
 
+`SCRABBLE_BOARD_LAYOUT_DIR` (#101) holds the durable guest-owned custom board
+layout library. It defaults to `layouts/` beside the seed; the supplied Compose
+file sets `/state/layouts` and the Hetzner environment `/var/lib/scrabble/layouts`.
+In production it must be absolute and separate from the TLS files, seed, runtime
+recovery and match initialization directories. The server creates it (mode 0700)
+and stores one `l_<id>.json` file (mode 0600) per saved original: its name, an
+optional share id, its recent immutable versions and an HMAC verifier of the
+owner capability keyed from the private seed. The bearer capability itself is
+never stored, so the library is unusable for owners if the seed is replaced; the
+server therefore refuses to create a new seed while this directory is non-empty.
+Back it up and preserve it together with the seed. Deleting it removes every
+guest layout (owners cannot recover them, as the UI states) but never changes a
+started match, whose composed board is pinned in its initialization manifest.
+Layout routes (`/layouts…`, `/shared-layouts/…`) accept request bodies up to
+32 KiB; all other API routes keep the 2 KiB limit. At most 4096 originals and 16
+selectable versions per original are retained.
+
 For the supplied Docker Compose deployment, place an operator-authored catalog
 and its word files in the existing read-only content directory. An explicit
 operator Compose override can enable it without changing the default service:
