@@ -1,11 +1,15 @@
 import { defineConfig } from "@playwright/test";
 const port = process.env.SCRABBLE_BROWSER_PORT;
+const suite = process.env.SCRABBLE_BROWSER_SUITE;
 if (port === undefined || !/^[0-9]+$/.test(port)) {
   throw new Error("Use bun run test:browser to provision the shared test port");
 }
 export default defineConfig({
   testDir: "./browser",
+  ...(suite === "hex" ? { testMatch: "**/hexagonal-board.spec.ts", globalTimeout: 240_000 } : {}),
+  outputDir: suite ? `../../test-results/browser-${suite}` : "../../test-results",
   testIgnore: [
+    ...(suite === "other" ? ["**/hexagonal-board.spec.ts"] : []),
     "**/playable-loop.spec.ts",
     "**/production-configuration.spec.ts",
     "**/performance-budgets.spec.ts",
