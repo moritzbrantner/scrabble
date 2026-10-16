@@ -9,10 +9,10 @@ import { join } from "node:path";
 import { z } from "zod";
 const pages = Bun.argv.includes("--pages");
 const testArgs = Bun.argv.slice(2).filter((argument) => argument !== "--pages");
-// Completed matches retire after five minutes. Verify the hex replay journeys
-// in their own bounded fixture lifetime instead of waiting for unrelated tests.
+// Completed matches retire after five minutes. Verify replay journeys in
+// bounded fixture lifetimes instead of waiting for unrelated tests.
 if (testArgs.length === 0 && process.env.SCRABBLE_BROWSER_SUITE === undefined) {
-  for (const suite of ["other", "hex"]) {
+  for (const suite of ["other", "hex", "custom-layout-replay"]) {
     const task = Bun.spawn([process.execPath, ...Bun.argv.slice(1)], {
       env: { ...process.env, SCRABBLE_BROWSER_SUITE: suite },
       stdout: "inherit",
@@ -175,13 +175,65 @@ const replayGame = z.strictObject({
   phase: z.unknown(),
   history: z.array(z.unknown()),
 });
+const customReplaySelected =
+  process.env.SCRABBLE_BROWSER_SUITE === "custom-layout-replay" ||
+  testArgs.some((argument) => argument.includes("custom-board-layout-replay"));
+const customReplayGame = replayGame.extend({ players: z.array(z.unknown()) });
+const customReplayExpectation = z.strictObject({
+  match: z.string(),
+  configuration: z.unknown(),
+  game: customReplayGame,
+});
 const replayExpectation = z.strictObject({ match: z.string(), game: replayGame });
 const replayReport = z.object({
   records_verified: z.int().positive(),
   checkpoints_verified: z.int().positive(),
   canonical_hash: z.string().min(1),
-  game: replayGame,
+  game: customReplayGame,
 });
+async function verifyCompletedCustomReplays() {
+  const directory = join(gameDirectory, "custom-layout-replay-expectations");
+  if (!customReplaySelected && !existsSync(directory)) {
+    return;
+  }
+  assert.deepEqual(
+    (await readdir(directory)).sort(),
+    ["custom-hex.json", "custom-square.json"],
+    "both completed custom geometries must provide native replay expectations",
+  );
+  for (const entry of ["custom-hex.json", "custom-square.json"]) {
+    const expected = customReplayExpectation.parse(
+      JSON.parse(await readFile(join(directory, entry), "utf8")),
+    );
+    const actual = replayReport
+      .extend({
+        configuration: z.unknown(),
+        game: customReplayGame,
+      })
+      .parse(
+        JSON.parse(
+          execFileSync(
+            join(fixtureExecutables, "browser_game_fixture"),
+            ["--hex-replay", gameDirectory, expected.match],
+            { encoding: "utf8", timeout: 10_000, stdio: ["ignore", "pipe", "inherit"] },
+          ),
+        ),
+      );
+    assert.deepEqual(
+      actual.configuration,
+      expected.configuration,
+      "native replay retains original custom configuration",
+    );
+    assert.deepEqual(
+      actual.game,
+      expected.game,
+      "native replay retains the SAME completed custom match results and history",
+    );
+  }
+  console.log(
+    "Verified 2 completed custom layout matches through native canonical replay after graceful shutdown.",
+  );
+}
 async function verifyCompletedHexReplays() {
   const directory = join(gameDirectory, "hex-replay-expectations");
   if (!existsSync(directory)) {
@@ -203,7 +255,7 @@ async function verifyCompletedHexReplays() {
       ),
     );
     assert.deepEqual(
-      actual.game,
+      { game_id: actual.game.game_id, phase: actual.game.phase, history: actual.game.history },
       expected.game,
       "native replay must retain the SAME completed match, phase and full history",
     );
@@ -235,6 +287,7 @@ try {
       "native game fixture must finish graceful recovery persistence",
     );
     await verifyCompletedHexReplays();
+    await verifyCompletedCustomReplays();
     verified = process.exitCode === 0;
   } finally {
     // Preserve an already nonzero browser result; replay errors also fail the

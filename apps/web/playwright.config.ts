@@ -7,9 +7,14 @@ if (port === undefined || !/^[0-9]+$/.test(port)) {
 export default defineConfig({
   testDir: "./browser",
   ...(suite === "hex" ? { testMatch: "**/hexagonal-board.spec.ts", globalTimeout: 240_000 } : {}),
+  ...(suite === "custom-layout-replay"
+    ? { testMatch: "**/custom-board-layout-replay.spec.ts", globalTimeout: 240_000 }
+    : {}),
   outputDir: suite ? `../../test-results/browser-${suite}` : "../../test-results",
   testIgnore: [
-    ...(suite === "other" ? ["**/hexagonal-board.spec.ts"] : []),
+    ...(suite === "other"
+      ? ["**/hexagonal-board.spec.ts", "**/custom-board-layout-replay.spec.ts"]
+      : []),
     "**/playable-loop.spec.ts",
     "**/production-configuration.spec.ts",
     "**/performance-budgets.spec.ts",
