@@ -269,8 +269,8 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
 
 ## 4. Current execution priority
 
-- **4.1 Prioritize approved hexagonal-board or match-clock journeys.**
-  Status: owner-approved 2026-10-14 in the interactive work-loop session.
+- **4.1 Prioritize approved hexagonal-board or match-clock journeys.**  
+  Status: owner-approved 2026-10-14 in the interactive work-loop session.  
   Focus current implementation work on the approved **hexagonal-board or match-clock** journeys. This sets the current category priority; it does not change the behaviors approved in sections 1 and 3 or establish a preference between those two journeys. Follow their evidenced actionable prerequisites. Execution is tracked by [hexagonal gameplay #96](https://github.com/moritzbrantner/scrabble/issues/96) and [match clocks #99](https://github.com/moritzbrantner/scrabble/issues/99); independent match configuration [#94](https://github.com/moritzbrantner/scrabble/issues/94) is an existing prerequisite of the separately selectable hex board. Physical-device release acceptance remains required by #32/#34 and is not claimed complete by this scheduling choice.
 
 ## Existing baseline and boundaries
