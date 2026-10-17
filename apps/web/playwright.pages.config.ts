@@ -20,6 +20,7 @@ function selectedTests() {
     "**/profile-creation.spec.ts",
     "**/custom-board-layout-responsive.spec.ts",
     "**/custom-word-lists.spec.ts",
+    "**/custom-tile-profiles.spec.ts",
     "**/custom-board-layout-replay.spec.ts",
     "**/multi-letter-tiles.spec.ts",
     "**/hexagonal-board.spec.ts",

@@ -471,13 +471,13 @@ impl ProfileCatalog {
         let words = self
             .word_list(&selection.word_list)
             .ok_or(SelectionError::Unknown("wordList"))?;
-        if !self.has_tile(&selection.tile) {
-            return Err(SelectionError::Unknown("tile"));
-        }
+        let tiles = self
+            .tile(&selection.tile)
+            .ok_or(SelectionError::Unknown("tile"))?;
         let board = self
             .board(&selection.board)
             .ok_or(SelectionError::Unknown("board"))?;
-        self.compose(selection, words, board, rules, time_control)
+        self.compose(selection, words, tiles, board, rules, time_control)
     }
     pub fn word_list(&self, identity: &ContentIdentity) -> Option<&WordListProfile> {
         self.words
@@ -485,8 +485,11 @@ impl ProfileCatalog {
             .find(|r| r.profile.identity() == identity)
             .map(|r| &r.profile)
     }
-    pub fn has_tile(&self, identity: &ContentIdentity) -> bool {
-        self.tiles.iter().any(|r| r.profile.identity() == identity)
+    pub fn tile(&self, identity: &ContentIdentity) -> Option<&TileProfile> {
+        self.tiles
+            .iter()
+            .map(|r| &r.profile)
+            .find(|profile| profile.identity() == identity)
     }
     pub fn board(&self, identity: &ContentIdentity) -> Option<&BoardProfile> {
         self.boards
@@ -494,12 +497,13 @@ impl ProfileCatalog {
             .find(|r| r.profile.identity() == identity)
             .map(|r| &r.profile)
     }
-    /// Composes an already validated word list and board, from this catalog or a guest
-    /// library (#97, #101), with this catalog's tiles under the single compatibility check.
+    /// Composes an already validated word list, tile profile and board, each from this
+    /// catalog or a guest library (#97, #100, #101), under the single compatibility check.
     pub fn compose(
         &self,
         selection: &Selection,
         words: &WordListProfile,
+        tiles: &TileProfile,
         board: &BoardProfile,
         rules: MatchRules,
         time_control: Option<scrabble_game::ruleset::TimeControl>,
@@ -507,15 +511,12 @@ impl ProfileCatalog {
         if words.identity() != &selection.word_list {
             return Err(SelectionError::Unknown("wordList"));
         }
+        if tiles.identity() != &selection.tile {
+            return Err(SelectionError::Unknown("tile"));
+        }
         if board.identity() != &selection.board {
             return Err(SelectionError::Unknown("board"));
         }
-        let tiles = &self
-            .tiles
-            .iter()
-            .find(|r| r.profile.identity() == &selection.tile)
-            .ok_or(SelectionError::Unknown("tile"))?
-            .profile;
         let composed =
             crate::profiles::compose_timed_profiles(words, tiles, board, rules, time_control)
                 .map_err(|error| match error {

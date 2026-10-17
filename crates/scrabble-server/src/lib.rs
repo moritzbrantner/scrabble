@@ -8,6 +8,7 @@ pub mod hosting;
 pub mod layout_library;
 pub mod profiles;
 pub mod simulation;
+pub mod tile_profile_library;
 pub mod word_list_library;
 
 pub mod replay;

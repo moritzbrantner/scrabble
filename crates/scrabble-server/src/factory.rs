@@ -98,6 +98,7 @@ fn seed(config: &ServerConfig) -> ErrorResult<[u8; 32]> {
                 || non_empty(&config.match_configuration_directory)?
                 || non_empty(&config.board_layout_directory)?
                 || non_empty(&config.word_list_directory)?
+                || non_empty(&config.tile_profile_directory)?
             {
                 return Err(
                     "recovery exists without its initialization seed; refusing new initialization"
@@ -127,6 +128,7 @@ pub struct MatchFactory {
     dictionary: Arc<dyn Dictionary>,
     layouts: Arc<crate::layout_library::LayoutLibrary>,
     word_lists: Arc<crate::word_list_library::WordListLibrary>,
+    tile_profiles: Arc<crate::tile_profile_library::TileProfileLibrary>,
 }
 impl MatchFactory {
     pub fn new(config: &ServerConfig) -> ErrorResult<Self> {
@@ -155,9 +157,14 @@ impl MatchFactory {
             &key,
             config.word_list_limits,
         )?);
+        let tile_profiles = Arc::new(crate::tile_profile_library::TileProfileLibrary::open(
+            config.tile_profile_directory.clone(),
+            &key,
+        )?);
         Ok(Self {
             layouts,
             word_lists,
+            tile_profiles,
             catalog: Arc::new(catalog),
             store: Arc::new(crate::configuration_store::ConfigurationStore::new(
                 config.match_configuration_directory.clone(),
@@ -245,7 +252,7 @@ impl MatchFactory {
         self.store.get(id)
     }
     /// Resolves each independently selected component from the operator catalog first,
-    /// then from the guest libraries: word lists (#97) and board layouts (#101). A guest
+    /// then from the guest libraries: word lists (#97), tile profiles (#100) and board layouts (#101). A guest
     /// word list additionally needs proof of access (a live share or owner capability,
     /// Decision 1.48); a catalog list is selected without one. The
     /// established error order (word list, tiles, board) and the single composition and
@@ -275,9 +282,17 @@ impl MatchFactory {
             // A guest list without proof, or a proof for a catalog list, selects nothing.
             _ => return Err(SelectionError::Unknown("wordList")),
         };
-        if !self.catalog.has_tile(&selection.tile) {
-            return Err(SelectionError::Unknown("tile"));
-        }
+        let saved_tiles;
+        let tiles = match self.catalog.tile(&selection.tile) {
+            Some(tiles) => tiles,
+            None => {
+                saved_tiles = self
+                    .tile_profiles
+                    .tiles(&selection.tile)
+                    .ok_or(SelectionError::Unknown("tile"))?;
+                &saved_tiles
+            }
+        };
         let saved_board;
         let board = match self.catalog.board(&selection.board) {
             Some(board) => board,
@@ -290,13 +305,16 @@ impl MatchFactory {
             }
         };
         self.catalog
-            .compose(selection, words, board, rules, time_control)
+            .compose(selection, words, tiles, board, rules, time_control)
     }
     pub(crate) fn layouts(&self) -> &crate::layout_library::LayoutLibrary {
         &self.layouts
     }
     pub(crate) fn word_lists(&self) -> &crate::word_list_library::WordListLibrary {
         &self.word_lists
+    }
+    pub(crate) fn tile_profiles(&self) -> &crate::tile_profile_library::TileProfileLibrary {
+        &self.tile_profiles
     }
     pub(crate) fn initialize(
         &self,

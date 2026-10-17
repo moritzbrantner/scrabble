@@ -154,6 +154,22 @@ selectable versions per original are retained. Only the owner capability withdra
 sharing again issues a fresh id, and saved copies and started matches are
 unaffected.
 
+`SCRABBLE_TILE_PROFILE_DIR` (#100) holds the durable guest-owned private tile-profile
+library. It defaults to `tile-profiles/` beside the seed; the supplied Compose file sets
+`/state/tile-profiles` and the Hetzner environment `/var/lib/scrabble/tile-profiles`. In
+production it must be absolute and separate from the TLS files, seed, runtime recovery,
+match initialization, board-layout and word-list directories. The server creates it
+(mode 0700) and stores one `t_<id>.json` file (mode 0600) per saved original: its name,
+its recent immutable versions and a seed-keyed HMAC verifier of the owner capability,
+never the capability. As for layouts, the server refuses to create a new seed while this
+directory is non-empty. Routes are `POST /tile-profiles` and
+`POST /tile-profiles/{id}/read|update|delete`, with bodies up to 16 KiB; tiles use the
+catalog's `{face,count,value}` rows and the same validation as operator tile profiles.
+There are no share links (Decision 1.27). A match selects a retained version by its
+`identity` as `selection.tile`; at most 4096 originals and 16 selectable versions per
+original are retained. Deleting the directory removes every guest profile but never
+changes a started match, whose tiles are pinned in its initialization manifest.
+
 `SCRABBLE_WORD_LIST_DIR` (#97) holds the durable guest-owned custom word-list
 library ([contract](word-list-library.md)). It defaults to `word-lists/` beside
 the seed; the supplied Compose file sets `/state/word-lists` and the Hetzner

@@ -4,6 +4,7 @@ use crate::games::{
     unix_seconds,
 };
 use crate::layout_library::{Created, Layout, LayoutError, LayoutView, is_layout_id, is_share_id};
+use crate::tile_profile_library::{TileProfileError, TileProfileView, is_tile_profile_id};
 use crate::word_list_library::{
     self as word_lists, WordListLibraryError, WordListView, is_word_list_id,
 };
@@ -22,6 +23,11 @@ const MAX_BODY_BYTES: usize = 2048;
 /// Layout documents (a 15×15 square is about 3.5 KiB) get their own bounded cap; every
 /// other route keeps the original 2 KiB limit.
 const MAX_LAYOUT_BODY_BYTES: usize = 32 * 1024;
+/// Tile profiles have at most 64 rows, far below this cap.
+const MAX_TILE_PROFILE_BODY_BYTES: usize = 16 * 1024;
+fn is_tile_profile_path(path: &str) -> bool {
+    path == "/tile-profiles" || path.starts_with("/tile-profiles/")
+}
 fn is_layout_path(path: &str) -> bool {
     path == "/layouts" || path.starts_with("/layouts/") || path.starts_with("/shared-layouts/")
 }
@@ -160,6 +166,8 @@ async fn read_request(stream: &mut TcpStream, word_list_body: usize) -> Result<R
     };
     let limit = if is_layout_path(&path) {
         MAX_LAYOUT_BODY_BYTES
+    } else if is_tile_profile_path(&path) {
+        MAX_TILE_PROFILE_BODY_BYTES
     } else if is_word_list_path(&path) {
         word_list_body
     } else {
@@ -211,6 +219,9 @@ async fn route(request: Request, games: &Games, board_origin: &str) -> Response 
     }
     if is_word_list_path(&request.path) {
         return word_list_route(&request, games).await;
+    }
+    if is_tile_profile_path(&request.path) {
+        return tile_profile_route(&request, games).await;
     }
     #[derive(Clone, Copy, PartialEq)]
     enum Resource {
@@ -414,6 +425,129 @@ fn parse_layout(value: serde_json::Value) -> Result<Layout, Response> {
         reason.truncate(reason.floor_char_boundary(200));
         layout_error(LayoutError::Invalid(reason))
     })
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CreateTileProfile {
+    version: u8,
+    name: String,
+    tiles: serde_json::Value,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct UpdateTileProfile {
+    version: u8,
+    owner_capability: String,
+    name: String,
+    tiles: serde_json::Value,
+}
+fn tile_profile_error(error: TileProfileError) -> Response {
+    match error {
+        TileProfileError::Invalid(reason) => json_response(
+            400,
+            &serde_json::json!({"error":"invalid-tile-profile","reason":reason}),
+        ),
+        TileProfileError::OwnerRejected => Response::error(403, "tile-profile-owner-rejected"),
+        TileProfileError::Unknown => Response::error(404, "unknown-tile-profile"),
+        TileProfileError::Full => Response::error(429, "tile-profile-library-full"),
+        TileProfileError::Internal => operation_error(GameOperationError::Internal),
+    }
+}
+fn tile_profile_body(view: &TileProfileView) -> serde_json::Value {
+    serde_json::json!({
+        "version": 1,
+        "profileId": view.profile_id,
+        "name": view.name,
+        "revision": view.revision,
+        "identity": view.identity,
+        "tiles": view.tiles,
+    })
+}
+fn parse_tiles(
+    value: serde_json::Value,
+) -> Result<Vec<scrabble_game::ruleset::TileDefinition>, Response> {
+    serde_json::from_value(value).map_err(|error| {
+        let mut reason = error.to_string();
+        reason.truncate(reason.floor_char_boundary(200));
+        tile_profile_error(TileProfileError::Invalid(reason))
+    })
+}
+/// Private guest tile-profile library (#100). Every mutation is a POST and only the
+/// owner capability reads or manages an original; there are no share links.
+async fn tile_profile_route(request: &Request, games: &Games) -> Response {
+    if request.method == "OPTIONS" {
+        return Response {
+            status: 204,
+            body: String::new(),
+        };
+    }
+    let result = async {
+        if request.method != "POST" {
+            return Err(Response::error(405, "method-not-allowed"));
+        }
+        if request.path == "/tile-profiles" {
+            let body: CreateTileProfile = parse_body(request, |b: &CreateTileProfile| b.version)?;
+            let tiles = parse_tiles(body.tiles)?;
+            let created = games
+                .with_tile_profiles(move |library| library.create(&body.name, tiles))
+                .await
+                .map_err(operation_error)?
+                .map_err(tile_profile_error)?;
+            let mut response = tile_profile_body(&created.view);
+            response["ownerCapability"] = serde_json::json!(created.owner_capability);
+            return Ok(json_response(200, &response));
+        }
+        let rest = request
+            .path
+            .strip_prefix("/tile-profiles/")
+            .unwrap_or_default();
+        let Some((id, action)) = rest.split_once('/') else {
+            return Err(Response::error(404, "not-found"));
+        };
+        if !is_tile_profile_id(id) {
+            return Err(Response::error(404, "unknown-tile-profile"));
+        }
+        let id = id.to_owned();
+        Ok(match action {
+            "update" => {
+                let body: UpdateTileProfile =
+                    parse_body(request, |b: &UpdateTileProfile| b.version)?;
+                let tiles = parse_tiles(body.tiles)?;
+                let view = games
+                    .with_tile_profiles(move |library| {
+                        library.update(&id, &body.owner_capability, &body.name, tiles)
+                    })
+                    .await
+                    .map_err(operation_error)?
+                    .map_err(tile_profile_error)?;
+                json_response(200, &tile_profile_body(&view))
+            }
+            "read" => {
+                let body: OwnerRequest = parse_body(request, |b: &OwnerRequest| b.version)?;
+                let view = games
+                    .with_tile_profiles(move |library| library.read(&id, &body.owner_capability))
+                    .await
+                    .map_err(operation_error)?
+                    .map_err(tile_profile_error)?;
+                json_response(200, &tile_profile_body(&view))
+            }
+            "delete" => {
+                let body: OwnerRequest = parse_body(request, |b: &OwnerRequest| b.version)?;
+                games
+                    .with_tile_profiles(move |library| library.delete(&id, &body.owner_capability))
+                    .await
+                    .map_err(operation_error)?
+                    .map_err(tile_profile_error)?;
+                Response {
+                    status: 204,
+                    body: String::new(),
+                }
+            }
+            _ => return Err(Response::error(404, "not-found")),
+        })
+    }
+    .await;
+    result.unwrap_or_else(|response| response)
 }
 fn parse_body<T: serde::de::DeserializeOwned>(
     request: &Request,

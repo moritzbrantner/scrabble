@@ -999,3 +999,20 @@ body {
 .layout-editor-cell .premium-triple-word {
   background: color-mix(in oklch, var(--destructive) 47%, var(--background));
 }
+
+.tile-editor-table {
+  border-collapse: collapse;
+  margin-block: 0.5rem;
+}
+.tile-editor-table caption {
+  text-align: start;
+  font-weight: 600;
+}
+.tile-editor-table th,
+.tile-editor-table td {
+  padding: 0.25rem;
+  text-align: start;
+}
+.tile-editor-table input {
+  width: 4.5rem;
+}

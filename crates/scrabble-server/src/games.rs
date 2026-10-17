@@ -225,6 +225,16 @@ impl Games {
             .await
             .map_err(|_| GameOperationError::Internal)
     }
+    /// Runs one guest tile-profile library operation off the async executor (#100).
+    pub async fn with_tile_profiles<T: Send + 'static>(
+        &self,
+        operation: impl FnOnce(&crate::tile_profile_library::TileProfileLibrary) -> T + Send + 'static,
+    ) -> Result<T, GameOperationError> {
+        let factory = self.factory.clone();
+        tokio::task::spawn_blocking(move || operation(factory.tile_profiles()))
+            .await
+            .map_err(|_| GameOperationError::Internal)
+    }
     /// The configured guest word-list bounds (#97, Decision 1.50).
     pub fn word_list_limits(&self) -> crate::word_list_library::WordListLimits {
         *self.factory.word_lists().limits()
