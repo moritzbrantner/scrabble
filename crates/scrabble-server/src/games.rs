@@ -46,7 +46,7 @@ pub struct CreateConfiguredGame {
     pub version: u8,
     pub request_id: String,
     pub requested_at: u64,
-    pub selection: crate::profile_catalog::Selection,
+    pub selection: crate::profile_catalog::RequestedSelection,
     pub rules: crate::profiles::MatchRules,
     /// Optional match clock (#114); absent or null is untimed (Decision 3.11).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -225,6 +225,10 @@ impl Games {
             .await
             .map_err(|_| GameOperationError::Internal)
     }
+    /// The configured guest word-list bounds (#97, Decision 1.50).
+    pub fn word_list_limits(&self) -> crate::word_list_library::WordListLimits {
+        *self.factory.word_lists().limits()
+    }
     /// Runs one guest word-list library operation off the async executor (#97).
     pub async fn with_word_lists<T: Send + 'static>(
         &self,
@@ -271,7 +275,7 @@ impl Games {
             .map_err(|_| GameOperationError::Internal)?;
         let newly_initialized = existing.is_none();
         if let Some(existing) = existing {
-            if existing.selection != request.selection
+            if existing.selection != request.selection.selection()
                 || crate::profiles::MatchRules::from(&existing.configuration.rules) != request.rules
                 || existing.configuration.rules.time_control != request.time_control
             {
@@ -287,7 +291,12 @@ impl Games {
                 request.time_control,
             );
             let prepared = tokio::task::spawn_blocking(move || {
-                factory.resolve(&selection, rules, time_control)
+                factory.resolve(
+                    &selection.selection(),
+                    selection.word_list_access.as_ref(),
+                    rules,
+                    time_control,
+                )
             })
             .await
             .map_err(|_| GameOperationError::Internal)?

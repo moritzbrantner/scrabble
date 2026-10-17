@@ -1,5 +1,5 @@
 //! Durable guest-owned custom word lists (#97; Decisions 1.1, 1.8, 1.16, 1.18, 1.20,
-//! 1.25, 1.45).
+//! 1.25, 1.45, 1.48, 1.50, 1.52).
 //!
 //! Mirrors the custom board-layout library (#101). Each original is one private JSON
 //! entry holding a keyed verifier of its owner capability (never the capability), its
@@ -33,20 +33,39 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-/// Published upload bound: UTF-8 bytes of one submitted word-list text.
-pub const MAX_WORD_LIST_BYTES: usize = 1024 * 1024;
-/// Published bound of distinct words in one list.
-pub const MAX_WORDS: usize = 200_000;
-/// Upper bound of originals kept by one server; protects disk use of anonymous guests.
-const MAX_WORD_LISTS: usize = 1024;
-/// Recent immutable versions of one original that remain selectable for new matches.
-const MAX_VERSIONS: usize = 8;
-/// Total retained normalized word content across the whole library.
-const MAX_LIBRARY_BYTES: u64 = 256 * 1024 * 1024;
+/// Operator-configurable bounds (Decision 1.50), published by `GET /word-lists/limits`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct WordListLimits {
+    /// UTF-8 bytes of one submitted word-list text.
+    pub max_bytes: usize,
+    /// Distinct words in one list.
+    pub max_words: usize,
+    /// Originals and copies kept by one server; protects disk use of anonymous guests.
+    pub max_lists: usize,
+    /// Recent immutable versions of one original that remain selectable for new matches.
+    pub max_versions: usize,
+    /// Total retained normalized word content across the whole library.
+    pub max_stored_bytes: u64,
+}
+impl Default for WordListLimits {
+    fn default() -> Self {
+        Self {
+            max_bytes: 1024 * 1024,
+            max_words: 200_000,
+            max_lists: 1024,
+            max_versions: 8,
+            max_stored_bytes: 256 * 1024 * 1024,
+        }
+    }
+}
+/// Hard ceilings of the operator settings (`SCRABBLE_WORD_LIST_MAX_*`).
+pub const CEILING_BYTES: u64 = 64 * 1024 * 1024;
+pub const CEILING_WORDS: u64 = 10_000_000;
+pub const CEILING_LISTS: u64 = 1_000_000;
+pub const CEILING_VERSIONS: u64 = 64;
+pub const CEILING_STORED_BYTES: u64 = 1 << 40;
 const MAX_NAME_CHARS: usize = 64;
 const MAX_ENTRY_BYTES: u64 = 64 * 1024;
-/// Normalized content never exceeds its submitted text by more than a final newline.
-const MAX_CONTENT_BYTES: u64 = MAX_WORD_LIST_BYTES as u64 + 1;
 /// Interrupted writes older than this are removed when the library is opened.
 const ORPHAN_AGE: Duration = Duration::from_secs(600);
 
@@ -119,6 +138,20 @@ pub struct Created {
     pub owner_capability: String,
 }
 
+/// Proof of access for selecting a guest list in a NEW match (Decision 1.48): a live
+/// share of that list, or its owner capability.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum WordListAccess {
+    #[serde(rename_all = "camelCase")]
+    Share { share_id: String },
+    #[serde(rename_all = "camelCase")]
+    Owner {
+        word_list_id: String,
+        owner_capability: String,
+    },
+}
+
 #[derive(Default)]
 struct Index {
     /// Source (and public identity) name of a retained version -> its original.
@@ -130,6 +163,7 @@ struct Index {
 
 pub struct WordListLibrary {
     directory: PathBuf,
+    limits: WordListLimits,
     key: hmac::Key,
     index: Mutex<Index>,
 }
@@ -171,20 +205,55 @@ fn validate_name(name: &str) -> Result<()> {
     }
     Ok(())
 }
-fn too_large_bytes() -> WordListLibraryError {
-    WordListLibraryError::TooLarge(format!(
-        "word lists are limited to {MAX_WORD_LIST_BYTES} bytes of UTF-8 text"
-    ))
+/// Uppercases each lowercase letter with exactly one uppercase form (Decision 1.52).
+/// A letter without one (`ß` -> `SS`, `ﬁ` -> `FI`) is replaced by a character the
+/// dictionary parser rejects, so the parser still names the first faulty line; that
+/// line is returned so the reason can name the cause.
+fn uppercase(words: &str) -> (String, Option<usize>) {
+    let mut text = String::with_capacity(words.len());
+    let mut unmapped = None;
+    for (index, line) in words.lines().enumerate() {
+        if index > 0 {
+            text.push('\n');
+        }
+        for letter in line.chars() {
+            if !letter.is_lowercase() {
+                text.push(letter);
+                continue;
+            }
+            let mut upper = letter.to_uppercase();
+            match (upper.next(), upper.next()) {
+                (Some(single), None) if !single.is_lowercase() => text.push(single),
+                _ => {
+                    unmapped.get_or_insert(index + 1);
+                    text.push('0');
+                }
+            }
+        }
+    }
+    (text, unmapped)
 }
 /// Parses with the deployment dictionary parser and bounds the result.
-fn prepare(source: ContentIdentity, words: &str) -> Result<Prepared> {
-    if words.len() > MAX_WORD_LIST_BYTES {
-        return Err(too_large_bytes());
+fn prepare(source: ContentIdentity, words: &str, limits: &WordListLimits) -> Result<Prepared> {
+    if words.len() > limits.max_bytes {
+        return Err(WordListLibraryError::TooLarge(format!(
+            "word lists are limited to {} bytes of UTF-8 text",
+            limits.max_bytes
+        )));
     }
-    let list = WordList::from_text(source.clone(), words).map_err(|error| match error {
+    let (normalized, unmapped) = uppercase(words);
+    let list = WordList::from_text(source.clone(), &normalized).map_err(|error| match error {
+        WordListError::InvalidWord { line } if unmapped == Some(line) => {
+            WordListLibraryError::Invalid {
+                reason: format!(
+                    "line {line} contains a lowercase letter without a single uppercase form (such as ß); write it in uppercase"
+                ),
+                line: Some(line),
+            }
+        }
         WordListError::InvalidWord { line } => WordListLibraryError::Invalid {
             reason: format!(
-                "line {line} must be one uppercase word of letters only, without spaces, digits, punctuation or comments"
+                "line {line} must be one word of letters only, without spaces, digits, punctuation or comments"
             ),
             line: Some(line),
         },
@@ -195,9 +264,10 @@ fn prepare(source: ContentIdentity, words: &str) -> Result<Prepared> {
         WordListError::InvalidIdentity => WordListLibraryError::Internal,
     })?;
     let word_count = list.words().count();
-    if word_count > MAX_WORDS {
+    if word_count > limits.max_words {
         return Err(WordListLibraryError::TooLarge(format!(
-            "word lists are limited to {MAX_WORDS} distinct words"
+            "word lists are limited to {} distinct words",
+            limits.max_words
         )));
     }
     let profile = WordListProfile::new(list).map_err(|_| WordListLibraryError::Internal)?;
@@ -244,7 +314,11 @@ fn write_private(
 
 impl WordListLibrary {
     /// Opens (creating if needed) the private library directory and indexes it.
-    pub fn open(directory: PathBuf, derivation: &hmac::Key) -> ErrorResult<Self> {
+    pub fn open(
+        directory: PathBuf,
+        derivation: &hmac::Key,
+        limits: WordListLimits,
+    ) -> ErrorResult<Self> {
         fs::create_dir_all(&directory)?;
         #[cfg(unix)]
         {
@@ -257,6 +331,7 @@ impl WordListLibrary {
         );
         let library = Self {
             directory,
+            limits,
             key,
             index: Mutex::new(Index::default()),
         };
@@ -349,7 +424,7 @@ impl WordListLibrary {
         if stored.version != 1
             || stored.word_list_id != id
             || stored.versions.is_empty()
-            || stored.versions.len() > MAX_VERSIONS
+            || stored.versions.len() as u64 > CEILING_VERSIONS
             || stored.versions.iter().any(|v| !is_hash(&v.content_hash))
             || stored.share_id.as_deref().is_some_and(|s| !is_share_id(s))
         {
@@ -371,9 +446,9 @@ impl WordListLibrary {
         }
         let mut bytes = Vec::new();
         fs::File::open(&path)?
-            .take(MAX_CONTENT_BYTES + 1)
+            .take(self.max_content_bytes() + 1)
             .read_to_end(&mut bytes)?;
-        if bytes.len() as u64 > MAX_CONTENT_BYTES
+        if bytes.len() as u64 > self.max_content_bytes()
             || hexadecimal(digest::digest(&digest::SHA256, &bytes).as_ref()) != version.content_hash
         {
             return Err(WordListLibraryError::Internal);
@@ -442,13 +517,15 @@ impl WordListLibrary {
 
     pub fn create(&self, name: &str, words: &str) -> Result<Created> {
         validate_name(name)?;
-        let prepared = prepare(new_source(1)?, words)?;
+        let prepared = prepare(new_source(1)?, words, &self.limits)?;
         let mut index = self
             .index
             .lock()
             .map_err(|_| WordListLibraryError::Internal)?;
         let bytes = prepared.content.len() as u64;
-        if index.lists >= MAX_WORD_LISTS || index.bytes + bytes > MAX_LIBRARY_BYTES {
+        if index.lists >= self.limits.max_lists
+            || index.bytes + bytes > self.limits.max_stored_bytes
+        {
             return Err(WordListLibraryError::Full);
         }
         let id = format!("w_{}", random_hex(16)?);
@@ -502,18 +579,18 @@ impl WordListLibrary {
         let mut stored = self.owned(id, capability)?;
         validate_name(name)?;
         let revision = stored.current().revision + 1;
-        let prepared = prepare(new_source(revision)?, words)?;
+        let prepared = prepare(new_source(revision)?, words, &self.limits)?;
         stored.name = name.to_owned();
         stored.versions.push(Self::version(revision, &prepared));
-        let dropped: Vec<_> = if stored.versions.len() > MAX_VERSIONS {
-            let excess = stored.versions.len() - MAX_VERSIONS;
+        let dropped: Vec<_> = if stored.versions.len() > self.limits.max_versions {
+            let excess = stored.versions.len() - self.limits.max_versions;
             stored.versions.drain(..excess).collect()
         } else {
             Vec::new()
         };
         let released: u64 = dropped.iter().map(|version| version.bytes).sum();
         let added = prepared.content.len() as u64;
-        if (index.bytes + added).saturating_sub(released) > MAX_LIBRARY_BYTES {
+        if (index.bytes + added).saturating_sub(released) > self.limits.max_stored_bytes {
             return Err(WordListLibraryError::Full);
         }
         self.write_content(id, revision, &prepared)?;
@@ -617,15 +694,44 @@ impl WordListLibrary {
         let words = String::from_utf8(words).map_err(|_| WordListLibraryError::Internal)?;
         self.create(name, &words)
     }
-    /// Resolves a retained saved version for match setup. Unknown, forged, dropped or
-    /// deleted identities are `None`.
-    pub(crate) fn word_list(&self, identity: &ContentIdentity) -> Option<WordListProfile> {
+    /// Resolves a retained saved version for a NEW match, given proof of access through
+    /// a live share of that list or its owner capability (Decision 1.48). Unknown, forged,
+    /// dropped, deleted, withdrawn or unproven selections are `None`.
+    pub(crate) fn word_list(
+        &self,
+        identity: &ContentIdentity,
+        access: &WordListAccess,
+    ) -> Option<WordListProfile> {
         let (source, bytes) = {
             let index = self.index.lock().ok()?;
             let id = index.versions.get(&identity.name)?;
-            let stored = self.load(id).ok()??;
-            let version = stored
+            let stored = match access {
+                WordListAccess::Share { share_id } => {
+                    if index.shares.get(share_id) != Some(id) {
+                        return None;
+                    }
+                    let stored = self.load(id).ok()??;
+                    if stored.share_id.as_deref() != Some(share_id.as_str()) {
+                        return None;
+                    }
+                    stored
+                }
+                WordListAccess::Owner {
+                    word_list_id,
+                    owner_capability,
+                } => {
+                    if word_list_id != id {
+                        return None;
+                    }
+                    self.owned(id, owner_capability).ok()?
+                }
+            };
+            // Only the most recent configured versions remain selectable (Decision 1.50).
+            let retained = stored
                 .versions
+                .len()
+                .saturating_sub(self.limits.max_versions);
+            let version = stored.versions[retained..]
                 .iter()
                 .find(|version| version.source.name == identity.name)
                 .filter(|version| &version.word_list == identity)?;
@@ -635,5 +741,13 @@ impl WordListLibrary {
         WordListProfile::new(words)
             .ok()
             .filter(|profile| profile.identity() == identity)
+    }
+    pub fn limits(&self) -> &WordListLimits {
+        &self.limits
+    }
+    /// Normalized content stays within the submitted bound, allowing for uppercase forms
+    /// that need more UTF-8 bytes and a final line break.
+    fn max_content_bytes(&self) -> u64 {
+        2 * self.limits.max_bytes as u64 + 2
     }
 }

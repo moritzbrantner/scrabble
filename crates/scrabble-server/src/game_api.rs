@@ -25,9 +25,11 @@ const MAX_LAYOUT_BODY_BYTES: usize = 32 * 1024;
 fn is_layout_path(path: &str) -> bool {
     path == "/layouts" || path.starts_with("/layouts/") || path.starts_with("/shared-layouts/")
 }
-/// Word-list routes admit the published text bound after JSON escaping (each line break
-/// may double) plus the small envelope; every other route keeps its own cap.
-const MAX_WORD_LIST_BODY_BYTES: usize = 2 * word_lists::MAX_WORD_LIST_BYTES + 4096;
+/// Word-list routes admit the configured text bound after JSON escaping (each line
+/// break may double) plus the small envelope; every other route keeps its own cap.
+fn word_list_body_bytes(limits: &word_lists::WordListLimits) -> usize {
+    2 * limits.max_bytes + 4096
+}
 fn is_word_list_path(path: &str) -> bool {
     path == "/word-lists"
         || path.starts_with("/word-lists/")
@@ -81,7 +83,7 @@ fn set_once(slot: &mut Option<String>, value: &str, error: &str) -> Result<(), R
     }
 }
 
-async fn read_request(stream: &mut TcpStream) -> Result<Request, Response> {
+async fn read_request(stream: &mut TcpStream, word_list_body: usize) -> Result<Request, Response> {
     let mut bytes = Vec::new();
     let header_end = loop {
         if let Some(index) = bytes.windows(4).position(|window| window == b"\r\n\r\n") {
@@ -159,7 +161,7 @@ async fn read_request(stream: &mut TcpStream) -> Result<Request, Response> {
     let limit = if is_layout_path(&path) {
         MAX_LAYOUT_BODY_BYTES
     } else if is_word_list_path(&path) {
-        MAX_WORD_LIST_BODY_BYTES
+        word_list_body
     } else {
         MAX_BODY_BYTES
     };
@@ -574,8 +576,7 @@ fn word_list_error(error: WordListLibraryError) -> Response {
         }
         WordListLibraryError::TooLarge(reason) => json_response(
             413,
-            &serde_json::json!({"error":"word-list-too-large","reason":reason,
-                "maxBytes":word_lists::MAX_WORD_LIST_BYTES,"maxWords":word_lists::MAX_WORDS}),
+            &serde_json::json!({"error":"word-list-too-large","reason":reason}),
         ),
         WordListLibraryError::OwnerRejected => Response::error(403, "word-list-owner-rejected"),
         WordListLibraryError::Unknown => Response::error(404, "unknown-word-list"),
@@ -626,10 +627,12 @@ async fn word_list_route(request: &Request, games: &Games) -> Response {
             if request.method != "GET" {
                 return Err(Response::error(405, "method-not-allowed"));
             }
+            let limits = games.word_list_limits();
             return Ok(json_response(
                 200,
-                &serde_json::json!({"version":1,"maxBytes":word_lists::MAX_WORD_LIST_BYTES,
-                    "maxWords":word_lists::MAX_WORDS}),
+                &serde_json::json!({"version":1,"maxBytes":limits.max_bytes,
+                    "maxWords":limits.max_words,"maxLists":limits.max_lists,
+                    "maxVersions":limits.max_versions,"maxStoredBytes":limits.max_stored_bytes}),
             ));
         }
         if request.path == "/word-lists" {
@@ -795,6 +798,7 @@ pub async fn serve(
     board_origin: String,
 ) -> io::Result<()> {
     let capacity = Arc::new(Semaphore::new(MAX_CONNECTIONS));
+    let word_list_body = word_list_body_bytes(&games.word_list_limits());
     let mut requests = JoinSet::new();
     let mut sweep = tokio::time::interval(Duration::from_secs(5));
     sweep.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
@@ -810,7 +814,7 @@ pub async fn serve(
                 requests.spawn(async move {
                     let _permit = permit;
                     let operation = async {
-                        match read_request(&mut stream).await {
+                        match read_request(&mut stream, word_list_body).await {
                             Ok(request) => route(request, &games, &origin).await,
                             Err(error) => error,
                         }
@@ -827,6 +831,17 @@ pub async fn serve(
 #[cfg(test)]
 mod tests {
     use super::*;
+    const MAX_WORD_LIST_BODY_BYTES: usize = 2 * 1024 * 1024 + 4096;
+    #[test]
+    fn the_word_list_body_cap_follows_the_configured_byte_bound() {
+        let limits = word_lists::WordListLimits::default();
+        assert_eq!(word_list_body_bytes(&limits), MAX_WORD_LIST_BODY_BYTES);
+        let small = word_lists::WordListLimits {
+            max_bytes: 64,
+            ..limits
+        };
+        assert_eq!(word_list_body_bytes(&small), 2 * 64 + 4096);
+    }
     async fn rejection(request: &[u8]) -> u16 {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
@@ -837,7 +852,7 @@ mod tests {
             stream.shutdown().await.unwrap();
         });
         let (mut stream, _) = listener.accept().await.unwrap();
-        let status = match read_request(&mut stream).await {
+        let status = match read_request(&mut stream, MAX_WORD_LIST_BODY_BYTES).await {
             Err(error) => error.status,
             Ok(_) => panic!("malformed request accepted"),
         };

@@ -153,6 +153,7 @@ impl MatchFactory {
         let word_lists = Arc::new(crate::word_list_library::WordListLibrary::open(
             config.word_list_directory.clone(),
             &key,
+            config.word_list_limits,
         )?);
         Ok(Self {
             layouts,
@@ -244,27 +245,35 @@ impl MatchFactory {
         self.store.get(id)
     }
     /// Resolves each independently selected component from the operator catalog first,
-    /// then from the guest libraries: word lists (#97) and board layouts (#101). The
+    /// then from the guest libraries: word lists (#97) and board layouts (#101). A guest
+    /// word list additionally needs proof of access (a live share or owner capability,
+    /// Decision 1.48); a catalog list is selected without one. The
     /// established error order (word list, tiles, board) and the single composition and
     /// compatibility check are unchanged.
     pub(crate) fn resolve(
         &self,
         selection: &crate::profile_catalog::Selection,
+        word_list_access: Option<&crate::word_list_library::WordListAccess>,
         rules: crate::profiles::MatchRules,
         time_control: Option<scrabble_game::ruleset::TimeControl>,
     ) -> Result<crate::profile_catalog::PreparedConfiguration, crate::profile_catalog::SelectionError>
     {
         use crate::profile_catalog::SelectionError;
         let saved_words;
-        let words = match self.catalog.word_list(&selection.word_list) {
-            Some(words) => words,
-            None => {
+        let words = match (
+            self.catalog.word_list(&selection.word_list),
+            word_list_access,
+        ) {
+            (Some(words), None) => words,
+            (None, Some(access)) => {
                 saved_words = self
                     .word_lists
-                    .word_list(&selection.word_list)
+                    .word_list(&selection.word_list, access)
                     .ok_or(SelectionError::Unknown("wordList"))?;
                 &saved_words
             }
+            // A guest list without proof, or a proof for a catalog list, selects nothing.
+            _ => return Err(SelectionError::Unknown("wordList")),
         };
         if !self.catalog.has_tile(&selection.tile) {
             return Err(SelectionError::Unknown("tile"));
