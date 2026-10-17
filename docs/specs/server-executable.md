@@ -128,7 +128,10 @@ guest layout (owners cannot recover them, as the UI states) but never changes a
 started match, whose composed board is pinned in its initialization manifest.
 Layout routes (`/layouts…`, `/shared-layouts/…`) accept request bodies up to
 32 KiB; all other API routes keep the 2 KiB limit. At most 4096 originals and 16
-selectable versions per original are retained.
+selectable versions per original are retained. Only the owner capability withdraws a share
+(`POST /layouts/{id}/unshare`, #134): the old share link then answers 404,
+sharing again issues a fresh id, and saved copies and started matches are
+unaffected.
 
 `SCRABBLE_WORD_LIST_DIR` (#97) holds the durable guest-owned custom word-list
 library ([contract](word-list-library.md)). It defaults to `word-lists/` beside

@@ -251,6 +251,14 @@ export async function shareLayout(api: string, entry: OwnerEntry): Promise<strin
     );
   return shared.shareId;
 }
+/** Withdraws the original's share link; the old link stops working, copies and matches stay. */
+export async function unshareLayout(api: string, entry: OwnerEntry) {
+  issuedBy(api, entry);
+  await request(api, `/layouts/${entry.layoutId}/unshare`, {
+    version: 1,
+    ownerCapability: entry.ownerCapability,
+  });
+}
 export async function fetchShared(api: string, shareId: string): Promise<SharedLayout> {
   if (!/^s_[0-9a-f]{32}$/.test(shareId)) {
     throw new LayoutError("unknown");
