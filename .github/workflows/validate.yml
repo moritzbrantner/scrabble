@@ -1,14 +1,16 @@
 name: Validate
 
-# Draft PR development uses focused local checks. Run this full gate only on
-# initial ready PRs, when a draft becomes ready, or by explicit dispatch on the
-# current head after further commits. Do not validate every intermediate push.
-# After pushing to a ready PR, manually dispatch on its new head branch or
-# return to draft and mark ready again. Never merge using older-head checks.
+# Draft PR development uses focused local checks. Run the full gate on every
+# push to a ready PR so its result always belongs to the current head; a newer
+# push cancels the older run.
 on:
   pull_request:
-    types: [opened, reopened, ready_for_review]
+    types: [opened, reopened, synchronize, ready_for_review]
   workflow_dispatch:
+
+concurrency:
+  group: validate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
