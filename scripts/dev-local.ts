@@ -1,17 +1,37 @@
-import { mkdir, realpath } from "node:fs/promises";
+import { chmod, copyFile, mkdir, realpath } from "node:fs/promises";
 import { createServer } from "node:net";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { z } from "zod";
 
-import { localAddress } from "./local-address";
+import { localAddress, publicHost } from "./local-address";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const directory = join(root, ".local", "local-server");
 const address = localAddress(undefined, process.env.LOCAL_LAN_IP);
-const tls = join(directory, `tls-${address}`);
-const origin = `https://${address}:5173`;
+// Remote players reach a public host through the router's port forwarding to this LAN address.
+const remote = process.env.LOCAL_PUBLIC_HOST
+  ? publicHost(process.env.LOCAL_PUBLIC_HOST)
+  : undefined;
+const host = remote ?? address;
+const supplied =
+  process.env.LOCAL_PUBLIC_CERT || process.env.LOCAL_PUBLIC_KEY
+    ? { cert: process.env.LOCAL_PUBLIC_CERT, key: process.env.LOCAL_PUBLIC_KEY }
+    : undefined;
+if (supplied && (!supplied.cert || !supplied.key || !remote)) {
+  throw new Error(
+    "A supplied certificate needs LOCAL_PUBLIC_CERT, LOCAL_PUBLIC_KEY and the LOCAL_PUBLIC_HOST it was issued for",
+  );
+}
+let tlsName = `tls-${address}`;
+if (supplied) {
+  tlsName = `tls-supplied-${host}`;
+} else if (remote) {
+  tlsName = `tls-${address}-${remote}`;
+}
+const tls = join(directory, tlsName);
+const origin = `https://${host}:5173`;
 const content = await realpath(Bun.argv[2] ?? join(root, ".local", "deployment", "content"));
 const manifest = z
   .object({
@@ -52,6 +72,7 @@ Object.assign(env, {
   DEPLOY_TLS_DIRECTORY: tls,
   DEPLOY_LOCAL_ADDRESS: address,
   DEPLOY_BOARD_ORIGIN: origin,
+  LOCAL_ALLOWED_HOST: host,
   DEPLOY_STATE_DIRECTORY: join(directory, "state"),
   DEPLOY_CONTENT_DIRECTORY: content,
   DEPLOY_UID: String(uid),
@@ -122,22 +143,45 @@ try {
     listener.close((error) => (error ? reject(error) : resolve())),
   );
   await mkdir(join(directory, "state"), { recursive: true, mode: 0o700 });
-  const connection = z
-    .object({
-      endpoint: z.string().url(),
-      certificateHash: z.array(z.int().min(0).max(255)).length(32),
-    })
-    .parse(JSON.parse(await run(["bun", "--no-env-file", "run", "dev:tls", address])));
+  let connection: { endpoint: string; certificateHash?: number[] };
+  if (supplied?.cert && supplied.key) {
+    // Copy the host's trusted certificate so symlinked Let's Encrypt files mount into the container.
+    await mkdir(tls, { recursive: true, mode: 0o700 });
+    await copyFile(supplied.cert, join(tls, "cert.pem"));
+    await copyFile(supplied.key, join(tls, "key.pem"));
+    await chmod(join(tls, "key.pem"), 0o600);
+    connection = { endpoint: `https://${host}:4433/game` };
+  } else {
+    connection = z
+      .object({
+        endpoint: z.string().url(),
+        certificateHash: z.array(z.int().min(0).max(255)).length(32),
+      })
+      .parse(
+        JSON.parse(
+          await run([
+            "bun",
+            "--no-env-file",
+            "run",
+            "dev:tls",
+            address,
+            ...(remote ? [remote] : []),
+          ]),
+        ),
+      );
+  }
   started = true;
   console.log("Starting the local game-server with the prepared dictionary…");
   await run([...compose, "up", "--build", "--wait", "--wait-timeout", "60", "server"]);
   const url = new URL(`${origin}/scrabble/`);
   url.searchParams.set("server", connection.endpoint);
   url.searchParams.set("api", `${origin}/api`);
-  url.searchParams.set(
-    "certificate",
-    connection.certificateHash.map((byte) => byte.toString(16).padStart(2, "0")).join(""),
-  );
+  if (connection.certificateHash) {
+    url.searchParams.set(
+      "certificate",
+      connection.certificateHash.map((byte) => byte.toString(16).padStart(2, "0")).join(""),
+    );
+  }
   await Bun.write(join(directory, "url.txt"), `${url.href}\n`);
   child = Bun.spawn(
     [

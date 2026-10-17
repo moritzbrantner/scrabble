@@ -45,3 +45,21 @@ export function localAddress(
   }
   return addresses[0];
 }
+
+const hostname =
+  /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
+/** Validate the public DNS name or IPv4 address that remote players use to reach this host. */
+export function publicHost(value: string): string {
+  const host = value.trim().toLowerCase();
+  if (
+    isIPv4(host)
+      ? host.split(".").every((part) => String(Number(part)) === part)
+      : hostname.test(host)
+  ) {
+    return host;
+  }
+  throw new Error(
+    "LOCAL_PUBLIC_HOST must be a DNS name such as play.example.com or an IPv4 address",
+  );
+}

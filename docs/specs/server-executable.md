@@ -23,6 +23,27 @@ The launcher uses `compose.yaml` with `compose.dev.yaml` under the dedicated `sc
 
 TLS and persistent seed/recovery storage live under ignored `.local/local-server`; the prepared content is mounted read-only. Ctrl+C stops the client and gracefully stops this project's server, preserving those files for the next run. Changing dictionary identity with existing recovery data is unsupported. Do not delete state to work around recovery failures. To renew an expired local certificate, stop the launcher and explicitly replace both `.local/local-server/tls-LAN_IP/cert.pem` and `key.pem` together before restarting. The local override disables automatic container restart so a stopped development server stays stopped.
 
+### Hosting players on other networks
+
+Atlas Decisions 5.1 and 5.3: a local checkout hosts with the same native server, so friends on other networks can join a game you run. Forward **TCP 5173** (browser client and its `/api` proxy) and **UDP 4433** (WebTransport) on your router to this computer's LAN address, then start the launcher with the public DNS name or IPv4 address those players use:
+
+```sh
+LOCAL_PUBLIC_HOST=play.example.com bun run dev:local
+```
+
+The certificate, the server's allowed browser origin, the printed game URL and therefore every invite link and QR code use `https://play.example.com:5173`. The services still listen on the selected LAN address that the router forwards to. Everyone, including players at home, opens the printed public URL; local devices need a router that supports NAT loopback or a local DNS entry for the name. There is no relay: when forwarding is missing or the host stops the launcher, remote players cannot connect.
+
+Without a supplied certificate the launcher generates its short-lived self-signed certificate for both the LAN address and the public host (stored under `.local/local-server/tls-LAN_IP-PUBLIC_HOST`), and remote players accept it in their browser, as on the LAN. To avoid that warning, supply a trusted certificate issued for the public name, for example a free Let's Encrypt certificate:
+
+```sh
+LOCAL_PUBLIC_HOST=play.example.com \
+LOCAL_PUBLIC_CERT=/etc/letsencrypt/live/play.example.com/fullchain.pem \
+LOCAL_PUBLIC_KEY=/etc/letsencrypt/live/play.example.com/privkey.pem \
+bun run dev:local
+```
+
+The launcher copies both files into `.local/local-server/tls-supplied-PUBLIC_HOST` at every start (so renewed certificates apply on restart and symlinked files mount into the container) and omits the self-signed certificate digest from the game URL. A supplied certificate requires `LOCAL_PUBLIC_HOST`. The GitHub Pages build is unaffected and keeps using the moenarch.com servers.
+
 ### Native development
 
 ```sh
