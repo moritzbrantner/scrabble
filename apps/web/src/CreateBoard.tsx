@@ -14,6 +14,7 @@ import { initialClockDraft, readTimeControl } from "./time-control";
 import { BoardLayoutPreview } from "./BoardLayoutPreview";
 import { ConnectedBoard } from "./ConnectedBoard";
 import { CustomLayouts, type BoardChoice } from "./CustomLayouts";
+import { CustomTileProfiles, type TileChoice } from "./CustomTileProfiles";
 import { CustomWordLists } from "./CustomWordLists";
 import { type WordChoice } from "./word-list-library";
 import { reportMoenarchMatch } from "./moenarch-launch";
@@ -107,7 +108,20 @@ export function CreateBoard({
   const customSelected =
     selectedChoice !== undefined &&
     !catalog?.boardProfiles.some((row) => row.identity.name === selectedChoice.value);
-  const selectedTiles = catalog?.tileProfiles.find((row) => row.identity.name === choices.tile);
+  const [customTiles, setCustomTiles] = useState<TileChoice[]>([]);
+  // Saved private tile profiles are selected independently of words and board (Decision 1.25).
+  const tileChoices: TileChoice[] = [
+    ...(catalog?.tileProfiles.map((row) => ({ value: row.identity.name, row })) ?? []),
+    ...customTiles,
+  ];
+  // A deleted saved profile falls back to the catalog default selection.
+  const selectedTileChoice =
+    tileChoices.find((choice) => choice.value === choices.tile) ??
+    tileChoices.find((choice) => choice.value === catalog?.defaults.selection.tile.name);
+  const selectedTiles = selectedTileChoice?.row;
+  const customTilesSelected =
+    selectedTileChoice !== undefined &&
+    !catalog?.tileProfiles.some((row) => row.identity.name === selectedTileChoice.value);
   const boardSizes = catalog
     ? [...new Set(catalog.boardProfiles.map((row) => row.boardSize))].sort((a, b) => a - b)
     : [];
@@ -162,6 +176,7 @@ export function CreateBoard({
           !touched &&
           !customSelected &&
           !customWordsSelected &&
+          !customTilesSelected &&
           catalog.defaults.legacyCompatible &&
           clock.control === undefined
         ) {
@@ -177,9 +192,7 @@ export function CreateBoard({
           );
           const wordList = selectedWords?.identity;
           const wordListAccess = selectedWords?.access;
-          const tile = catalog.tileProfiles.find(
-            (row) => row.identity.name === choices.tile,
-          )?.identity;
+          const tile = selectedTiles?.identity;
           const board = selectedBoard?.identity;
           if (!rules.success) {
             throw new CreationError("profiles.invalidRules", false);
@@ -278,15 +291,15 @@ export function CreateBoard({
                   {t("profiles.tiles")}
                   <NativeSelect
                     aria-label={t("profiles.tiles")}
-                    value={choices.tile}
+                    value={selectedTileChoice?.value ?? ""}
                     onChange={(event: ChangeEvent<HTMLSelectElement>) => {
                       change();
                       setChoices({ ...choices, tile: event.currentTarget.value });
                     }}
                   >
-                    {catalog.tileProfiles.map((row) => (
-                      <NativeSelectOption key={row.identity.name} value={row.identity.name}>
-                        {row.label}
+                    {tileChoices.map((choice) => (
+                      <NativeSelectOption key={choice.value} value={choice.value}>
+                        {choice.row.label}
                       </NativeSelectOption>
                     ))}
                   </NativeSelect>
@@ -398,6 +411,7 @@ export function CreateBoard({
         {state.kind === "failed" && state.retryable ? t("create.retry") : t("create.action")}
       </Button>
       <CustomWordLists api={api} onChoices={setCustomWords} />
+      <CustomTileProfiles api={api} template={selectedTiles} onChoices={setCustomTiles} />
       <CustomLayouts api={api} onChoices={setCustomBoards} />
     </main>
   );

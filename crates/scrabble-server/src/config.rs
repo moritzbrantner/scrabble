@@ -26,6 +26,8 @@ pub struct ServerConfig {
     pub board_layout_directory: PathBuf,
     /// Durable private guest word-list library (#97).
     pub word_list_directory: PathBuf,
+    /// Durable private guest tile-profile library (#100).
+    pub tile_profile_directory: PathBuf,
     /// Operator-configurable guest word-list bounds (#97, Decision 1.50).
     pub word_list_limits: crate::word_list_library::WordListLimits,
     pub port: u16,
@@ -60,6 +62,7 @@ const KEYS: &[&str] = &[
     "SCRABBLE_MATCH_CONFIGURATION_DIR",
     "SCRABBLE_BOARD_LAYOUT_DIR",
     "SCRABBLE_WORD_LIST_DIR",
+    "SCRABBLE_TILE_PROFILE_DIR",
     "SCRABBLE_WORD_LIST_MAX_BYTES",
     "SCRABBLE_WORD_LIST_MAX_WORDS",
     "SCRABBLE_WORD_LIST_MAX_LISTS",
@@ -308,6 +311,13 @@ impl ServerConfig {
                 .unwrap_or(std::path::Path::new("."))
                 .join("word-lists"),
         };
+        let tile_profile_directory = match values.get("SCRABBLE_TILE_PROFILE_DIR") {
+            Some(_) => path(values, "SCRABBLE_TILE_PROFILE_DIR", "")?,
+            None => path(values, "SCRABBLE_SEED_FILE", ".local/server/seed")?
+                .parent()
+                .unwrap_or(std::path::Path::new("."))
+                .join("tile-profiles"),
+        };
         let word_list_limits = {
             use crate::word_list_library::{
                 CEILING_BYTES, CEILING_LISTS, CEILING_STORED_BYTES, CEILING_VERSIONS,
@@ -348,6 +358,7 @@ impl ServerConfig {
         let config = Self {
             board_layout_directory,
             word_list_directory,
+            tile_profile_directory,
             word_list_limits,
             profile_catalog_file,
             match_configuration_directory,
@@ -391,6 +402,7 @@ impl ServerConfig {
                 &config.match_configuration_directory,
                 &config.board_layout_directory,
                 &config.word_list_directory,
+                &config.tile_profile_directory,
             ]
             .iter()
             .any(|path| !path.is_absolute())
@@ -447,6 +459,23 @@ impl ServerConfig {
         {
             return Err(fail(
                 "word list library must be separate from TLS, seed, recovery, match initialization and board layouts",
+            ));
+        }
+        let tiles = &config.tile_profile_directory;
+        if tiles == &config.seed_file
+            || tiles == &config.certificate
+            || tiles == &config.private_key
+            || tiles.starts_with(&config.recovery_directory)
+            || config.recovery_directory.starts_with(tiles)
+            || tiles.starts_with(&config.match_configuration_directory)
+            || config.match_configuration_directory.starts_with(tiles)
+            || tiles.starts_with(layouts)
+            || layouts.starts_with(tiles)
+            || tiles.starts_with(words)
+            || words.starts_with(tiles)
+        {
+            return Err(fail(
+                "tile profile library must be separate from TLS, seed, recovery, match initialization, board layouts and word lists",
             ));
         }
         if config.certificate == config.private_key {
