@@ -144,9 +144,15 @@ while this directory is non-empty; back it up and preserve it with the seed.
 Deleting it removes every guest list (owners cannot recover them, as the UI
 states) but never changes a started match, whose word set is pinned in the
 match configuration store. Word-list routes (`/word-lists…`,
-`/shared-word-lists/…`) accept request bodies up to 2 MiB + 4 KiB; published
-upload bounds are 1 MiB and 200,000 words per list, and at most 1024 originals,
-8 selectable versions per original and 256 MiB of retained word content are kept.
+`/shared-word-lists/…`) accept request bodies up to twice the configured byte
+bound plus 4 KiB. The bounds are operator-configurable (Decision 1.50) and
+published by `GET /word-lists/limits`: `SCRABBLE_WORD_LIST_MAX_BYTES` (default
+1048576 per list, at most 64 MiB), `SCRABBLE_WORD_LIST_MAX_WORDS` (200000 per
+list), `SCRABBLE_WORD_LIST_MAX_LISTS` (1024 originals and copies),
+`SCRABBLE_WORD_LIST_MAX_VERSIONS` (8 versions per list selectable for new
+matches, at most 64) and `SCRABBLE_WORD_LIST_MAX_STORED_BYTES` (268435456 bytes
+of retained words). Each must be a positive decimal integer. Lowering a bound
+never changes a started match.
 
 For the supplied Docker Compose deployment, place an operator-authored catalog
 and its word files in the existing read-only content directory. An explicit
