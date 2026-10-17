@@ -116,10 +116,11 @@ export function CustomWordLists({
   }, [api]);
   useEffect(() => {
     onChoices(
-      owned.map(({ saved }) => ({
+      owned.map(({ entry, saved }) => ({
         value: `word-list:${saved.wordListId}`,
         label: saved.name,
         identity: saved.wordList,
+        access: { wordListId: entry.wordListId, ownerCapability: entry.ownerCapability },
       })),
     );
   }, [owned, onChoices]);

@@ -4,7 +4,7 @@
 // game API that issued it (the same model as the board-layout library, #101).
 import { z } from "zod";
 
-import { gameApiUrl, readResponse } from "./create-game";
+import { gameApiUrl, readResponse, type WordListAccess } from "./create-game";
 import { canonicalApi, shareUrl } from "./layout-library";
 
 const identity = z.strictObject({ name: z.string(), revision: z.string() });
@@ -264,8 +264,15 @@ export function wordListShareUrl(id: string): string {
   return shareUrl(id, "word-list");
 }
 
-/** A selectable word list: an operator catalog row, a saved original or an opened share. */
-export type WordChoice = { value: string; label: string; identity: WordListIdentity };
+/** A selectable word list: an operator catalog row, a saved original or an opened share.
+ * Guest lists carry the proof of access a new match needs (Decision 1.48): the owner
+ * capability (sent only to its issuing API) or the share id. */
+export type WordChoice = {
+  value: string;
+  label: string;
+  identity: WordListIdentity;
+  access?: WordListAccess;
+};
 
 export type ImportResult =
   | { kind: "text"; text: string }

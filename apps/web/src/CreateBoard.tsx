@@ -176,6 +176,7 @@ export function CreateBoard({
             ),
           );
           const wordList = selectedWords?.identity;
+          const wordListAccess = selectedWords?.access;
           const tile = catalog.tileProfiles.find(
             (row) => row.identity.name === choices.tile,
           )?.identity;
@@ -189,7 +190,7 @@ export function CreateBoard({
           request.current = {
             ...intent,
             version: 3,
-            selection: { wordList, tile, board },
+            selection: { wordList, tile, board, ...(wordListAccess ? { wordListAccess } : {}) },
             rules: rules.data,
             ...(clock.control === undefined ? {} : { timeControl: clock.control }),
           };

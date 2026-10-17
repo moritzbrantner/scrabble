@@ -85,6 +85,7 @@ export function SharedWordListView({
                       value: `word-share:${shared.shareId}`,
                       label: shared.name,
                       identity: shared.wordList,
+                      access: { shareId: shared.shareId },
                     })
                   }
                 >
