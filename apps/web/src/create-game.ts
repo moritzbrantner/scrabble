@@ -11,11 +11,20 @@ const creationIntent = z.strictObject({
   requestId: z.string().regex(/^[0-9a-f]{32}$/),
   requestedAt: z.int().min(0).max(Number.MAX_SAFE_INTEGER),
 });
+/** Proof of access to a guest word list for a new match (#97, Decision 1.48). */
+export const wordListAccess = z.union([
+  z.strictObject({ shareId: z.string().regex(/^s_[0-9a-f]{32}$/) }),
+  z.strictObject({
+    wordListId: z.string().regex(/^w_[0-9a-f]{32}$/),
+    ownerCapability: z.string().regex(/^[0-9a-f]{64}$/),
+  }),
+]);
+export type WordListAccess = z.infer<typeof wordListAccess>;
 const createRequest = z.discriminatedUnion("version", [
   creationIntent,
   creationIntent.extend({
     version: z.literal(3),
-    selection: profileSelection,
+    selection: profileSelection.extend({ wordListAccess: wordListAccess.optional() }),
     rules: matchSettings,
     timeControl: timeControl.optional(),
   }),

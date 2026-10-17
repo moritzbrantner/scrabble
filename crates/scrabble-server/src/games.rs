@@ -46,7 +46,7 @@ pub struct CreateConfiguredGame {
     pub version: u8,
     pub request_id: String,
     pub requested_at: u64,
-    pub selection: crate::profile_catalog::Selection,
+    pub selection: crate::profile_catalog::RequestedSelection,
     pub rules: crate::profiles::MatchRules,
     /// Optional match clock (#114); absent or null is untimed (Decision 3.11).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -225,6 +225,20 @@ impl Games {
             .await
             .map_err(|_| GameOperationError::Internal)
     }
+    /// The configured guest word-list bounds (#97, Decision 1.50).
+    pub fn word_list_limits(&self) -> crate::word_list_library::WordListLimits {
+        *self.factory.word_lists().limits()
+    }
+    /// Runs one guest word-list library operation off the async executor (#97).
+    pub async fn with_word_lists<T: Send + 'static>(
+        &self,
+        operation: impl FnOnce(&crate::word_list_library::WordListLibrary) -> T + Send + 'static,
+    ) -> Result<T, GameOperationError> {
+        let factory = self.factory.clone();
+        tokio::task::spawn_blocking(move || operation(factory.word_lists()))
+            .await
+            .map_err(|_| GameOperationError::Internal)
+    }
     pub fn hex_profiles(&self) -> serde_json::Value {
         self.factory.hex_profile_catalog()
     }
@@ -261,17 +275,32 @@ impl Games {
             .map_err(|_| GameOperationError::Internal)?;
         let newly_initialized = existing.is_none();
         if let Some(existing) = existing {
-            if existing.selection != request.selection
+            if existing.selection != request.selection.selection()
                 || crate::profiles::MatchRules::from(&existing.configuration.rules) != request.rules
                 || existing.configuration.rules.time_control != request.time_control
             {
                 return Err(ConfiguredError::Conflict);
             }
         } else {
-            let prepared = self
-                .factory
-                .resolve(&request.selection, request.rules, request.time_control)
-                .map_err(ConfiguredError::Selection)?;
+            // Saved guest versions are read and fingerprinted from disk; keep that off
+            // the async executor.
+            let factory = self.factory.clone();
+            let (selection, rules, time_control) = (
+                request.selection.clone(),
+                request.rules,
+                request.time_control,
+            );
+            let prepared = tokio::task::spawn_blocking(move || {
+                factory.resolve(
+                    &selection.selection(),
+                    selection.word_list_access.as_ref(),
+                    rules,
+                    time_control,
+                )
+            })
+            .await
+            .map_err(|_| GameOperationError::Internal)?
+            .map_err(ConfiguredError::Selection)?;
             if !self.host.is_serving() {
                 return Err(GameOperationError::NotServing.into());
             }

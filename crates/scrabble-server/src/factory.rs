@@ -97,6 +97,7 @@ fn seed(config: &ServerConfig) -> ErrorResult<[u8; 32]> {
             if config.recovery_directory.exists()
                 || non_empty(&config.match_configuration_directory)?
                 || non_empty(&config.board_layout_directory)?
+                || non_empty(&config.word_list_directory)?
             {
                 return Err(
                     "recovery exists without its initialization seed; refusing new initialization"
@@ -125,6 +126,7 @@ pub struct MatchFactory {
     rules: Ruleset,
     dictionary: Arc<dyn Dictionary>,
     layouts: Arc<crate::layout_library::LayoutLibrary>,
+    word_lists: Arc<crate::word_list_library::WordListLibrary>,
 }
 impl MatchFactory {
     pub fn new(config: &ServerConfig) -> ErrorResult<Self> {
@@ -148,8 +150,14 @@ impl MatchFactory {
             config.board_layout_directory.clone(),
             &key,
         )?);
+        let word_lists = Arc::new(crate::word_list_library::WordListLibrary::open(
+            config.word_list_directory.clone(),
+            &key,
+            config.word_list_limits,
+        )?);
         Ok(Self {
             layouts,
+            word_lists,
             catalog: Arc::new(catalog),
             store: Arc::new(crate::configuration_store::ConfigurationStore::new(
                 config.match_configuration_directory.clone(),
@@ -236,29 +244,59 @@ impl MatchFactory {
     ) -> ErrorResult<Option<Arc<crate::configuration_store::RegisteredConfiguration>>> {
         self.store.get(id)
     }
+    /// Resolves each independently selected component from the operator catalog first,
+    /// then from the guest libraries: word lists (#97) and board layouts (#101). A guest
+    /// word list additionally needs proof of access (a live share or owner capability,
+    /// Decision 1.48); a catalog list is selected without one. The
+    /// established error order (word list, tiles, board) and the single composition and
+    /// compatibility check are unchanged.
     pub(crate) fn resolve(
         &self,
         selection: &crate::profile_catalog::Selection,
+        word_list_access: Option<&crate::word_list_library::WordListAccess>,
         rules: crate::profiles::MatchRules,
         time_control: Option<scrabble_game::ruleset::TimeControl>,
     ) -> Result<crate::profile_catalog::PreparedConfiguration, crate::profile_catalog::SelectionError>
     {
-        match self.catalog.resolve_timed(selection, rules, time_control) {
-            // Guest library versions resolve only after the operator catalog misses, and
-            // compose with the catalog's word list and tiles under the same validation.
-            Err(crate::profile_catalog::SelectionError::Unknown("board")) => {
-                let board = self
+        use crate::profile_catalog::SelectionError;
+        let saved_words;
+        let words = match (
+            self.catalog.word_list(&selection.word_list),
+            word_list_access,
+        ) {
+            (Some(words), None) => words,
+            (None, Some(access)) => {
+                saved_words = self
+                    .word_lists
+                    .word_list(&selection.word_list, access)
+                    .ok_or(SelectionError::Unknown("wordList"))?;
+                &saved_words
+            }
+            // A guest list without proof, or a proof for a catalog list, selects nothing.
+            _ => return Err(SelectionError::Unknown("wordList")),
+        };
+        if !self.catalog.has_tile(&selection.tile) {
+            return Err(SelectionError::Unknown("tile"));
+        }
+        let saved_board;
+        let board = match self.catalog.board(&selection.board) {
+            Some(board) => board,
+            None => {
+                saved_board = self
                     .layouts
                     .board(&selection.board)
-                    .ok_or(crate::profile_catalog::SelectionError::Unknown("board"))?;
-                self.catalog
-                    .resolve_with_board(selection, &board, rules, time_control)
+                    .ok_or(SelectionError::Unknown("board"))?;
+                &saved_board
             }
-            result => result,
-        }
+        };
+        self.catalog
+            .compose(selection, words, board, rules, time_control)
     }
     pub(crate) fn layouts(&self) -> &crate::layout_library::LayoutLibrary {
         &self.layouts
+    }
+    pub(crate) fn word_lists(&self) -> &crate::word_list_library::WordListLibrary {
+        &self.word_lists
     }
     pub(crate) fn initialize(
         &self,

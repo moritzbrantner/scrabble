@@ -10,6 +10,8 @@ import { useCopy } from "./preferences";
 import { SharedBoard } from "./SharedBoard";
 import { type BoardChoice } from "./CustomLayouts";
 import { SharedLayoutView } from "./SharedLayout";
+import { SharedWordListView } from "./SharedWordList";
+import { type WordChoice } from "./word-list-library";
 
 export function App() {
   const { t } = useCopy();
@@ -18,6 +20,7 @@ export function App() {
     typeof window === "undefined" ? null : new URLSearchParams(window.location.search),
   );
   const [sharedUse, setSharedUse] = useState<BoardChoice>();
+  const [sharedWords, setSharedWords] = useState<WordChoice>();
   const launch = moenarchLaunch(connection ?? new URLSearchParams());
   if (launch.kind === "invalid" || launch.kind === "unbound") {
     return (
@@ -99,6 +102,26 @@ export function App() {
       />
     );
   }
+  if (api && connection?.get("view") === "word-list" && sharedWords === undefined) {
+    return (
+      <SharedWordListView
+        api={api}
+        shareId={connection.get("share") ?? ""}
+        {...(endpoint
+          ? {
+              onUse: (choice: WordChoice) => {
+                // Continue on the create page; the share stays a word-list choice only.
+                const location = new URL(window.location.href);
+                location.searchParams.delete("view");
+                location.searchParams.delete("share");
+                window.history.replaceState(null, "", location);
+                setSharedWords(choice);
+              },
+            }
+          : {})}
+      />
+    );
+  }
   if (endpoint && api) {
     return (
       <CreateBoard
@@ -106,6 +129,7 @@ export function App() {
         api={api}
         {...localTrust}
         {...(sharedUse ? { sharedBoard: sharedUse } : {})}
+        {...(sharedWords ? { sharedWordList: sharedWords } : {})}
       />
     );
   }

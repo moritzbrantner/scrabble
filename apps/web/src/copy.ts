@@ -383,6 +383,63 @@ export const en = {
   "shared.unavailable": "This shared board layout is not available.",
   "shared.note":
     "You can use this board or save your own editable copy. Only its owner can edit the original.",
+  "wordLists.region": "Custom word lists",
+  "wordLists.new": "New word list",
+  "wordLists.list": "Saved word lists",
+  "wordLists.empty": "No saved word lists yet.",
+  "wordLists.notice":
+    "Your word lists are owned by this browser only. If this browser's data is cleared or lost, you lose the ability to edit, share or delete them, and no recovery is offered yet. Games already started keep the words they began with.",
+  "wordLists.count": "{count} words",
+  "wordLists.countOne": "1 word",
+  "wordLists.edit": "Edit {name}",
+  "wordLists.share": "Share {name}",
+  "wordLists.unshare": "Stop sharing {name}",
+  "wordLists.delete": "Delete {name}",
+  "wordLists.editShort": "Edit",
+  "wordLists.shareShort": "Share",
+  "wordLists.unshareShort": "Stop sharing",
+  "wordLists.deleteShort": "Delete",
+  "wordLists.shareLink": "Word list share link",
+  "wordLists.shareNote":
+    "Anyone with this link can use the list or save their own copy. The link never allows editing your original. Stop sharing to withdraw it.",
+  "wordLists.loading": "Loading saved word lists…",
+  "wordLists.loadFailed": "Some saved word lists could not be loaded. Try again later.",
+  "wordLists.failed": "The word list request failed. Try again.",
+  "wordLists.full": "This server cannot store more word lists right now.",
+  "wordLists.storage":
+    "This browser could not store your word list’s private management key. Allow site storage and try again.",
+  "wordLists.deleted": "Word list deleted.",
+  "wordLists.unshared": "Sharing stopped. The previous link no longer works.",
+  "wordEditor.region": "Word list editor",
+  "wordEditor.newTitle": "New word list",
+  "wordEditor.editTitle": "Editing {name}",
+  "wordEditor.name": "Word list name",
+  "wordEditor.file": "Word-list file",
+  "wordEditor.fileHelp":
+    "Choose a plain UTF-8 text file with one word per line, up to {bytes} bytes and {words} words. You can review and edit the words before saving.",
+  "wordEditor.words": "Words",
+  "wordEditor.wordsHelp":
+    "One uppercase word per line, using letters of any alphabet only. Blank lines and duplicates are ignored.",
+  "wordEditor.loading": "Loading words…",
+  "wordEditor.save": "Save word list",
+  "wordEditor.saved": "Word list saved.",
+  "wordEditor.nameInvalid":
+    "Enter a word list name of 1 to 64 characters without leading or trailing spaces.",
+  "wordEditor.empty": "Add at least one word, one per line.",
+  "wordEditor.fileEmpty": "This file contains no words. Choose a file with one word per line.",
+  "wordEditor.notText":
+    "This file is not valid UTF-8 text. Save it as UTF-8 plain text and try again.",
+  "wordEditor.tooLarge":
+    "This word list is too large: at most {bytes} bytes and {words} words are allowed.",
+  "wordEditor.invalidLine":
+    "Line {line} is not accepted: use one uppercase word of letters only per line, without spaces, digits, punctuation or comments.",
+  "wordEditor.rejected": "The server rejected this word list: {reason}",
+  "sharedWords.region": "Shared word list",
+  "sharedWords.loading": "Loading shared word list…",
+  "sharedWords.unavailable":
+    "This shared word list is no longer available. Its owner may have stopped sharing or deleted it.",
+  "sharedWords.note":
+    "You can use this word list for a new game or save your own editable copy. Only its owner can edit the original.",
 } as const;
 export type CopyKey = keyof typeof en;
 const de: Record<CopyKey, string> = {
@@ -791,6 +848,65 @@ const de: Record<CopyKey, string> = {
   "shared.unavailable": "Dieses geteilte Brettlayout ist nicht verfügbar.",
   "shared.note":
     "Du kannst dieses Brett verwenden oder eine eigene bearbeitbare Kopie speichern. Nur der Besitzer kann das Original bearbeiten.",
+  "wordLists.region": "Eigene Wortlisten",
+  "wordLists.new": "Neue Wortliste",
+  "wordLists.list": "Gespeicherte Wortlisten",
+  "wordLists.empty": "Noch keine gespeicherten Wortlisten.",
+  "wordLists.notice":
+    "Deine Wortlisten gehören nur diesem Browser. Werden die Daten dieses Browsers gelöscht oder gehen verloren, kannst du sie nicht mehr bearbeiten, teilen oder löschen; eine Wiederherstellung wird noch nicht angeboten. Bereits begonnene Spiele behalten ihre ursprünglichen Wörter.",
+  "wordLists.count": "{count} Wörter",
+  "wordLists.countOne": "1 Wort",
+  "wordLists.edit": "{name} bearbeiten",
+  "wordLists.share": "{name} teilen",
+  "wordLists.unshare": "Teilen von {name} beenden",
+  "wordLists.delete": "{name} löschen",
+  "wordLists.editShort": "Bearbeiten",
+  "wordLists.shareShort": "Teilen",
+  "wordLists.unshareShort": "Teilen beenden",
+  "wordLists.deleteShort": "Löschen",
+  "wordLists.shareLink": "Freigabelink der Wortliste",
+  "wordLists.shareNote":
+    "Wer diesen Link hat, kann die Liste verwenden oder eine eigene Kopie speichern. Dein Original kann über den Link nie bearbeitet werden. Beende das Teilen, um ihn zurückzuziehen.",
+  "wordLists.loading": "Gespeicherte Wortlisten werden geladen…",
+  "wordLists.loadFailed":
+    "Einige gespeicherte Wortlisten konnten nicht geladen werden. Versuche es später erneut.",
+  "wordLists.failed": "Die Wortlisten-Anfrage ist fehlgeschlagen. Versuche es erneut.",
+  "wordLists.full": "Dieser Server kann gerade keine weiteren Wortlisten speichern.",
+  "wordLists.storage":
+    "Dieser Browser konnte den privaten Verwaltungsschlüssel deiner Wortliste nicht speichern. Erlaube Website-Speicher und versuche es erneut.",
+  "wordLists.deleted": "Wortliste gelöscht.",
+  "wordLists.unshared": "Teilen beendet. Der bisherige Link funktioniert nicht mehr.",
+  "wordEditor.region": "Wortlisten-Editor",
+  "wordEditor.newTitle": "Neue Wortliste",
+  "wordEditor.editTitle": "{name} bearbeiten",
+  "wordEditor.name": "Name der Wortliste",
+  "wordEditor.file": "Wortlisten-Datei",
+  "wordEditor.fileHelp":
+    "Wähle eine UTF-8-Textdatei mit einem Wort pro Zeile, höchstens {bytes} Bytes und {words} Wörter. Du kannst die Wörter vor dem Speichern prüfen und bearbeiten.",
+  "wordEditor.words": "Wörter",
+  "wordEditor.wordsHelp":
+    "Ein großgeschriebenes Wort pro Zeile, nur Buchstaben eines beliebigen Alphabets. Leerzeilen und Duplikate werden ignoriert.",
+  "wordEditor.loading": "Wörter werden geladen…",
+  "wordEditor.save": "Wortliste speichern",
+  "wordEditor.saved": "Wortliste gespeichert.",
+  "wordEditor.nameInvalid":
+    "Gib einen Namen mit 1 bis 64 Zeichen ohne Leerzeichen am Anfang oder Ende ein.",
+  "wordEditor.empty": "Füge mindestens ein Wort hinzu, eines pro Zeile.",
+  "wordEditor.fileEmpty":
+    "Diese Datei enthält keine Wörter. Wähle eine Datei mit einem Wort pro Zeile.",
+  "wordEditor.notText":
+    "Diese Datei ist kein gültiger UTF-8-Text. Speichere sie als UTF-8-Textdatei und versuche es erneut.",
+  "wordEditor.tooLarge":
+    "Diese Wortliste ist zu groß: erlaubt sind höchstens {bytes} Bytes und {words} Wörter.",
+  "wordEditor.invalidLine":
+    "Zeile {line} wird nicht akzeptiert: Verwende pro Zeile ein großgeschriebenes Wort nur aus Buchstaben, ohne Leerzeichen, Ziffern, Satzzeichen oder Kommentare.",
+  "wordEditor.rejected": "Der Server hat diese Wortliste abgelehnt: {reason}",
+  "sharedWords.region": "Geteilte Wortliste",
+  "sharedWords.loading": "Geteilte Wortliste wird geladen…",
+  "sharedWords.unavailable":
+    "Diese geteilte Wortliste ist nicht mehr verfügbar. Der Besitzer hat das Teilen möglicherweise beendet oder sie gelöscht.",
+  "sharedWords.note":
+    "Du kannst diese Wortliste für ein neues Spiel verwenden oder eine eigene bearbeitbare Kopie speichern. Nur der Besitzer kann das Original bearbeiten.",
 };
 const es: Record<CopyKey, string> = {
   "clock.setup": "Controles de tiempo",
@@ -1184,6 +1300,65 @@ const es: Record<CopyKey, string> = {
   "shared.unavailable": "Este diseño de tablero compartido no está disponible.",
   "shared.note":
     "Puedes usar este tablero o guardar tu propia copia editable. Solo su propietario puede editar el original.",
+  "wordLists.region": "Listas de palabras propias",
+  "wordLists.new": "Nueva lista de palabras",
+  "wordLists.list": "Listas de palabras guardadas",
+  "wordLists.empty": "Todavía no hay listas de palabras guardadas.",
+  "wordLists.notice":
+    "Tus listas de palabras pertenecen solo a este navegador. Si se borran o pierden los datos de este navegador, ya no podrás editarlas, compartirlas ni eliminarlas; todavía no se ofrece ninguna recuperación. Las partidas ya iniciadas conservan sus palabras originales.",
+  "wordLists.count": "{count} palabras",
+  "wordLists.countOne": "1 palabra",
+  "wordLists.edit": "Editar {name}",
+  "wordLists.share": "Compartir {name}",
+  "wordLists.unshare": "Dejar de compartir {name}",
+  "wordLists.delete": "Eliminar {name}",
+  "wordLists.editShort": "Editar",
+  "wordLists.shareShort": "Compartir",
+  "wordLists.unshareShort": "Dejar de compartir",
+  "wordLists.deleteShort": "Eliminar",
+  "wordLists.shareLink": "Enlace para compartir la lista de palabras",
+  "wordLists.shareNote":
+    "Quien tenga este enlace puede usar la lista o guardar su propia copia. El enlace nunca permite editar tu original. Deja de compartir para retirarlo.",
+  "wordLists.loading": "Cargando listas de palabras guardadas…",
+  "wordLists.loadFailed":
+    "No se pudieron cargar algunas listas de palabras guardadas. Inténtalo más tarde.",
+  "wordLists.failed": "La solicitud de la lista de palabras falló. Inténtalo de nuevo.",
+  "wordLists.full": "Este servidor no puede guardar más listas de palabras ahora mismo.",
+  "wordLists.storage":
+    "Este navegador no pudo guardar la clave privada de gestión de tu lista de palabras. Permite el almacenamiento del sitio e inténtalo de nuevo.",
+  "wordLists.deleted": "Lista de palabras eliminada.",
+  "wordLists.unshared": "Se dejó de compartir. El enlace anterior ya no funciona.",
+  "wordEditor.region": "Editor de listas de palabras",
+  "wordEditor.newTitle": "Nueva lista de palabras",
+  "wordEditor.editTitle": "Editando {name}",
+  "wordEditor.name": "Nombre de la lista de palabras",
+  "wordEditor.file": "Archivo de lista de palabras",
+  "wordEditor.fileHelp":
+    "Elige un archivo de texto UTF-8 con una palabra por línea, como máximo {bytes} bytes y {words} palabras. Puedes revisar y editar las palabras antes de guardar.",
+  "wordEditor.words": "Palabras",
+  "wordEditor.wordsHelp":
+    "Una palabra en mayúsculas por línea, solo con letras de cualquier alfabeto. Se ignoran las líneas vacías y los duplicados.",
+  "wordEditor.loading": "Cargando palabras…",
+  "wordEditor.save": "Guardar lista de palabras",
+  "wordEditor.saved": "Lista de palabras guardada.",
+  "wordEditor.nameInvalid":
+    "Escribe un nombre de 1 a 64 caracteres sin espacios al principio ni al final.",
+  "wordEditor.empty": "Añade al menos una palabra, una por línea.",
+  "wordEditor.fileEmpty":
+    "Este archivo no contiene palabras. Elige un archivo con una palabra por línea.",
+  "wordEditor.notText":
+    "Este archivo no es texto UTF-8 válido. Guárdalo como texto UTF-8 e inténtalo de nuevo.",
+  "wordEditor.tooLarge":
+    "Esta lista de palabras es demasiado grande: se permiten como máximo {bytes} bytes y {words} palabras.",
+  "wordEditor.invalidLine":
+    "La línea {line} no se acepta: usa una palabra en mayúsculas por línea, solo con letras, sin espacios, cifras, signos de puntuación ni comentarios.",
+  "wordEditor.rejected": "El servidor rechazó esta lista de palabras: {reason}",
+  "sharedWords.region": "Lista de palabras compartida",
+  "sharedWords.loading": "Cargando lista de palabras compartida…",
+  "sharedWords.unavailable":
+    "Esta lista de palabras compartida ya no está disponible. Su propietario puede haber dejado de compartirla o haberla eliminado.",
+  "sharedWords.note":
+    "Puedes usar esta lista de palabras en una partida nueva o guardar tu propia copia editable. Solo su propietario puede editar el original.",
 };
 export const catalogs = { en, de, es };
 export type Locale = keyof typeof catalogs;

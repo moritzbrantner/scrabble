@@ -23,6 +23,27 @@ pub struct Selection {
     pub tile: ContentIdentity,
     pub board: ContentIdentity,
 }
+/// A version-3 creation selection. `word_list_access` proves access to a guest word
+/// list for a NEW match (Decision 1.48); it is never persisted, so started matches keep
+/// their manifest selection unchanged.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RequestedSelection {
+    pub word_list: ContentIdentity,
+    pub tile: ContentIdentity,
+    pub board: ContentIdentity,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub word_list_access: Option<crate::word_list_library::WordListAccess>,
+}
+impl RequestedSelection {
+    pub fn selection(&self) -> Selection {
+        Selection {
+            word_list: self.word_list.clone(),
+            tile: self.tile.clone(),
+            board: self.board.clone(),
+        }
+    }
+}
 impl From<&ProfileSelection> for Selection {
     fn from(value: &ProfileSelection) -> Self {
         Self {
@@ -447,46 +468,48 @@ impl ProfileCatalog {
         time_control: Option<scrabble_game::ruleset::TimeControl>,
     ) -> Result<PreparedConfiguration, SelectionError> {
         // Keep the established error order: word list, tiles, then board.
-        if !self
-            .words
-            .iter()
-            .any(|r| r.profile.identity() == &selection.word_list)
-        {
-            return Err(SelectionError::Unknown("wordList"));
-        }
-        if !self
-            .tiles
-            .iter()
-            .any(|r| r.profile.identity() == &selection.tile)
-        {
+        let words = self
+            .word_list(&selection.word_list)
+            .ok_or(SelectionError::Unknown("wordList"))?;
+        if !self.has_tile(&selection.tile) {
             return Err(SelectionError::Unknown("tile"));
         }
-        let board = &self
-            .boards
-            .iter()
-            .find(|r| r.profile.identity() == &selection.board)
-            .ok_or(SelectionError::Unknown("board"))?
-            .profile;
-        self.resolve_with_board(selection, board, rules, time_control)
+        let board = self
+            .board(&selection.board)
+            .ok_or(SelectionError::Unknown("board"))?;
+        self.compose(selection, words, board, rules, time_control)
     }
-    /// Composes the catalog word list and tiles with an already validated board, such as
-    /// a saved guest layout version (#101).
-    pub fn resolve_with_board(
+    pub fn word_list(&self, identity: &ContentIdentity) -> Option<&WordListProfile> {
+        self.words
+            .iter()
+            .find(|r| r.profile.identity() == identity)
+            .map(|r| &r.profile)
+    }
+    pub fn has_tile(&self, identity: &ContentIdentity) -> bool {
+        self.tiles.iter().any(|r| r.profile.identity() == identity)
+    }
+    pub fn board(&self, identity: &ContentIdentity) -> Option<&BoardProfile> {
+        self.boards
+            .iter()
+            .find(|r| r.profile.identity() == identity)
+            .map(|r| &r.profile)
+    }
+    /// Composes an already validated word list and board, from this catalog or a guest
+    /// library (#97, #101), with this catalog's tiles under the single compatibility check.
+    pub fn compose(
         &self,
         selection: &Selection,
+        words: &WordListProfile,
         board: &BoardProfile,
         rules: MatchRules,
         time_control: Option<scrabble_game::ruleset::TimeControl>,
     ) -> Result<PreparedConfiguration, SelectionError> {
+        if words.identity() != &selection.word_list {
+            return Err(SelectionError::Unknown("wordList"));
+        }
         if board.identity() != &selection.board {
             return Err(SelectionError::Unknown("board"));
         }
-        let words = &self
-            .words
-            .iter()
-            .find(|r| r.profile.identity() == &selection.word_list)
-            .ok_or(SelectionError::Unknown("wordList"))?
-            .profile;
         let tiles = &self
             .tiles
             .iter()
