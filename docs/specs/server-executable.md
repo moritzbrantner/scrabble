@@ -130,6 +130,24 @@ Layout routes (`/layouts…`, `/shared-layouts/…`) accept request bodies up to
 32 KiB; all other API routes keep the 2 KiB limit. At most 4096 originals and 16
 selectable versions per original are retained.
 
+`SCRABBLE_WORD_LIST_DIR` (#97) holds the durable guest-owned custom word-list
+library ([contract](word-list-library.md)). It defaults to `word-lists/` beside
+the seed; the supplied Compose file sets `/state/word-lists` and the Hetzner
+environment `/var/lib/scrabble/word-lists`. In production it must be absolute and
+separate from the TLS files, seed, runtime recovery, match initialization and
+board-layout directories. The server creates it (mode 0700) and stores one
+`w_<id>.json` entry (mode 0600) per saved original — name, optional share id,
+version metadata and a seed-keyed HMAC verifier of the owner capability, never
+the capability — plus one verified `w_<id>-r<revision>.txt` normalized word file
+per retained version. As for layouts, the server refuses to create a new seed
+while this directory is non-empty; back it up and preserve it with the seed.
+Deleting it removes every guest list (owners cannot recover them, as the UI
+states) but never changes a started match, whose word set is pinned in the
+match configuration store. Word-list routes (`/word-lists…`,
+`/shared-word-lists/…`) accept request bodies up to 2 MiB + 4 KiB; published
+upload bounds are 1 MiB and 200,000 words per list, and at most 1024 originals,
+8 selectable versions per original and 256 MiB of retained word content are kept.
+
 For the supplied Docker Compose deployment, place an operator-authored catalog
 and its word files in the existing read-only content directory. An explicit
 operator Compose override can enable it without changing the default service:
