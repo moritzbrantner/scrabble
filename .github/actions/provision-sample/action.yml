@@ -52,7 +52,8 @@ runs:
           -v "$HOME/.cargo/registry:/usr/local/cargo/registry" \
           -v "$HOME/.cargo/git:/usr/local/cargo/git" \
           -v "$HOME/.bun/install/cache:/root/.bun/install/cache" \
-          -e CI=true "$IMAGE" bash -euo pipefail -c "\$1"
+          -e CI=true -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory \
+          -e GIT_CONFIG_VALUE_0=/workspace "$IMAGE" bash -euo pipefail -c "\$1"
         SCRIPT
         chmod +x "$RUNNER_TEMP/in-env"
     - name: Use the host directly for non-container variants
@@ -65,7 +66,7 @@ runs:
       shell: bash
       run: |
         "$RUNNER_TEMP/in-env" '
-          echo "Commit: $(git -c safe.directory="*" rev-parse HEAD)"
+          echo "Commit: $(git rev-parse HEAD)"
           echo "Flake lock digest: $(sha256sum flake.lock)"
           echo "Cargo lock digest: $(sha256sum Cargo.lock)"
           echo "Bun lock digest: $(sha256sum bun.lock)"
