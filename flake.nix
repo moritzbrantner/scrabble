@@ -18,24 +18,24 @@
         let
           pkgs = import nixpkgs { inherit system; };
 
-          # Same Bun release and checksums as the official SHASUMS256.txt for bun-v1.4.2.
+          # Same Bun release and checksums as the official SHASUMS256.txt for bun-v1.4.3.
           bunAsset =
             if system == "x86_64-linux" then
               {
                 archive = "bun-linux-x64";
-                hash = "sha256-NjaPrvdSeHXV/6UuU81IAhdB8qg+tiCKjdZAaNQiqRM=";
+                hash = "sha256-PnMFKNiXdfA/h/BcBnh8TfQJnQo38/JS57gpyyOBbhg=";
               }
             else
               {
                 archive = "bun-linux-aarch64";
-                hash = "sha256-VDKLvC2cjgyfiSxUTWbFeoO4QTnjSQnl7oF1jxrI/ac=";
+                hash = "sha256-76mBPaXtckI7+Ef5FujSxHwNd2rdlyNUAmp14Q2pqiE=";
               };
 
           bun = pkgs.stdenvNoCC.mkDerivation {
             pname = "bun";
-            version = "1.4.2";
+            version = "1.4.3";
             src = pkgs.fetchurl {
-              url = "https://github.com/oven-sh/bun/releases/download/bun-v1.4.2/${bunAsset.archive}.zip";
+              url = "https://github.com/oven-sh/bun/releases/download/bun-v1.4.3/${bunAsset.archive}.zip";
               inherit (bunAsset) hash;
             };
             nativeBuildInputs = [

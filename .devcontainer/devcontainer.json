@@ -1,0 +1,5 @@
+{
+  "name": "Scrabble agent environment (#81 candidate)",
+  "build": { "dockerfile": "Dockerfile", "context": ".." },
+  "postCreateCommand": "bun install --frozen-lockfile && cargo fetch --locked"
+}

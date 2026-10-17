@@ -1,0 +1,92 @@
+name: Provision and run one #81 comparison sample
+description: >-
+  Provision one variant, install identical dependencies, run a first focused test (agent
+  "first useful test") and the identical repository gate. Step durations are the samples.
+inputs:
+  variant:
+    description: ubuntu, nix or container
+    required: true
+  image:
+    description: Digest-pinned agent container image (container variant only)
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Conventional Bun setup
+      if: inputs.variant == 'ubuntu'
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      with:
+        bun-version: 1.4.3
+    - name: Conventional Rust setup from rust-toolchain.toml
+      if: inputs.variant == 'ubuntu'
+      shell: bash
+      run: rustup toolchain install
+    - name: Install Nix
+      if: inputs.variant == 'nix'
+      uses: NixOS/nix-installer-action@62c1943b776c509394b550f3f983adc14e9212d6 # v1.0.0
+      with:
+        installer-version: 2.35.2
+        enable-kvm: false
+    - name: Activate locked Nix development shell
+      if: inputs.variant == 'nix'
+      shell: bash
+      run: |
+        nix develop --command bash -c 'printf "%s\n" "$PATH" >> "$GITHUB_PATH"'
+    - name: Install Rust toolchain from rust-toolchain.toml
+      if: inputs.variant == 'nix'
+      shell: bash
+      run: rustup toolchain install
+    - name: Pull prebuilt agent container image
+      if: inputs.variant == 'container'
+      shell: bash
+      env:
+        IMAGE: ${{ inputs.image }}
+      run: |
+        set -euo pipefail
+        docker pull "$IMAGE"
+        mkdir -p ~/.cargo/registry ~/.cargo/git ~/.bun/install/cache
+        cat > "$RUNNER_TEMP/in-env" <<SCRIPT
+        #!/usr/bin/env bash
+        exec docker run --rm --ipc=host --network=host \
+          -v "$GITHUB_WORKSPACE:/workspace" -w /workspace \
+          -v "$HOME/.cargo/registry:/usr/local/cargo/registry" \
+          -v "$HOME/.cargo/git:/usr/local/cargo/git" \
+          -v "$HOME/.bun/install/cache:/root/.bun/install/cache" \
+          -e CI=true -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory \
+          -e GIT_CONFIG_VALUE_0=/workspace "$IMAGE" bash -euo pipefail -c "\$1"
+        SCRIPT
+        chmod +x "$RUNNER_TEMP/in-env"
+    - name: Use the host directly for non-container variants
+      if: inputs.variant != 'container'
+      shell: bash
+      run: |
+        printf '#!/usr/bin/env bash\nexec bash -euo pipefail -c "$1"\n' > "$RUNNER_TEMP/in-env"
+        chmod +x "$RUNNER_TEMP/in-env"
+    - name: Record toolchain identity
+      shell: bash
+      run: |
+        "$RUNNER_TEMP/in-env" '
+          echo "Commit: $(git rev-parse HEAD)"
+          echo "Flake lock digest: $(sha256sum flake.lock)"
+          echo "Cargo lock digest: $(sha256sum Cargo.lock)"
+          echo "Bun lock digest: $(sha256sum bun.lock)"
+          command -v bun cargo rustc
+          rustc --version
+          cargo --version
+          bun --version
+        '
+        echo "Runner image: ${ImageOS:-unknown} ${ImageVersion:-unknown}; container image: ${{ inputs.variant == 'container' && inputs.image || 'none' }}"
+    - name: Install identical package dependencies
+      shell: bash
+      run: |
+        "$RUNNER_TEMP/in-env" 'bun install --frozen-lockfile && cargo fetch --locked'
+        # The container image already contains Chromium and its system libraries.
+        if [ "${{ inputs.variant }}" != container ]; then
+          bunx playwright install --with-deps chromium
+        fi
+    - name: First focused test (agent first useful test)
+      shell: bash
+      run: '"$RUNNER_TEMP/in-env" "cargo test -p scrabble-game --lib --locked"'
+    - name: Execute the identical repository gate
+      shell: bash
+      run: '"$RUNNER_TEMP/in-env" "bun run check"'
