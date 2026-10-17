@@ -36,7 +36,10 @@
 //   `{"version":1,"layoutId":"l_<32 hex>","ownerCapability":"<64 hex>",...}`.
 //   It is never placed in a URL, sessionStorage or a share link, and is
 //   removed when the owner deletes the layout.
-// Share withdrawal (1.35) and account linking (#132) are successor scope.
+// - Withdrawal (Decision 1.35, #134): an owner's shared row offers
+//   "Stop sharing <name>"; afterwards the old link shows the alert
+//   "This shared board layout is not available." while copies keep working.
+// Account linking (#132) is successor scope.
 import { execFileSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import AxeBuilder from "@axe-core/playwright";
@@ -603,6 +606,36 @@ test("a recipient in an independent browser uses and copies a shared square layo
     await expect(
       current.getByRole("cell", { name: /^Row 2, column 2:.*Triple letter/ }),
     ).toHaveCount(0);
+    // Only the owner withdraws the link; the recipient's copy keeps working.
+    await expect(
+      recipient.getByRole("button", { name: /^Stop sharing\b/ }),
+      "recipients cannot withdraw",
+    ).toHaveCount(0);
+    await page.goto(`./?${query}`);
+    await savedList(page)
+      .getByRole("button", { name: `Stop sharing ${name}`, exact: true })
+      .click();
+    await expect(
+      libraryRegion(page).getByRole("status").filter({ hasText: "Sharing stopped." }),
+    ).toBeVisible();
+    await expect(libraryRegion(page).getByRole("link", { name: "Layout share link" })).toHaveCount(
+      0,
+    );
+    await page.reload();
+    await expect(
+      savedList(page).getByRole("button", { name: `Share ${name}`, exact: true }),
+    ).toBeVisible();
+    await expect(
+      savedList(page).getByRole("button", { name: `Stop sharing ${name}`, exact: true }),
+    ).toHaveCount(0);
+    await recipient.goto(href.href);
+    await expect(
+      recipient
+        .getByRole("alert")
+        .filter({ hasText: "This shared board layout is not available." }),
+    ).toBeVisible();
+    await copyPage.goto(`./?${query}`);
+    await expect(savedList(copyPage).getByRole("listitem")).toHaveCount(1);
     for (const client of [page, recipient]) {
       expect((await new AxeBuilder({ page: client }).analyze()).violations).toEqual([]);
     }

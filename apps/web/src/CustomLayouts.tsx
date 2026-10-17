@@ -17,6 +17,7 @@ import {
   reshape,
   shareLayout,
   shareUrl,
+  unshareLayout,
   updateLayout,
   validSize,
   type BoardRow,
@@ -149,10 +150,29 @@ export function CustomLayouts({
     setMessage(undefined);
     try {
       const id = row.saved.shareId ?? (await shareLayout(api, row.entry));
+      replace({ ...row.saved, shareId: id });
       setShared({ layoutId: row.saved.layoutId, url: shareUrl(id) });
     } catch {
       setMessage({ text: "layouts.failed", alert: true });
     }
+  }
+  async function unshare(row: Owned) {
+    setMessage(undefined);
+    try {
+      await unshareLayout(api, row.entry);
+      const withdrawn = { ...row.saved };
+      delete withdrawn.shareId;
+      replace(withdrawn);
+      setShared((value) => (value?.layoutId === row.saved.layoutId ? undefined : value));
+      setMessage({ text: "layouts.unshared", alert: false });
+    } catch {
+      setMessage({ text: "layouts.failed", alert: true });
+    }
+  }
+  function replace(saved: SavedLayout) {
+    setOwned((rows) =>
+      rows.map((row) => (row.saved.layoutId === saved.layoutId ? { ...row, saved } : row)),
+    );
   }
   const editingRow = owned.find((row) => row.saved.layoutId === editing?.layoutId);
   const sharedName = owned.find((row) => row.saved.layoutId === shared?.layoutId)?.saved.name;
@@ -191,6 +211,16 @@ export function CustomLayouts({
                 >
                   {t("layouts.shareShort")}
                 </Button>
+                {row.saved.shareId !== undefined && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    aria-label={t("layouts.unshare", { name: row.saved.name })}
+                    onClick={() => void unshare(row)}
+                  >
+                    {t("layouts.unshareShort")}
+                  </Button>
+                )}
                 <Button
                   type="button"
                   variant="outline"

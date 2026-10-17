@@ -52,8 +52,12 @@
 //! `{"error":"unknown-profile","profile":"board"}`; started matches keep their
 //! version through the existing per-match initialization manifest.
 //!
-//! Share withdrawal (Decision 1.35) and account linking (Question 1.44, #132)
-//! are successor scope and deliberately not asserted here.
+//! - `POST /layouts/{layoutId}/unshare` `{version,ownerCapability}` -> 204;
+//!   withdraws the share link (Decision 1.35, #134). The old `shareId` then
+//!   answers 404 `unknown-layout`; sharing again issues a fresh id.
+//!
+//! Account linking (Question 1.44, #132) is successor scope and deliberately not
+//! asserted here.
 use game_server::GameSimulation;
 use scrabble_game::{
     identity::{Coordinate, PlayerId, ProtocolVersion, TurnId},
@@ -797,6 +801,96 @@ async fn share_links_grant_use_and_copy_but_never_edit_and_copies_are_independen
     for saved in [&original, &copy, &second] {
         assert!(files_containing(root.path(), &saved.capability).is_empty());
     }
+    api.stop().await;
+}
+
+#[tokio::test]
+async fn only_the_owner_withdraws_a_share_and_copies_and_matches_keep_working() {
+    let root = tempfile::tempdir().unwrap();
+    let api = Api::start(root.path()).await;
+    let catalog = api.catalog().await;
+    let original = api
+        .save(
+            "Withdrawn hex",
+            hex(7, &[(3, 3, Premium::TripleWord)], "main_word_only"),
+        )
+        .await;
+    let share = api.share(&original).await;
+    let (_, shared) = api.get(&format!("/shared-layouts/{share}")).await;
+    let (status, join, _) = api
+        .create_match(&catalog, "acceptance-pairs", &shared["board"])
+        .await;
+    assert_eq!(status, 200, "{join}");
+    let match_id = join["matchId"].as_str().unwrap().to_owned();
+    let (status, copied) = api
+        .post(
+            &format!("/shared-layouts/{share}/copy"),
+            json!({"version":1,"name":"Recipient copy"}),
+        )
+        .await;
+    assert_eq!(status, 200, "{copied}");
+    let copy = Saved::parse(&copied);
+
+    // Neither the share id, the recipient's capability nor a forgery can withdraw.
+    for capability in [share.clone(), copy.capability.clone(), "0".repeat(64)] {
+        let (status, body) = api
+            .post(
+                &format!("/layouts/{}/unshare", original.id),
+                json!({"version":1,"ownerCapability":capability}),
+            )
+            .await;
+        assert!(
+            matches!(status, 400 | 403),
+            "non-owner unshare: {status} {body}"
+        );
+    }
+    let (status, _) = api.get(&format!("/shared-layouts/{share}")).await;
+    assert_eq!(status, 200, "a rejected withdrawal leaves the link working");
+
+    let unshare = json!({"version":1,"ownerCapability":original.capability});
+    let path = format!("/layouts/{}/unshare", original.id);
+    let (status, _) = api.post(&path, unshare.clone()).await;
+    assert_eq!(status, 204);
+    let (status, _) = api.post(&path, unshare).await;
+    assert_eq!(status, 204, "withdrawing again is idempotent");
+    let (status, body) = api.get(&format!("/shared-layouts/{share}")).await;
+    assert_eq!(status, 404);
+    assert_eq!(body["error"], "unknown-layout");
+    let (status, _) = api
+        .post(
+            &format!("/shared-layouts/{share}/copy"),
+            json!({"version":1,"name":"Too late"}),
+        )
+        .await;
+    assert_eq!(status, 404, "a withdrawn link cannot be copied");
+    let (_, owned) = api.read(&original).await;
+    assert!(owned.get("shareId").is_none_or(Value::is_null), "{owned}");
+
+    // The recipient's copy and the running match are unaffected.
+    let (status, _) = api.read(&copy).await;
+    assert_eq!(status, 200);
+    let (status, _, _) = api
+        .create_match(&catalog, "acceptance-pairs", &copy.board)
+        .await;
+    assert_eq!(status, 200, "an existing copy still starts matches");
+    let (status, body) = api.get(&format!("/games/{match_id}")).await;
+    assert_eq!(status, 200, "{body}");
+
+    // Sharing again issues a fresh link; the withdrawn one stays dead.
+    let fresh = api.share(&original).await;
+    assert_ne!(fresh, share);
+    let (status, _) = api.get(&format!("/shared-layouts/{fresh}")).await;
+    assert_eq!(status, 200);
+    let (status, _) = api.get(&format!("/shared-layouts/{share}")).await;
+    assert_eq!(status, 404);
+    api.stop().await;
+
+    // Withdrawal is durable across a restart.
+    let api = Api::start(root.path()).await;
+    let (status, _) = api.get(&format!("/shared-layouts/{share}")).await;
+    assert_eq!(status, 404);
+    let (status, _) = api.get(&format!("/shared-layouts/{fresh}")).await;
+    assert_eq!(status, 200);
     api.stop().await;
 }
 

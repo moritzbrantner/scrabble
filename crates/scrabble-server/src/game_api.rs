@@ -496,7 +496,7 @@ async fn layout_route(request: &Request, games: &Games) -> Response {
         if !is_layout_id(id) {
             return Err(Response::error(404, "unknown-layout"));
         }
-        if !matches!(action, "read" | "update" | "delete" | "share") {
+        if !matches!(action, "read" | "update" | "delete" | "share" | "unshare") {
             return Err(Response::error(404, "not-found"));
         }
         if request.method != "POST" {
@@ -533,6 +533,17 @@ async fn layout_route(request: &Request, games: &Games) -> Response {
                     .map_err(operation_error)?
                     .map_err(layout_error)?;
                 json_response(200, &serde_json::json!({"version":1,"shareId":share}))
+            }
+            "unshare" => {
+                games
+                    .with_layouts(move |library| library.unshare(&id, &capability))
+                    .await
+                    .map_err(operation_error)?
+                    .map_err(layout_error)?;
+                Response {
+                    status: 204,
+                    body: String::new(),
+                }
             }
             _ => {
                 games

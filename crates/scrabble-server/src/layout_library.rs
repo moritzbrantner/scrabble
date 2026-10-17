@@ -441,7 +441,8 @@ impl LayoutLibrary {
         index.layouts = index.layouts.saturating_sub(1);
         Ok(())
     }
-    /// Enables (idempotently) the original's share link.
+    /// Enables (idempotently) the original's share link. After `unshare`, sharing again
+    /// issues a fresh share id; a withdrawn id is never revived.
     pub fn share(&self, layout_id: &str, capability: &str) -> Result<String, LayoutError> {
         let mut index = self.index.lock().map_err(|_| LayoutError::Internal)?;
         let mut stored = self.owned(layout_id, capability)?;
@@ -453,6 +454,17 @@ impl LayoutLibrary {
         self.store(&stored)?;
         index.shares.insert(share.clone(), stored.layout_id.clone());
         Ok(share)
+    }
+    /// Withdraws the share link (idempotent). Existing copies and matches are unaffected.
+    pub fn unshare(&self, layout_id: &str, capability: &str) -> Result<(), LayoutError> {
+        let mut index = self.index.lock().map_err(|_| LayoutError::Internal)?;
+        let mut stored = self.owned(layout_id, capability)?;
+        let Some(share) = stored.share_id.take() else {
+            return Ok(());
+        };
+        self.store(&stored)?;
+        index.shares.remove(&share);
+        Ok(())
     }
     /// The current version of a shared original; never owner material.
     pub fn shared(&self, share_id: &str) -> Result<LayoutView, LayoutError> {
