@@ -68,7 +68,6 @@ use scrabble_server::{
     config::ServerConfig,
     factory::{self, MatchFactory},
     games::unix_seconds,
-    hosting,
     simulation::ScrabbleSimulation,
 };
 use serde_json::{Value, json};
@@ -82,6 +81,8 @@ use tokio::{
     task::JoinHandle,
 };
 
+#[path = "support/hosted.rs"]
+mod hosted;
 #[path = "support/profile_catalog.rs"]
 mod profile_catalog;
 
@@ -130,13 +131,6 @@ impl Drop for Api {
         }
     }
 }
-fn free_tcp_port() -> u16 {
-    std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port()
-}
 impl Api {
     async fn start(root: &Path) -> Self {
         let certificate = root.join("cert.pem");
@@ -154,50 +148,20 @@ impl Api {
                 .await
                 .unwrap();
         }
-        let udp = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
-        let transport_port = udp.local_addr().unwrap().port();
-        drop(udp);
-        let (port, status_port) = (free_tcp_port(), free_tcp_port());
         let mut values = values(root);
         for (name, value) in [
-            ("SCRABBLE_PORT", transport_port.to_string()),
-            ("SCRABBLE_API_PORT", port.to_string()),
-            ("SCRABBLE_STATUS_PORT", status_port.to_string()),
-            ("SCRABBLE_MAX_MATCHES", "8".into()),
+            ("SCRABBLE_MAX_MATCHES", "8".to_owned()),
             ("SCRABBLE_CERT_PEM", certificate.to_str().unwrap().into()),
             ("SCRABBLE_KEY_PEM", key.to_str().unwrap().into()),
         ] {
             values.insert(name.into(), value);
         }
-        let config = ServerConfig::from_values(&values)
-            .expect("#101 requires the durable guest layout library key SCRABBLE_BOARD_LAYOUT_DIR");
-        let (shutdown, receiver) = tokio::sync::mpsc::channel(1);
-        let task = tokio::spawn(hosting::serve(config, receiver));
-        let api = Self {
-            port,
-            task: Some(task),
-            shutdown,
-        };
-        // Ready only when the recovery-prepared host serves and the API answers.
-        let status = Self {
-            port: status_port,
-            task: None,
-            shutdown: api.shutdown.clone(),
-        };
-        tokio::time::timeout(std::time::Duration::from_secs(20), async {
-            loop {
-                if TcpStream::connect(("127.0.0.1", status_port)).await.is_ok()
-                    && status.raw("GET", "/readyz", "").await.0 == 200
-                    && TcpStream::connect(("127.0.0.1", port)).await.is_ok()
-                {
-                    break;
-                }
-                tokio::time::sleep(std::time::Duration::from_millis(25)).await;
-            }
-        })
-        .await
-        .expect("server became ready");
-        api
+        let hosted = hosted::start(&values).await;
+        Self {
+            port: hosted.api_port,
+            task: Some(hosted.task),
+            shutdown: hosted.shutdown,
+        }
     }
     /// Graceful shutdown; recovery images are written before this returns.
     async fn stop(mut self) {
