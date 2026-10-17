@@ -195,6 +195,27 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
   Status: owner-approved 2026-10-16. Answers Question 1.44 (choice A); supersedes only the _deferral_ in Decision 1.45, not its guest-first permission.  
   When a player chooses to link guest-owned Scrabble word lists, private tile profiles or custom square/hex board layouts to an account, use **one shared Moenarch account identity across products**, not a Scrabble-specific account. Scrabble remains the authority for these game-specific libraries and their permissions; sharing a login does not transfer their data ownership or game rules to a shared identity service. Preserve guest use without sign-in, private guest ownership capabilities, independent recipient copies, share links, and immutable match/replay references under Decisions 1.20, 1.29, 1.33 and 1.35. Resolve and verify an existing supported shared-account service contract before integration; this decision does not choose or authorize a new identity provider, a duplicate authentication implementation, an automatic guest-library migration, or a specific sign-in UX. Account linking remains separate implementation work in [#132](https://github.com/moritzbrantner/scrabble/issues/132).
 
+- **1.47** [question] **After a word list stops being shared, may its shared identity still start new matches?**
+  Answered 2026-10-17 by Decision 1.48. Raised during [#97](https://github.com/moritzbrantner/scrabble/issues/97): the implementation let anyone who had already obtained a shared list version's identity keep creating new matches with it after withdrawal. Retained as a historical Question.
+
+- **1.48 Share withdrawal ends new-match access through the share.**
+  Status: owner-approved 2026-10-17 (asked by the work-loop orchestrator). Answers 1.47 (choice B).
+  After the owner stops sharing a custom word list, a **new** match may select that list only through a live share or with owner access. A previously obtained identity alone is no longer enough. Matches already started (including recovery and replay) and independent copies are unaffected. Withdrawal for word lists ships with [#97](https://github.com/moritzbrantner/scrabble/issues/97) now, independently of the deferred layout withdrawal (#134). Sharing again issues a **new** share id; withdrawn links stay dead.
+
+- **1.49** [question] **What size limits apply to guest word-list uploads on a public server?**
+  Answered 2026-10-17 by Decision 1.50. Retained as a historical Question.
+
+- **1.50 Word-list library limits are operator-configurable.**
+  Status: owner-approved 2026-10-17. Answers 1.49 (choice C).
+  The server operator configures the guest word-list limits. The defaults are **1 MiB and 200,000 words per list**, plus **1,024 lists, 8 retained versions per list and 256 MiB of stored words per server**. Versions bound to started or recoverable matches remain governed by ADR 0009.
+
+- **1.51** [question] **How are lowercase letters in an uploaded word list handled?**
+  Answered 2026-10-17 by Decision 1.52. Retained as a historical Question.
+
+- **1.52 Uploaded word lists are uppercased only where the mapping is one-to-one.**
+  Status: owner-approved 2026-10-17. Answers 1.51 (choice B).
+  On import, lowercase letters are converted to uppercase when each letter maps to exactly one uppercase letter. A line containing a letter without such a mapping (for example ß, which uppercases to SS) is rejected with an error that names the line.
+
 ## 2. Game clients and interface controls
 
 - **2.1 Mobile-style client experience across devices.**  
@@ -272,6 +293,19 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
 - **4.1 Prioritize approved hexagonal-board or match-clock journeys.**
   Status: owner-approved 2026-10-14 in the interactive work-loop session.
   Focus current implementation work on the approved **hexagonal-board or match-clock** journeys. This sets the current category priority; it does not change the behaviors approved in sections 1 and 3 or establish a preference between those two journeys. Follow their evidenced actionable prerequisites. Execution is tracked by [hexagonal gameplay #96](https://github.com/moritzbrantner/scrabble/issues/96) and [match clocks #99](https://github.com/moritzbrantner/scrabble/issues/99); independent match configuration [#94](https://github.com/moritzbrantner/scrabble/issues/94) is an existing prerequisite of the separately selectable hex board. Physical-device release acceptance remains required by #32/#34 and is not claimed complete by this scheduling choice.
+
+## 5. Hosting and online play
+
+- **5.1 Pages uses the moenarch.com servers; a local checkout can host.**
+  Status: owner-approved 2026-10-14 ([#77](https://github.com/moritzbrantner/scrabble/issues/77#issuecomment-6164647489)).
+  The GitHub Pages build always uses the game servers hosted on moenarch.com and offers no peer hosting. From a local checkout, a player can host a game themselves.
+
+- **5.2** [question] **What is the authority for a game hosted from a local checkout?**
+  Answered 2026-10-17 by Decision 5.3. Options were the existing native Rust game server, a browser-peer WASM authority over WebRTC, or both ([#77](https://github.com/moritzbrantner/scrabble/issues/77)). Retained as a historical Question.
+
+- **5.3 Local hosting runs the existing native game server.**
+  Status: owner-approved 2026-10-17 (asked by the work-loop orchestrator). Answers 5.2 (choice A).
+  "Host it yourself" means the local checkout runs the existing native Rust Scrabble game server, and the clients connect to it. There is one authority implementation, with the same protocol, replay and privacy guarantees as moenarch.com. No browser-peer authority and no host migration.
 
 ## Existing baseline and boundaries
 
