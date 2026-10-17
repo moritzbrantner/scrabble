@@ -238,6 +238,33 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
   Status: owner-approved 2026-10-13. Answers 2.4 (choice A).  
   The **public shared board remains a separate presentation optimized for larger displays**, showing the board and public match state without exposing private player racks or duplicating player-only editing controls. The **player's own gameplay interface stays compact and mobile-style** on phones and desktop browsers, with rack, placement and frequent turn actions prioritized. Do not force the shared-display view into a phone-controller shell or replace the player's interaction layout with a large-screen shared-board dashboard. Both presentations use the same authoritative match state and retain the distinct shared-board versus player identity/visibility boundaries. This preserves the existing two-role product model rather than requesting a new alternative-layout setting.
 
+- **2.6 Proposed placements remain private until acceptance.**  
+  Status: owner-approved 2026-10-17 (direct gameplay steering).  
+  Neither waiting-turn preparations nor an active player's tentative placements appear to opponents or on the shared board. The player's own controller can show their proposed placement. Only a server-accepted move changes the public board. This **supersedes the public tentative-preview behavior delivered by #18**; the server/public projection must stop disclosing drafts, not merely hide their rendering. The server retains authoritative validation, scoring and turn order.
+
+- **2.7 Drag and rearrange tiles like a physical rack.**  
+  Status: owner-approved 2026-10-17 (direct gameplay steering).  
+  Players can reorder their own rack tiles and drag them to, within and back from their private proposed placement, including mobile/touch interaction. Reordering is only player-side arrangement, not a change to canonical rack ownership, bag order or match rules. Preserve accessible tap and keyboard editing as alternatives. This extends the completed phone editor (#17), not a second rules engine.
+
+- **2.8 Prepare pre-moves during others' turns; confirm manually.**  
+  Status: owner-approved 2026-10-17 (explicit choice A).  
+  A player may arrange their owned tiles on a private proposed board placement while waiting for their turn. No pre-move can be submitted or scored before that turn. When their turn begins, they review the prepared placement and explicitly select **Commit move**; never auto-submit it. Server-side legality is checked at actual submission.
+
+- **2.9 Reset the whole pre-move on an overlapping opponent placement.**  
+  Status: owner-approved 2026-10-17 (explicit choice C).  
+  If an intervening accepted move places a tile on **any square used by the waiting player's pre-move**, clear that entire pre-move rather than partially preserving or moving its tiles. If there is no overlap, the draft may remain pending subject to ordinary authoritative validation when submitted. Other board/rack/context invalidation rules are not changed by this choice.
+
+- **2.10 Persist pre-moves on the same device.**  
+  Status: owner-approved 2026-10-17 (explicit choice B).  
+  A private pre-move survives page reload/browser restart on the same device and is restored only when its match, player/rack identities and board context remain compatible; apply 2.9 on overlap. Do not require server-side draft storage or cross-device draft synchronization. Private credentials and draft content must not appear in public projections or links.
+
+- **2.11 Opt-in background notifications when it becomes your turn.**  
+  Status: owner-approved 2026-10-17 (explicit choice B).  
+  In addition to a visible in-app active-turn indicator, support **opt-in web-push/system notifications** when the player's turn begins, including when their Scrabble tab is closed where browser/OS support permits. Request permission explicitly, offer a way to disable notifications and do not require a Moenarch account for a guest player to opt in. Keep push contents and subscriptions scoped to the player's actual match/turn and never expose private racks or tentative moves. Unavailable or denied notification permission must not impair gameplay.
+
+- **2.12** [question] **How many alternative private pre-moves can a player keep per match?**  
+  The approved private, manually submitted, locally persisted pre-move (2.6, 2.8–2.10) does not specify whether the user has one working draft or can save alternatives. Options: (A) only one draft at a time; (B) up to three switchable candidate drafts; (C) any number of named candidate drafts, all manually selected and confirmed. The chosen model must preserve conflict-reset and per-device privacy semantics.
+
 ## 3. Match clocks
 
 - **3.1 Optional configurable time controls.**  
