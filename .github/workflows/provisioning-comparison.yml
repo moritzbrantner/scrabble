@@ -1,74 +1,129 @@
 name: Scrabble Provisioning Comparison
 
 # Non-required experiment for #81: identical `bun run check` on the same runner class with
-# conventional provisioning versus the locked Nix development shell. Every sample is cold:
-# a fresh runner with no restored Actions caches. Opt in when collecting benchmark
-# evidence; routine PRs must not trigger this ten-job experiment.
+# conventional provisioning, the locked Nix development shell, and a prebuilt digest-pinned
+# agent container (.devcontainer/Dockerfile). Opt in when collecting benchmark evidence;
+# routine PRs must not trigger this fifteen-sample experiment.
+#
+# cold: every sample is a fresh runner with no restored Actions caches. The container
+#       sample still pulls its image on that fresh runner; building the image is a separate
+#       `image` job, skipped when the tag already exists in GHCR.
+# warm: one priming job per variant runs the gate and saves its dependency/build caches
+#       under this run's key; every sample is then a fresh runner that restores them.
+#       The Nix store itself is not cached (no binary cache by design).
 on:
   workflow_dispatch:
+    inputs:
+      cache_state:
+        description: "cold or warm"
+        required: true
+        default: cold
+        type: choice
+        options: [cold, warm]
 
 permissions:
   contents: read
 
+env:
+  IMAGE_REPOSITORY: ghcr.io/${{ github.repository_owner }}/scrabble-agent-env
+
 jobs:
-  compare:
-    name: "${{ matrix.variant }} cold sample ${{ matrix.sample }}"
+  image:
+    name: Prebuilt agent container image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      ref: ${{ steps.publish.outputs.ref }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Build only when the environment inputs changed
+        id: publish
+        run: |
+          set -euo pipefail
+          tag="$(cat .devcontainer/Dockerfile rust-toolchain.toml <(jq -r .packageManager package.json) | sha256sum | cut -c1-16)"
+          image="$IMAGE_REPOSITORY:$tag"
+          if ! docker buildx imagetools inspect "$image" >/dev/null 2>&1; then
+            start=$(date +%s)
+            docker build -f .devcontainer/Dockerfile -t "$image" .
+            docker push "$image"
+            echo "| Image | built and pushed in $(( $(date +%s) - start )) s |" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "| Image | reused existing $image |" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          digest="$(docker buildx imagetools inspect "$image" --format '{{json .Manifest}}' | jq -r .digest)"
+          echo "ref=$IMAGE_REPOSITORY@$digest" >> "$GITHUB_OUTPUT"
+          echo "| Image ref | $IMAGE_REPOSITORY@$digest |" >> "$GITHUB_STEP_SUMMARY"
+
+  prime:
+    name: "${{ matrix.variant }} warm cache priming"
+    if: inputs.cache_state == 'warm'
+    needs: image
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        variant: [ubuntu, nix]
+        variant: [ubuntu, nix, container]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: ./.github/actions/provision-sample
+        with:
+          variant: ${{ matrix.variant }}
+          image: ${{ needs.image.outputs.ref }}
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          # The container variant mounts these same host directories.
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.bun/install/cache
+            ~/.cache/ms-playwright
+            target
+          key: provisioning-${{ matrix.variant }}-${{ github.run_id }}
+
+  compare:
+    name: "${{ matrix.variant }} ${{ inputs.cache_state }} sample ${{ matrix.sample }}"
+    needs: [image, prime]
+    if: ${{ !cancelled() && needs.image.result == 'success' && (needs.prime.result == 'success' || needs.prime.result == 'skipped') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [ubuntu, nix, container]
         sample: [1, 2, 3, 4, 5]
     steps:
       - name: Check out the identical source revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Conventional Bun setup
-        if: matrix.variant == 'ubuntu'
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      - name: Restore this run's warm caches on a fresh runner
+        if: inputs.cache_state == 'warm'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
-          bun-version: 1.4.3
-      - name: Conventional Rust setup from rust-toolchain.toml
-        if: matrix.variant == 'ubuntu'
-        run: rustup toolchain install
-      - name: Install Nix
-        if: matrix.variant == 'nix'
-        uses: NixOS/nix-installer-action@62c1943b776c509394b550f3f983adc14e9212d6 # v1.0.0
+          # The container variant mounts these same host directories.
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.bun/install/cache
+            ~/.cache/ms-playwright
+            target
+          key: provisioning-${{ matrix.variant }}-${{ github.run_id }}
+          fail-on-cache-miss: true
+      - uses: ./.github/actions/provision-sample
         with:
-          installer-version: 2.35.2
-          enable-kvm: false
-      - name: Activate locked Nix development shell
-        if: matrix.variant == 'nix'
-        run: |
-          nix develop --command bash -c 'printf "%s\n" "$PATH" >> "$GITHUB_PATH"'
-      - name: Install Rust toolchain from rust-toolchain.toml
-        if: matrix.variant == 'nix'
-        run: rustup toolchain install
-      - name: Record toolchain identity
-        run: |
-          set -euo pipefail
-          echo "Commit: $(git rev-parse HEAD)"
-          echo "Runner image: ${ImageOS:-unknown} ${ImageVersion:-unknown}"
-          echo "Flake lock digest: $(sha256sum flake.lock)"
-          echo "Cargo lock digest: $(sha256sum Cargo.lock)"
-          echo "Bun lock digest: $(sha256sum bun.lock)"
-          command -v bun cargo rustc
-          rustc --version
-          cargo --version
-          bun --version
-      - name: Install identical package dependencies
-        run: |
-          bun install --frozen-lockfile
-          cargo fetch --locked
-          bunx playwright install --with-deps chromium
-      - name: Execute the identical repository gate
-        run: bun run check
+          variant: ${{ matrix.variant }}
+          image: ${{ needs.image.outputs.ref }}
       - name: Record independent experimental sample
         if: always()
         env:
           VARIANT: ${{ matrix.variant }}
           SAMPLE: ${{ matrix.sample }}
+          CACHE_STATE: ${{ inputs.cache_state }}
         run: |
           echo "| Provisioner | Cache state | Sample | Source | Runner image |" >> "$GITHUB_STEP_SUMMARY"
           echo "| --- | --- | ---: | --- | --- |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| $VARIANT | cold; no restored Actions caches | $SAMPLE | $GITHUB_SHA | ${ImageOS:-unknown} ${ImageVersion:-unknown} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| $VARIANT | $CACHE_STATE | $SAMPLE | $GITHUB_SHA | ${ImageOS:-unknown} ${ImageVersion:-unknown} |" >> "$GITHUB_STEP_SUMMARY"

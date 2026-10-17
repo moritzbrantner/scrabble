@@ -4,7 +4,7 @@ A shared-board and private-phone multiplayer Scrabble application, under constru
 
 ## Development
 
-Install Bun 1.4.2 and Rust (the toolchain file selects 1.99.0 with Clippy and rustfmt). From a fresh checkout:
+Install Bun 1.4.3 and Rust (the toolchain file selects 1.99.1 with Clippy and rustfmt). From a fresh checkout:
 
 ```sh
 bun install --frozen-lockfile
