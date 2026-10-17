@@ -216,6 +216,10 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
   Status: owner-approved 2026-10-17. Answers 1.51 (choice B).
   On import, lowercase letters are converted to uppercase when each letter maps to exactly one uppercase letter. A line containing a letter without such a mapping (for example ß, which uppercases to SS) is rejected with an error that names the line.
 
+- **1.53 Optional live dictionary hints are a match setting, off by default.**  
+  Status: owner-approved 2026-10-17 (direct gameplay steering).  
+  The host may enable **dictionary membership hints** for the match; the option starts **disabled** for every new match. With it disabled, preparing or rearranging a proposed placement does not check whether its words occur in the selected dictionary; that check happens on actual move submission. With it enabled, players may privately check candidate words against the selected match dictionary before submission. **Estimated score preview and structural placement guidance remain available by default without revealing dictionary membership**; a score estimate must not imply that a word is legal. Dictionary checks and scoring on committed moves remain authoritative and mandatory in either mode. The chosen assistance setting applies equally to every player, cannot change during a running match, and must survive match recovery without altering an older match's interpretation. Respect Decision 2.6: drafts and hints must not be published to other players or the shared board.
+
 ## 2. Game clients and interface controls
 
 - **2.1 Mobile-style client experience across devices.**  
@@ -263,7 +267,20 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
   In addition to a visible in-app active-turn indicator, support **opt-in web-push/system notifications** when the player's turn begins, including when their Scrabble tab is closed where browser/OS support permits. Request permission explicitly, offer a way to disable notifications and do not require a Moenarch account for a guest player to opt in. Keep push contents and subscriptions scoped to the player's actual match/turn and never expose private racks or tentative moves. Unavailable or denied notification permission must not impair gameplay.
 
 - **2.12** [question] **How many alternative private pre-moves can a player keep per match?**  
+  Answered 2026-10-17 by Decision 2.13 (choice A); retained as a historical Question.  
   The approved private, manually submitted, locally persisted pre-move (2.6, 2.8–2.10) does not specify whether the user has one working draft or can save alternatives. Options: (A) only one draft at a time; (B) up to three switchable candidate drafts; (C) any number of named candidate drafts, all manually selected and confirmed. The chosen model must preserve conflict-reset and per-device privacy semantics.
+
+- **2.13 One working pre-move per player.**  
+  Status: owner-approved 2026-10-17. Answers 2.12 (choice A).  
+  Each player has **one editable private pre-move at a time**, rather than multiple saved alternatives or named drafts. The same-device persistence and whole-draft overlap reset in Decisions 2.9–2.10 apply to that one working draft. The player still explicitly confirms a move under 2.8.
+
+- **2.14 Notify every subscribed device on that player's turn.**  
+  Status: owner-approved 2026-10-17 (choice A). Supplements 2.11.  
+  An authorized player's turn-start notification is sent to **each of their independently opted-in devices**, not just the last-used device and not just a selected primary device. Each device can revoke its own subscription without unsubscribing the others. Never send to another player's device or the public shared board. Browser/device push support remains a prerequisite; a Moenarch account is not required.
+
+- **2.15 Prefer transfer of player controls between devices; details deferred.**  
+  Status: owner-selected direction 2026-10-17 (choice B), **implementation and edge cases explicitly deferred**.  
+  When one player accesses the same match on more than one device, the preferred future interaction is to transfer active editing control to the newly active device and make the former device read-only, rather than allow concurrent edits. Do not treat this as a prerequisite for private drafting or turn notifications, and do not infer unresolved authentication, handoff, failure/reconnection or draft-transfer details. This does **not** limit the all-subscribed-device push delivery in 2.14.
 
 ## 3. Match clocks
 
