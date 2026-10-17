@@ -225,6 +225,8 @@ async function startMatch(browser: Browser, host: Page) {
 type Group = Awaited<ReturnType<typeof startMatch>>;
 /** The active phone places its first two lettered tiles across the centre and commits. */
 async function playOpening(group: Group, board: () => PlayerSnapshot | undefined) {
+  // The board's observed snapshot may trail the phones' racks; wait for it.
+  await expect.poll(() => board()?.public.phase.kind, { timeout: 10_000 }).toBe("playing");
   const state = board();
   if (state?.public.phase.kind !== "playing") {
     throw new Error("match is not playing");
