@@ -157,6 +157,9 @@ export function CustomLayouts({
     }
   }
   async function unshare(row: Owned) {
+    if (!window.confirm(t("layouts.unshareConfirm", { name: row.saved.name }))) {
+      return;
+    }
     setMessage(undefined);
     try {
       await unshareLayout(api, row.entry);

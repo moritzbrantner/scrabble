@@ -342,6 +342,7 @@ export const en = {
   "layouts.deleteShort": "Delete",
   "layouts.unshare": "Stop sharing {name}",
   "layouts.unshareShort": "Stop sharing",
+  "layouts.unshareConfirm": "Stop sharing {name}?",
   "layouts.unshared": "Sharing stopped. The previous link no longer works.",
   "layouts.shareLink": "Layout share link",
   "layouts.shareNote":
@@ -808,6 +809,7 @@ const de: Record<CopyKey, string> = {
   "layouts.deleteShort": "Löschen",
   "layouts.unshare": "Teilen von {name} beenden",
   "layouts.unshareShort": "Teilen beenden",
+  "layouts.unshareConfirm": "Teilen von {name} beenden?",
   "layouts.unshared": "Teilen beendet. Der bisherige Link funktioniert nicht mehr.",
   "layouts.shareLink": "Freigabelink des Layouts",
   "layouts.shareNote":
@@ -1263,6 +1265,7 @@ const es: Record<CopyKey, string> = {
   "layouts.deleteShort": "Eliminar",
   "layouts.unshare": "Dejar de compartir {name}",
   "layouts.unshareShort": "Dejar de compartir",
+  "layouts.unshareConfirm": "¿Dejar de compartir {name}?",
   "layouts.unshared": "Se dejó de compartir. El enlace anterior ya no funciona.",
   "layouts.shareLink": "Enlace para compartir el diseño",
   "layouts.shareNote":

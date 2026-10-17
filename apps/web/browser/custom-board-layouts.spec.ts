@@ -37,7 +37,7 @@
 //   It is never placed in a URL, sessionStorage or a share link, and is
 //   removed when the owner deletes the layout.
 // - Withdrawal (Decision 1.35, #134): an owner's shared row offers
-//   "Stop sharing <name>"; afterwards the old link shows the alert
+//   "Stop sharing <name>", confirmed by the dialog "Stop sharing <name>?"; afterwards the old link shows the alert
 //   "This shared board layout is not available." while copies keep working.
 // Account linking (#132) is successor scope.
 import { execFileSync } from "node:child_process";
@@ -612,9 +612,26 @@ test("a recipient in an independent browser uses and copies a shared square layo
       "recipients cannot withdraw",
     ).toHaveCount(0);
     await page.goto(`./?${query}`);
-    await savedList(page)
-      .getByRole("button", { name: `Stop sharing ${name}`, exact: true })
-      .click();
+    const stopSharing = savedList(page).getByRole("button", {
+      name: `Stop sharing ${name}`,
+      exact: true,
+    });
+    // Withdrawal asks first; dismissing keeps the link working.
+    page.removeAllListeners("dialog");
+    const asked: string[] = [];
+    page.once("dialog", (dialog) => {
+      asked.push(dialog.message());
+      void dialog.dismiss();
+    });
+    await stopSharing.click();
+    await expect.poll(() => asked).toEqual([`Stop sharing ${name}?`]);
+    await expect(stopSharing).toBeVisible();
+    await recipient.goto(href.href);
+    await expect(
+      recipient.getByRole("region", { name: "Shared board layout", exact: true }),
+    ).toContainText(name);
+    page.on("dialog", (dialog) => void dialog.accept());
+    await stopSharing.click();
     await expect(
       libraryRegion(page).getByRole("status").filter({ hasText: "Sharing stopped." }),
     ).toBeVisible();
