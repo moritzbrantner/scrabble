@@ -14,6 +14,8 @@ import { initialClockDraft, readTimeControl } from "./time-control";
 import { BoardLayoutPreview } from "./BoardLayoutPreview";
 import { ConnectedBoard } from "./ConnectedBoard";
 import { CustomLayouts, type BoardChoice } from "./CustomLayouts";
+import { CustomWordLists } from "./CustomWordLists";
+import { type WordChoice } from "./word-list-library";
 import { reportMoenarchMatch } from "./moenarch-launch";
 import { useCopy } from "./preferences";
 import { fetchProfiles } from "./profile-catalog";
@@ -50,12 +52,15 @@ export function CreateBoard({
   api,
   certificateHash,
   sharedBoard,
+  sharedWordList,
 }: {
   endpoint: string;
   api: string;
   certificateHash?: string;
   /** A shared custom layout opened through its link (#101), offered as a board choice. */
   sharedBoard?: BoardChoice;
+  /** A shared custom word list opened through its link (#97), offered as a word list. */
+  sharedWordList?: WordChoice;
 }) {
   const { t, number } = useCopy();
   const [state, setState] = useState<State>({ kind: "idle" });
@@ -70,6 +75,25 @@ export function CreateBoard({
   const operation = useRef<AbortController>(undefined);
   const initialBoard = useRef(sharedBoard?.value);
   const [customBoards, setCustomBoards] = useState<BoardChoice[]>([]);
+  const initialWords = useRef(sharedWordList?.value);
+  const [customWords, setCustomWords] = useState<WordChoice[]>([]);
+  // Saved and shared lists are selected independently of tiles and board (Decision 1.25).
+  const wordChoices: WordChoice[] = [
+    ...(catalog?.wordLists.map((row) => ({
+      value: row.identity.name,
+      label: row.label,
+      identity: row.identity,
+    })) ?? []),
+    ...customWords,
+    ...(sharedWordList ? [sharedWordList] : []),
+  ];
+  // A deleted saved list falls back to the catalog default selection.
+  const selectedWords =
+    wordChoices.find((choice) => choice.value === choices.wordList) ??
+    wordChoices.find((choice) => choice.value === catalog?.defaults.selection.wordList.name);
+  const customWordsSelected =
+    selectedWords !== undefined &&
+    !catalog?.wordLists.some((row) => row.identity.name === selectedWords.value);
   const boardChoices: BoardChoice[] = [
     ...(catalog?.boardProfiles.map((row) => ({ value: row.identity.name, row })) ?? []),
     ...customBoards,
@@ -98,7 +122,7 @@ export function CreateBoard({
         }
         setCatalog(value);
         setChoices({
-          wordList: value.defaults.selection.wordList.name,
+          wordList: initialWords.current ?? value.defaults.selection.wordList.name,
           tile: value.defaults.selection.tile.name,
           board: initialBoard.current ?? value.defaults.selection.board.name,
         });
@@ -137,6 +161,7 @@ export function CreateBoard({
         if (
           !touched &&
           !customSelected &&
+          !customWordsSelected &&
           catalog.defaults.legacyCompatible &&
           clock.control === undefined
         ) {
@@ -150,9 +175,7 @@ export function CreateBoard({
               ]),
             ),
           );
-          const wordList = catalog.wordLists.find(
-            (row) => row.identity.name === choices.wordList,
-          )?.identity;
+          const wordList = selectedWords?.identity;
           const tile = catalog.tileProfiles.find(
             (row) => row.identity.name === choices.tile,
           )?.identity;
@@ -236,15 +259,15 @@ export function CreateBoard({
                   {t("profiles.wordList")}
                   <NativeSelect
                     aria-label={t("profiles.wordList")}
-                    value={choices.wordList}
+                    value={selectedWords?.value ?? ""}
                     onChange={(event: ChangeEvent<HTMLSelectElement>) => {
                       change();
                       setChoices({ ...choices, wordList: event.currentTarget.value });
                     }}
                   >
-                    {catalog.wordLists.map((row) => (
-                      <NativeSelectOption key={row.identity.name} value={row.identity.name}>
-                        {row.label}
+                    {wordChoices.map((choice) => (
+                      <NativeSelectOption key={choice.value} value={choice.value}>
+                        {choice.label}
                       </NativeSelectOption>
                     ))}
                   </NativeSelect>
@@ -373,6 +396,7 @@ export function CreateBoard({
       >
         {state.kind === "failed" && state.retryable ? t("create.retry") : t("create.action")}
       </Button>
+      <CustomWordLists api={api} onChoices={setCustomWords} />
       <CustomLayouts api={api} onChoices={setCustomBoards} />
     </main>
   );

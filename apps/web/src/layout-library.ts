@@ -283,7 +283,7 @@ export function boardRow(name: string, board: SavedLayout["board"], layout: Layo
 }
 
 /** Share URL: only the view, the share id and the dev-only connection parameters. */
-export function shareUrl(shareId: string): string {
+export function shareUrl(shareId: string, view: "layout" | "word-list" = "layout"): string {
   const current = new URL(window.location.href);
   const next = new URL(current.pathname, current.origin);
   for (const key of ["server", "api", "certificate"]) {
@@ -292,7 +292,7 @@ export function shareUrl(shareId: string): string {
       next.searchParams.set(key, value);
     }
   }
-  next.searchParams.set("view", "layout");
+  next.searchParams.set("view", view);
   next.searchParams.set("share", shareId);
   return next.href;
 }

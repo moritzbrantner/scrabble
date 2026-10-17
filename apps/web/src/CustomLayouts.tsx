@@ -226,7 +226,7 @@ export function CustomLayouts({
   );
 }
 
-function CopyLinkButton({ url }: { url: string }) {
+export function CopyLinkButton({ url }: { url: string }) {
   const { t } = useCopy();
   const [copied, setCopied] = useState(false);
   return (
