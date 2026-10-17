@@ -18,6 +18,10 @@ export default defineConfig(({ mode }) => ({
     ? {
         server: {
           https: { cert: readFileSync(certificate), key: readFileSync(privateKey) },
+          // The local launcher may advertise a public DNS name that remote players use.
+          ...(process.env.LOCAL_ALLOWED_HOST
+            ? { allowedHosts: [process.env.LOCAL_ALLOWED_HOST] }
+            : {}),
           fs: {
             deny: ["**/.local/**", ".env", ".env.*", "*.{crt,pem}", "**/.git/**"],
           },

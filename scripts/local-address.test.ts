@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { type NetworkInterfaceInfo } from "node:os";
 
-import { localAddress } from "./local-address";
+import { localAddress, publicHost } from "./local-address";
 
 function ipv4(address: string, internal = false): NetworkInterfaceInfo {
   return {
@@ -35,4 +35,19 @@ test("ambiguous networks need an explicit assigned private address", () => {
   expect(() => localAddress({ lo: [ipv4("127.0.0.1", true)] })).toThrow(
     "Cannot select one LAN address",
   );
+});
+
+test("public hosts are DNS names or canonical IPv4 addresses", () => {
+  expect(publicHost("Play.Example.com")).toBe("play.example.com");
+  expect(publicHost("203.0.113.7")).toBe("203.0.113.7");
+  for (const host of [
+    "",
+    "localhost",
+    "https://play.example.com",
+    "play.example.com:5173",
+    "a..b",
+    "010.0.0.1",
+  ]) {
+    expect(() => publicHost(host)).toThrow("LOCAL_PUBLIC_HOST");
+  }
 });
