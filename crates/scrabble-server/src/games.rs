@@ -225,6 +225,16 @@ impl Games {
             .await
             .map_err(|_| GameOperationError::Internal)
     }
+    /// Runs one guest word-list library operation off the async executor (#97).
+    pub async fn with_word_lists<T: Send + 'static>(
+        &self,
+        operation: impl FnOnce(&crate::word_list_library::WordListLibrary) -> T + Send + 'static,
+    ) -> Result<T, GameOperationError> {
+        let factory = self.factory.clone();
+        tokio::task::spawn_blocking(move || operation(factory.word_lists()))
+            .await
+            .map_err(|_| GameOperationError::Internal)
+    }
     pub fn hex_profiles(&self) -> serde_json::Value {
         self.factory.hex_profile_catalog()
     }
@@ -268,10 +278,20 @@ impl Games {
                 return Err(ConfiguredError::Conflict);
             }
         } else {
-            let prepared = self
-                .factory
-                .resolve(&request.selection, request.rules, request.time_control)
-                .map_err(ConfiguredError::Selection)?;
+            // Saved guest versions are read and fingerprinted from disk; keep that off
+            // the async executor.
+            let factory = self.factory.clone();
+            let (selection, rules, time_control) = (
+                request.selection.clone(),
+                request.rules,
+                request.time_control,
+            );
+            let prepared = tokio::task::spawn_blocking(move || {
+                factory.resolve(&selection, rules, time_control)
+            })
+            .await
+            .map_err(|_| GameOperationError::Internal)?
+            .map_err(ConfiguredError::Selection)?;
             if !self.host.is_serving() {
                 return Err(GameOperationError::NotServing.into());
             }

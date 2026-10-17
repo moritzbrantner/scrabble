@@ -24,6 +24,8 @@ pub struct ServerConfig {
     pub match_configuration_directory: PathBuf,
     /// Durable private guest board-layout library (#101).
     pub board_layout_directory: PathBuf,
+    /// Durable private guest word-list library (#97).
+    pub word_list_directory: PathBuf,
     pub port: u16,
     pub status_port: u16,
     pub api_port: u16,
@@ -55,6 +57,7 @@ const KEYS: &[&str] = &[
     "SCRABBLE_PROFILE_CATALOG_FILE",
     "SCRABBLE_MATCH_CONFIGURATION_DIR",
     "SCRABBLE_BOARD_LAYOUT_DIR",
+    "SCRABBLE_WORD_LIST_DIR",
     "SCRABBLE_MODE",
     "SCRABBLE_RULESET_FILE",
     "SCRABBLE_DICTIONARY_FILE",
@@ -291,8 +294,16 @@ impl ServerConfig {
                 .unwrap_or(std::path::Path::new("."))
                 .join("layouts"),
         };
+        let word_list_directory = match values.get("SCRABBLE_WORD_LIST_DIR") {
+            Some(_) => path(values, "SCRABBLE_WORD_LIST_DIR", "")?,
+            None => path(values, "SCRABBLE_SEED_FILE", ".local/server/seed")?
+                .parent()
+                .unwrap_or(std::path::Path::new("."))
+                .join("word-lists"),
+        };
         let config = Self {
             board_layout_directory,
+            word_list_directory,
             profile_catalog_file,
             match_configuration_directory,
             mode,
@@ -334,6 +345,7 @@ impl ServerConfig {
                 &config.recovery_directory,
                 &config.match_configuration_directory,
                 &config.board_layout_directory,
+                &config.word_list_directory,
             ]
             .iter()
             .any(|path| !path.is_absolute())
@@ -375,6 +387,21 @@ impl ServerConfig {
         {
             return Err(fail(
                 "board layout library must be separate from TLS, seed, recovery and match initialization",
+            ));
+        }
+        let words = &config.word_list_directory;
+        if words == &config.seed_file
+            || words == &config.certificate
+            || words == &config.private_key
+            || words.starts_with(&config.recovery_directory)
+            || config.recovery_directory.starts_with(words)
+            || words.starts_with(&config.match_configuration_directory)
+            || config.match_configuration_directory.starts_with(words)
+            || words.starts_with(layouts)
+            || layouts.starts_with(words)
+        {
+            return Err(fail(
+                "word list library must be separate from TLS, seed, recovery, match initialization and board layouts",
             ));
         }
         if config.certificate == config.private_key {

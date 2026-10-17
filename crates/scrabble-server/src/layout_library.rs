@@ -114,14 +114,14 @@ pub struct LayoutLibrary {
     index: Mutex<Index>,
 }
 
-fn random_hex(bytes: usize) -> Result<String, LayoutError> {
+pub(crate) fn random_hex(bytes: usize) -> Result<String, LayoutError> {
     let mut value = vec![0; bytes];
     SystemRandom::new()
         .fill(&mut value)
         .map_err(|_| LayoutError::Internal)?;
     Ok(hexadecimal(&value))
 }
-fn is_hex_id(value: &str, prefix: &str) -> bool {
+pub(crate) fn is_hex_id(value: &str, prefix: &str) -> bool {
     value.strip_prefix(prefix).is_some_and(|rest| {
         rest.len() == 32
             && rest
@@ -135,7 +135,7 @@ pub fn is_layout_id(value: &str) -> bool {
 pub fn is_share_id(value: &str) -> bool {
     is_hex_id(value, "s_")
 }
-fn decode_hex(text: &str) -> Option<Vec<u8>> {
+pub(crate) fn decode_hex(text: &str) -> Option<Vec<u8>> {
     if !text.len().is_multiple_of(2) {
         return None;
     }
@@ -484,7 +484,7 @@ impl LayoutLibrary {
     }
 }
 
-fn sync_directory(path: &Path) -> io::Result<()> {
+pub(crate) fn sync_directory(path: &Path) -> io::Result<()> {
     #[cfg(unix)]
     {
         fs::File::open(path)?.sync_all()?;
