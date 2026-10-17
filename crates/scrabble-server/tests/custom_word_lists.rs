@@ -1,6 +1,7 @@
 //! Independent acceptance contract for #97, guest-owned slice: import, save,
 //! reuse, share, copy, withdraw and manage custom word lists (Decisions 1.1,
-//! 1.8, 1.16, 1.18, 1.20, 1.25 and 1.45; ADR 0008/0009). Authored before any
+//! 1.8, 1.16, 1.18, 1.20, 1.25, 1.45, 1.48, 1.50 and 1.52; ADR 0008/0009).
+//! Authored before any
 //! implementation by a separate acceptance agent; it exercises the real
 //! production host (`hosting::serve`), its HTTP API, the configured match
 //! factory and the native engine. Nothing here re-implements dictionary
@@ -23,15 +24,26 @@
 //! (docs/specs/dictionary-validation.md): one uppercase alphabetic word per
 //! line, any Unicode alphabet; blank lines ignored; LF or CRLF; duplicates and
 //! order do not matter. Spaces, digits, punctuation and comments are rejected
-//! with the 1-based line number. (Whether lowercase is normalized or rejected
-//! is left to the implementation and not asserted.)
+//! with the 1-based line number. Lowercase letters are uppercased on import
+//! when each maps to exactly one uppercase letter (Decision 1.52, e.g. `ä` ->
+//! `Ä`); a line with a letter lacking such a mapping (`ß` -> `SS`, `ﬁ` -> `FI`)
+//! is rejected as `invalid-word-list` naming that `line`.
+//!
+//! Limits (Decision 1.50) are operator-configurable with these optional keys
+//! and defaults: `SCRABBLE_WORD_LIST_MAX_BYTES` (1 MiB = 1048576, per list),
+//! `SCRABBLE_WORD_LIST_MAX_WORDS` (200000, per list),
+//! `SCRABBLE_WORD_LIST_MAX_LISTS` (1024 originals and copies per server; when
+//! full a new list or copy is 429 `{"error":"word-list-library-full"}`),
+//! `SCRABBLE_WORD_LIST_MAX_VERSIONS` (8 retained versions per list; older
+//! versions stop resolving for NEW matches) and
+//! `SCRABBLE_WORD_LIST_MAX_STORED_BYTES` (256 MiB = 268435456 of stored words
+//! per server). Versions bound to started matches stay governed by ADR 0009.
 //!
 //! HTTP endpoints on the existing game API origin (JSON, `version: 1`, 200 on
 //! success; every mutation is a POST, matching the `/layouts` conventions):
-//! - `GET /word-lists/limits` -> `{version,maxBytes,maxWords}`: the
-//!   authoritative upload bounds. `maxBytes` (UTF-8 bytes of `words`) is at
-//!   most the 64 MiB deployment bound; `maxWords + 1` distinct short words
-//!   must fit within `maxBytes`, so the word bound is independently reachable.
+//! - `GET /word-lists/limits` -> `{version,maxBytes,maxWords,maxLists,
+//!   maxVersions,maxStoredBytes}`: the effective configured bounds.
+//!   `maxBytes` counts UTF-8 bytes of `words`.
 //! - `POST /word-lists` `{version,name,words}` -> `{version,wordListId,
 //!   ownerCapability,name,revision:1,wordList,wordCount}`. `wordListId` =
 //!   `w_<32 hex>`, `ownerCapability` = 64 lowercase hex, returned only to the
@@ -45,7 +57,9 @@
 //! - `POST /word-lists/{id}/delete` `{version,ownerCapability}` -> 200 or 204;
 //!   removes it from the library and ends its sharing.
 //! - `POST /word-lists/{id}/share` `{version,ownerCapability}` -> `{version,
-//!   shareId}`; `shareId` = `s_<32 hex>`, stable for repeated calls.
+//!   shareId}`; `shareId` = `s_<32 hex>`, stable for repeated calls while
+//!   shared. Sharing again after withdrawal issues a NEW share id; the
+//!   withdrawn id stays dead (Decision 1.48).
 //! - `POST /word-lists/{id}/unshare` `{version,ownerCapability}` -> 200 or
 //!   204; the share link stops working (stop sharing, Decision 1.20).
 //! - `GET /shared-word-lists/{shareId}` -> `{version,shareId,name,revision,
@@ -53,10 +67,17 @@
 //!   `wordListId` or an owner capability.
 //! - `POST /shared-word-lists/{shareId}/copy` `{version,name}` -> the
 //!   `POST /word-lists` response shape for a NEW, independently owned list.
-//! - `POST /games` (version 3, unchanged shape): `selection.wordList` may be
-//!   the `wordList` identity of a saved version or of a share view, while
-//!   `selection.tile` and `selection.board` are chosen independently from the
-//!   operator catalog (Decision 1.25).
+//! - `POST /games` (version 3): `selection.wordList` may be the `wordList`
+//!   identity of a saved version or of a share view, while `selection.tile`
+//!   and `selection.board` are chosen independently from the operator catalog
+//!   (Decision 1.25). A guest list additionally carries its access proof in
+//!   `selection.wordListAccess` (Decision 1.48), exactly one of
+//!   `{"shareId":"s_.."}` (a LIVE share of that list) or
+//!   `{"wordListId":"w_..","ownerCapability":".."}` (owner access). Catalog
+//!   lists omit it. After withdrawal the identity alone, or the dead share id,
+//!   no longer selects the list for a new match; owner access and copies do.
+//!   This suite always sends a proof for guest lists, so it does not decide
+//!   whether an identity without proof is accepted while still shared.
 //!
 //! Errors: 400 `{"error":"invalid-word-list","reason":..,"line"?:N}` for a
 //! well-formed but invalid list or name (`line` is present whenever one line
@@ -67,13 +88,10 @@
 //! missing/forged/foreign capability; 404 `{"error":"unknown-word-list"}` for
 //! unknown or deleted lists; a withdrawn share answers 404 `unknown-word-list`
 //! or 410 `word-list-share-withdrawn`. New matches reject deleted or forged
-//! identities as `{"error":"unknown-profile","profile":"wordList"}` and an
-//! incompatible list/tile pair as the existing
+//! identities, and a missing, withdrawn, foreign or forged access proof, as
+//! `{"error":"unknown-profile","profile":"wordList"}` and an incompatible
+//! list/tile pair as the existing
 //! `{"error":"incompatible-profiles","letters":[..]}`, never by substitution.
-//!
-//! Deliberately NOT asserted (open questions recorded on #97): whether an
-//! identity learned from a share view stays usable for NEW matches after
-//! withdrawal, and whether re-sharing revives an old share id.
 use game_server::{GameSimulation, SimulationError};
 use scrabble_game::{
     identity::{Coordinate, PlayerId, ProtocolVersion, TurnId},
@@ -210,9 +228,13 @@ fn free_tcp_port() -> u16 {
 }
 impl Api {
     async fn start(root: &Path) -> Self {
-        Self::start_with(root, true).await
+        Self::start_with(root, true, &[]).await
     }
-    async fn start_with(root: &Path, library: bool) -> Self {
+    /// Starts with operator overrides (Decision 1.50 limit keys).
+    async fn start_configured(root: &Path, overrides: &[(&str, &str)]) -> Self {
+        Self::start_with(root, true, overrides).await
+    }
+    async fn start_with(root: &Path, library: bool, overrides: &[(&str, &str)]) -> Self {
         let certificate = root.join("cert.pem");
         let key = root.join("key.pem");
         if !certificate.exists() {
@@ -242,6 +264,9 @@ impl Api {
             ("SCRABBLE_KEY_PEM", key.to_str().unwrap().into()),
         ] {
             values.insert(name.into(), value);
+        }
+        for (name, value) in overrides {
+            values.insert((*name).into(), (*value).into());
         }
         let config = ServerConfig::from_values(&values).expect("valid acceptance configuration");
         let (shutdown, receiver) = tokio::sync::mpsc::channel(1);
@@ -355,20 +380,16 @@ impl Api {
         )
         .await
     }
-    async fn limits(&self) -> (usize, usize) {
+    async fn limits_body(&self) -> Value {
         let (status, body) = self.get("/word-lists/limits").await;
-        assert_eq!(status, 200, "upload bounds are published: {body}");
+        assert_eq!(status, 200, "configured bounds are published: {body}");
         assert_eq!(body["version"], 1);
+        body
+    }
+    async fn limits(&self) -> (usize, usize) {
+        let body = self.limits_body().await;
         let bytes = body["maxBytes"].as_u64().expect("maxBytes") as usize;
         let words = body["maxWords"].as_u64().expect("maxWords") as usize;
-        assert!(
-            bytes <= 64 * 1024 * 1024,
-            "guest uploads never exceed the deployment bound"
-        );
-        assert!(
-            bytes >= pairs().len() && words >= 676,
-            "bounds admit small authored lists"
-        );
         (bytes, words)
     }
     async fn catalog(&self) -> Value {
@@ -381,11 +402,15 @@ impl Api {
         &self,
         catalog: &Value,
         word_list: &Value,
+        access: Option<Value>,
         tile: Option<&str>,
     ) -> (u16, Value, String) {
         let nonce = format!("{:032x}", rand_nonce());
         let mut selection = catalog["defaults"]["selection"].clone();
         selection["wordList"] = word_list.clone();
+        if let Some(access) = access {
+            selection["wordListAccess"] = access;
+        }
         if let Some(tile) = tile {
             selection["tile"] = identity_of(catalog, "tileProfiles", tile);
         }
@@ -398,6 +423,18 @@ impl Api {
             .await;
         (status, body, nonce)
     }
+}
+
+/// `selection.wordListAccess` proving owner access (Decision 1.48).
+fn owner_access(saved: &Saved) -> Option<Value> {
+    Some(json!({"wordListId":saved.id,"ownerCapability":saved.capability}))
+}
+/// `selection.wordListAccess` through a live share (Decision 1.48).
+fn share_access(share: &str) -> Option<Value> {
+    Some(json!({"shareId":share}))
+}
+fn unknown_word_list() -> Value {
+    json!({"error":"unknown-profile","profile":"wordList"})
 }
 
 fn rand_nonce() -> u128 {
@@ -725,6 +762,245 @@ async fn invalid_or_oversized_uploads_get_precise_feedback_and_save_nothing() {
     api.stop().await;
 }
 
+/// `count` distinct uppercase words of `length` letters, one per line.
+fn distinct_words(count: usize, length: u32, offset: usize) -> String {
+    let mut text = String::new();
+    for index in offset..offset + count {
+        let mut value = index;
+        for _ in 0..length {
+            text.push(char::from(b'A' + (value % 26) as u8));
+            value /= 26;
+        }
+        text.push('\n');
+    }
+    text
+}
+fn full_or_too_large(status: u16, body: &Value) -> bool {
+    matches!(
+        (status, body["error"].as_str()),
+        (429, Some("word-list-library-full")) | (413, Some("word-list-too-large"))
+    )
+}
+fn per_list_rejection(status: u16, body: &Value) -> bool {
+    matches!(
+        (status, body["error"].as_str()),
+        (413, Some("word-list-too-large" | "body-too-large")) | (400, Some("invalid-word-list"))
+    )
+}
+
+#[tokio::test]
+async fn lowercase_is_uppercased_only_where_the_mapping_is_one_to_one() {
+    let root = tempfile::tempdir().unwrap();
+    let api = Api::start(root.path()).await;
+    let catalog = api.catalog().await;
+    // Decision 1.52: one-to-one lowercase letters are uppercased on import.
+    let mixed = api.save("Mixed case", "cat\nTa\närger\nÖl\n").await;
+    let (_, body) = api.read(&mixed).await;
+    assert_eq!(body["wordCount"], 4, "{body}");
+    assert_eq!(
+        word_set(body["words"].as_str().unwrap()),
+        word_set("CAT\nTA\nÄRGER\nÖL"),
+        "saved words are the uppercased forms"
+    );
+    let (status, edited) = api.update(&mixed, "Mixed case", "dog\nDOG\n").await;
+    assert_eq!(status, 200, "{edited}");
+    assert_eq!(edited["wordCount"], 1, "an update normalizes case too");
+
+    // A letter without a one-to-one uppercase mapping rejects its line.
+    for (case, words, line) in [
+        ("sharp s uppercases to SS", "CAT\nstraße\n", 2),
+        ("ligature uppercases to FI", "ﬁsh\nCAT\n", 1),
+        ("capital words after it", "CAT\nDOG\nMaß\n", 3),
+    ] {
+        let (status, body) = api
+            .post(
+                "/word-lists",
+                json!({"version":1,"name":case,"words":words}),
+            )
+            .await;
+        assert_eq!(status, 400, "{case}: {body}");
+        assert_eq!(body["error"], "invalid-word-list", "{case}: {body}");
+        assert_eq!(body["line"], line, "{case} names the line: {body}");
+        let (status, body) = api.update(&mixed, case, words).await;
+        assert_eq!(
+            (status, body["error"].as_str(), body["line"].as_u64()),
+            (400, Some("invalid-word-list"), Some(line as u64)),
+            "{case} on update: {body}"
+        );
+    }
+    let (_, still) = api.read(&mixed).await;
+    assert_eq!(
+        still["revision"], 2,
+        "rejected edits keep the saved version"
+    );
+
+    // The normalized words are what native matches validate against.
+    let lower = api.save("Lowercase pairs", &pairs().to_lowercase()).await;
+    let (status, created, nonce) = api
+        .create_match(&catalog, &lower.word_list, owner_access(&lower), None)
+        .await;
+    assert_eq!(status, 200, "{created}");
+    api.stop().await;
+    let mut game = Match::open(root.path(), created["matchId"].as_str().unwrap(), &nonce);
+    assert_accepted(&mut game, "an uppercase opening against a lowercase upload");
+}
+
+#[tokio::test]
+async fn default_limits_are_published() {
+    let root = tempfile::tempdir().unwrap();
+    let api = Api::start(root.path()).await;
+    let body = api.limits_body().await;
+    // Decision 1.50 defaults.
+    for (field, value) in [
+        ("maxBytes", 1024 * 1024),
+        ("maxWords", 200_000),
+        ("maxLists", 1024),
+        ("maxVersions", 8),
+        ("maxStoredBytes", 256 * 1024 * 1024),
+    ] {
+        assert_eq!(body[field], value, "default {field}: {body}");
+    }
+    api.stop().await;
+}
+
+#[tokio::test]
+async fn operator_overrides_bound_words_bytes_and_lists() {
+    let root = tempfile::tempdir().unwrap();
+    let api = Api::start_configured(
+        root.path(),
+        &[
+            ("SCRABBLE_WORD_LIST_MAX_BYTES", "64"),
+            ("SCRABBLE_WORD_LIST_MAX_WORDS", "3"),
+            ("SCRABBLE_WORD_LIST_MAX_LISTS", "3"),
+        ],
+    )
+    .await;
+    let body = api.limits_body().await;
+    assert_eq!(
+        (&body["maxBytes"], &body["maxWords"], &body["maxLists"]),
+        (&json!(64), &json!(3), &json!(3)),
+        "operator overrides are published: {body}"
+    );
+    assert_eq!(body["maxVersions"], 8, "unset keys keep their defaults");
+    let directory = root.path().join("word-lists");
+    let first = api.save("Three words", "CAT\nTA\nAT\n").await;
+    let before = file_count(&directory);
+    let (status, body) = api
+        .post(
+            "/word-lists",
+            json!({"version":1,"name":"Four words","words":"CAT\nTA\nAT\nACT\n"}),
+        )
+        .await;
+    assert!(
+        per_list_rejection(status, &body),
+        "word override: {status} {body}"
+    );
+    assert!(body["reason"].as_str().is_some_and(|r| !r.is_empty()));
+    let long = format!("{}\n{}\n", "A".repeat(40), "B".repeat(40));
+    let (status, body) = api
+        .post(
+            "/word-lists",
+            json!({"version":1,"name":"Long words","words":long}),
+        )
+        .await;
+    assert!(
+        per_list_rejection(status, &body),
+        "byte override: {status} {body}"
+    );
+    let (status, body) = api.update(&first, "Four", "CAT\nTA\nAT\nACT\n").await;
+    assert!(
+        per_list_rejection(status, &body),
+        "edits are bounded: {status} {body}"
+    );
+    assert_eq!(file_count(&directory), before, "rejections store nothing");
+
+    // Server-wide list bound, counting originals and copies.
+    let share = api.share(&first).await;
+    api.save("Second", "DOG\n").await;
+    let third = api.save("Third", "EEL\n").await;
+    let (status, body) = api
+        .post(
+            "/word-lists",
+            json!({"version":1,"name":"Fourth","words":"FOX\n"}),
+        )
+        .await;
+    assert_eq!(
+        (status, body["error"].as_str()),
+        (429, Some("word-list-library-full")),
+        "{body}"
+    );
+    let (status, body) = api.copy(&share, "Copy when full").await;
+    assert_eq!(
+        (status, body["error"].as_str()),
+        (429, Some("word-list-library-full")),
+        "{body}"
+    );
+    let (status, _) = api.owner(&third, "delete").await;
+    assert!(matches!(status, 200 | 204));
+    api.save("Fourth after delete", "FOX\n").await;
+    api.stop().await;
+
+    // Server-wide stored-word bound.
+    let root = tempfile::tempdir().unwrap();
+    let api = Api::start_configured(
+        root.path(),
+        &[("SCRABBLE_WORD_LIST_MAX_STORED_BYTES", "1024")],
+    )
+    .await;
+    assert_eq!(api.limits_body().await["maxStoredBytes"], 1024);
+    let large = api
+        .save("Seven hundred bytes", &distinct_words(140, 4, 0))
+        .await;
+    let (status, body) = api
+        .post(
+            "/word-lists",
+            json!({"version":1,"name":"Over budget","words":distinct_words(140, 4, 140)}),
+        )
+        .await;
+    assert!(
+        full_or_too_large(status, &body),
+        "stored-byte bound: {status} {body}"
+    );
+    let (status, _) = api.owner(&large, "delete").await;
+    assert!(matches!(status, 200 | 204));
+    api.save("Within budget again", &distinct_words(140, 4, 140))
+        .await;
+    api.stop().await;
+}
+
+#[tokio::test]
+async fn operator_version_retention_bounds_new_matches_but_never_started_ones() {
+    let root = tempfile::tempdir().unwrap();
+    let api = Api::start_configured(root.path(), &[("SCRABBLE_WORD_LIST_MAX_VERSIONS", "2")]).await;
+    assert_eq!(api.limits_body().await["maxVersions"], 2);
+    let catalog = api.catalog().await;
+    let saved = api.save("Retained", &pairs()).await;
+    let (status, pinned, nonce) = api
+        .create_match(&catalog, &saved.word_list, owner_access(&saved), None)
+        .await;
+    assert_eq!(status, 200, "{pinned}");
+    let (_, v2) = api.update(&saved, "Retained", REJECTING_WORDS).await;
+    let (_, v3) = api.update(&saved, "Retained", "QUIZ\nZAX\n").await;
+    assert_eq!(v3["revision"], 3);
+    let (status, body, _) = api
+        .create_match(&catalog, &saved.word_list, owner_access(&saved), None)
+        .await;
+    assert_eq!(
+        (status, body),
+        (400, unknown_word_list()),
+        "a version beyond retention no longer resolves for new matches"
+    );
+    for retained in [&v2["wordList"], &v3["wordList"]] {
+        let (status, body, _) = api
+            .create_match(&catalog, retained, owner_access(&saved), None)
+            .await;
+        assert_eq!(status, 200, "retained versions stay selectable: {body}");
+    }
+    api.stop().await;
+    let mut game = Match::open(root.path(), pinned["matchId"].as_str().unwrap(), &nonce);
+    assert_accepted(&mut game, "the match started on the dropped v1");
+}
+
 #[tokio::test]
 async fn only_the_private_capability_reads_edits_shares_unshares_or_deletes_an_original() {
     let root = tempfile::tempdir().unwrap();
@@ -966,6 +1242,14 @@ async fn withdrawn_share_fails_visibly_while_copies_and_owner_use_continue() {
     assert_eq!(status, 200);
     let copy = Saved::parse(&copied);
     let (_, before) = api.read(&copy).await;
+    // A recipient learns the shared identity and starts a match through the share.
+    let (_, shared) = api.get(&format!("/shared-word-lists/{share}")).await;
+    let shared_identity = shared["wordList"].clone();
+    let (status, running, running_nonce) = api
+        .create_match(&catalog, &shared_identity, share_access(&share), None)
+        .await;
+    assert_eq!(status, 200, "a live share selects the list: {running}");
+    let running_id = running["matchId"].as_str().unwrap().to_owned();
 
     let (status, _) = api.owner(&original, "unshare").await;
     assert!(matches!(status, 200 | 204), "the owner can stop sharing");
@@ -987,18 +1271,90 @@ async fn withdrawn_share_fails_visibly_while_copies_and_owner_use_continue() {
         "withdrawal does not edit the list"
     );
 
+    // Decision 1.48: the previously obtained identity alone, or with the dead
+    // share id, or with a foreign proof, no longer selects the list.
+    let configurations = root.path().join("configurations");
+    let created = file_count(&configurations);
+    for (case, access) in [
+        ("identity alone", None),
+        ("withdrawn share id", share_access(&share)),
+        (
+            "forged owner capability",
+            Some(json!({"wordListId":original.id,"ownerCapability":"0".repeat(64)})),
+        ),
+        (
+            "share id as capability",
+            Some(json!({"wordListId":original.id,"ownerCapability":share})),
+        ),
+    ] {
+        let (status, body, _) = api
+            .create_match(&catalog, &shared_identity, access, None)
+            .await;
+        assert_eq!(
+            (status, &body),
+            (400, &unknown_word_list()),
+            "{case} must not select a withdrawn list for a new match"
+        );
+    }
+    assert_eq!(file_count(&configurations), created, "no match was created");
+
+    // The owner still uses its own unshared list for new matches.
+    let (status, body, _) = api
+        .create_match(
+            &catalog,
+            &owner_view["wordList"],
+            owner_access(&original),
+            None,
+        )
+        .await;
+    assert_eq!(status, 200, "{body}");
     // Existing copies keep working, unchanged and usable for new matches.
     let (status, after) = api.read(&copy).await;
     assert_eq!(status, 200);
     assert_eq!(after, before);
-    let (status, body, _) = api.create_match(&catalog, &copy.word_list, None).await;
-    assert_eq!(status, 200, "{body}");
-    // The owner still uses its own unshared list for new matches.
     let (status, body, _) = api
-        .create_match(&catalog, &owner_view["wordList"], None)
+        .create_match(&catalog, &copy.word_list, owner_access(&copy), None)
         .await;
     assert_eq!(status, 200, "{body}");
+
+    // Sharing again issues a NEW id; the withdrawn link stays dead.
+    let reshared = api.share(&original).await;
+    assert_ne!(reshared, share, "re-sharing never revives the withdrawn id");
+    let (status, body) = api.get(&format!("/shared-word-lists/{share}")).await;
+    assert!(
+        withdrawn(status, &body),
+        "old link stays dead: {status} {body}"
+    );
+    let (status, body) = api.copy(&share, "Still late").await;
+    assert!(withdrawn(status, &body), "{status} {body}");
+    let (status, live) = api.get(&format!("/shared-word-lists/{reshared}")).await;
+    assert_eq!(status, 200, "{live}");
+    let (status, body, _) = api
+        .create_match(&catalog, &live["wordList"], share_access(&reshared), None)
+        .await;
+    assert_eq!(status, 200, "the new live share selects the list: {body}");
+    let (status, body, _) = api
+        .create_match(&catalog, &live["wordList"], share_access(&share), None)
+        .await;
+    assert_eq!((status, body), (400, unknown_word_list()));
+    // A live share of ANOTHER list never proves access to this one.
+    let other = api.save("Other shared", "CAT\n").await;
+    let other_share = api.share(&other).await;
+    api.owner(&original, "unshare").await;
+    let (status, body, _) = api
+        .create_match(&catalog, &shared_identity, share_access(&other_share), None)
+        .await;
+    assert_eq!((status, body), (400, unknown_word_list()));
     api.stop().await;
+
+    // The match started through the share before withdrawal is unaffected,
+    // including recovery after a restart and native validation.
+    let api = Api::start(root.path()).await;
+    let (status, body) = api.get(&format!("/games/{running_id}")).await;
+    assert_eq!(status, 200, "recovered after restart: {body}");
+    api.stop().await;
+    let mut game = Match::open(root.path(), &running_id, &running_nonce);
+    assert_accepted(&mut game, "the match started through the withdrawn share");
 }
 
 #[tokio::test]
@@ -1015,7 +1371,9 @@ async fn match_creation_selects_saved_lists_independently_and_rejects_incompatib
         Some("acceptance-legacy-tiles"),
         Some("acceptance-valued-tiles"),
     ] {
-        let (status, join, _) = api.create_match(&catalog, &english.word_list, tile).await;
+        let (status, join, _) = api
+            .create_match(&catalog, &english.word_list, owner_access(&english), tile)
+            .await;
         assert_eq!(status, 200, "{tile:?}: {join}");
         assert!(join["matchId"].as_str().unwrap().starts_with("p_"));
     }
@@ -1023,6 +1381,7 @@ async fn match_creation_selects_saved_lists_independently_and_rejects_incompatib
     let nonce = format!("{:032x}", rand_nonce());
     let mut selection = catalog["defaults"]["selection"].clone();
     selection["wordList"] = english.word_list.clone();
+    selection["wordListAccess"] = owner_access(&english).unwrap();
     selection["board"] = identity_of(&catalog, "boardProfiles", "acceptance-compact-board");
     let (status, body) = api
         .post(
@@ -1037,7 +1396,12 @@ async fn match_creation_selects_saved_lists_independently_and_rejects_incompatib
     let configurations = root.path().join("configurations");
     let before = file_count(&configurations);
     let (status, body, _) = api
-        .create_match(&catalog, &german.word_list, Some("acceptance-legacy-tiles"))
+        .create_match(
+            &catalog,
+            &german.word_list,
+            owner_access(&german),
+            Some("acceptance-legacy-tiles"),
+        )
         .await;
     assert_eq!(status, 400, "{body}");
     assert_eq!(
@@ -1052,7 +1416,12 @@ async fn match_creation_selects_saved_lists_independently_and_rejects_incompatib
     );
     // The same list with a compatible, separately chosen tile profile works.
     let (status, body, _) = api
-        .create_match(&catalog, &german.word_list, Some(UMLAUT_TILES))
+        .create_match(
+            &catalog,
+            &german.word_list,
+            owner_access(&german),
+            Some(UMLAUT_TILES),
+        )
         .await;
     assert_eq!(status, 200, "{body}");
 
@@ -1062,25 +1431,47 @@ async fn match_creation_selects_saved_lists_independently_and_rejects_incompatib
         "{}0",
         english.word_list["revision"].as_str().unwrap()
     ));
-    let (status, body, _) = api.create_match(&catalog, &forged, None).await;
+    let (status, body, _) = api
+        .create_match(&catalog, &forged, owner_access(&english), None)
+        .await;
     assert_eq!(
         (status, body),
         (400, json!({"error":"unknown-profile","profile":"wordList"}))
     );
     let mut inline = english.word_list.clone();
     inline["words"] = json!("ANY\n");
-    let (status, _, _) = api.create_match(&catalog, &inline, None).await;
+    let (status, _, _) = api
+        .create_match(&catalog, &inline, owner_access(&english), None)
+        .await;
     assert_eq!(status, 400);
+    // Owner access to ANOTHER list never proves access to this one.
+    let (status, body, _) = api
+        .create_match(&catalog, &english.word_list, owner_access(&german), None)
+        .await;
+    assert_eq!((status, body), (400, unknown_word_list()));
+    let mut mixed = owner_access(&english).unwrap();
+    mixed["ownerCapability"] = json!(german.capability);
+    let (status, body, _) = api
+        .create_match(&catalog, &english.word_list, Some(mixed), None)
+        .await;
+    assert_eq!((status, body), (400, unknown_word_list()));
     // A recipient may use a shared list directly without copying it.
     let share = api.share(&english).await;
     let (_, shared) = api.get(&format!("/shared-word-lists/{share}")).await;
-    let (status, body, _) = api.create_match(&catalog, &shared["wordList"], None).await;
+    let (status, body, _) = api
+        .create_match(&catalog, &shared["wordList"], share_access(&share), None)
+        .await;
     assert_eq!(status, 200, "{body}");
     // Deleted lists are unavailable for new matches.
     let (status, _) = api.owner(&german, "delete").await;
     assert!(matches!(status, 200 | 204));
     let (status, body, _) = api
-        .create_match(&catalog, &german.word_list, Some(UMLAUT_TILES))
+        .create_match(
+            &catalog,
+            &german.word_list,
+            owner_access(&german),
+            Some(UMLAUT_TILES),
+        )
         .await;
     assert_eq!(
         (status, body),
@@ -1088,7 +1479,7 @@ async fn match_creation_selects_saved_lists_independently_and_rejects_incompatib
     );
     // Catalog word lists are unchanged.
     let catalog_words = identity_of(&catalog, "wordLists", "acceptance-legacy-words");
-    let (status, _, _) = api.create_match(&catalog, &catalog_words, None).await;
+    let (status, _, _) = api.create_match(&catalog, &catalog_words, None, None).await;
     assert_eq!(status, 200);
     api.stop().await;
 }
@@ -1233,11 +1624,13 @@ async fn original_and_edited_copy_validate_native_commits_differently() {
     let copy = Saved::parse(&copied);
     let (status, edited) = api.update(&copy, "Rejecting copy", REJECTING_WORDS).await;
     assert_eq!(status, 200, "{edited}");
-    let (status, from_original, original_nonce) =
-        api.create_match(&catalog, &original.word_list, None).await;
+    let (status, from_original, original_nonce) = api
+        .create_match(&catalog, &original.word_list, owner_access(&original), None)
+        .await;
     assert_eq!(status, 200, "{from_original}");
-    let (status, from_copy, copy_nonce) =
-        api.create_match(&catalog, &edited["wordList"], None).await;
+    let (status, from_copy, copy_nonce) = api
+        .create_match(&catalog, &edited["wordList"], owner_access(&copy), None)
+        .await;
     assert_eq!(status, 200, "{from_copy}");
     api.stop().await;
 
@@ -1269,13 +1662,17 @@ async fn started_matches_keep_their_word_list_revision_after_edit_unshare_delete
     let saved = api.save("Pinned pairs", &pairs()).await;
     let kept = api.save("Kept list", "CAT\n").await;
     let share = api.share(&saved).await;
-    let (status, pinned, pinned_nonce) = api.create_match(&catalog, &saved.word_list, None).await;
+    let (status, pinned, pinned_nonce) = api
+        .create_match(&catalog, &saved.word_list, owner_access(&saved), None)
+        .await;
     assert_eq!(status, 200, "{pinned}");
     let pinned_id = pinned["matchId"].as_str().unwrap().to_owned();
 
     let (status, v2) = api.update(&saved, "Pinned v2", REJECTING_WORDS).await;
     assert_eq!(status, 200, "{v2}");
-    let (status, edited, edited_nonce) = api.create_match(&catalog, &v2["wordList"], None).await;
+    let (status, edited, edited_nonce) = api
+        .create_match(&catalog, &v2["wordList"], owner_access(&saved), None)
+        .await;
     assert_eq!(status, 200, "{edited}");
     let edited_id = edited["matchId"].as_str().unwrap().to_owned();
     let (status, _) = api.owner(&saved, "unshare").await;
@@ -1283,7 +1680,9 @@ async fn started_matches_keep_their_word_list_revision_after_edit_unshare_delete
     let (status, _) = api.owner(&saved, "delete").await;
     assert!(matches!(status, 200 | 204));
     for identity in [&saved.word_list, &v2["wordList"]] {
-        let (status, body, _) = api.create_match(&catalog, identity, None).await;
+        let (status, body, _) = api
+            .create_match(&catalog, identity, owner_access(&saved), None)
+            .await;
         assert_eq!(
             (status, body),
             (400, json!({"error":"unknown-profile","profile":"wordList"})),
@@ -1373,16 +1772,18 @@ async fn concurrent_lists_and_matches_stay_isolated() {
     let ids: BTreeSet<_> = lists.iter().map(|saved| saved.id.clone()).collect();
     assert_eq!(ids.len(), 4);
     let (ra, rb, rc, rd) = tokio::join!(
-        api.create_match(&catalog, &lists[0].word_list, None),
-        api.create_match(&catalog, &lists[1].word_list, None),
+        api.create_match(&catalog, &lists[0].word_list, owner_access(&lists[0]), None),
+        api.create_match(&catalog, &lists[1].word_list, owner_access(&lists[1]), None),
         api.create_match(
             &catalog,
             &lists[2].word_list,
+            owner_access(&lists[2]),
             Some("acceptance-valued-tiles")
         ),
         api.create_match(
             &catalog,
             &lists[3].word_list,
+            owner_access(&lists[3]),
             Some("acceptance-valued-tiles")
         ),
     );
@@ -1416,14 +1817,16 @@ async fn concurrent_lists_and_matches_stay_isolated() {
 #[tokio::test]
 async fn harness_self_check_recovers_a_catalog_match_without_the_library_key() {
     let root = tempfile::tempdir().unwrap();
-    let api = Api::start_with(root.path(), false).await;
+    let api = Api::start_with(root.path(), false, &[]).await;
     let catalog = api.catalog().await;
     let words = identity_of(&catalog, "wordLists", "acceptance-pairs");
-    let (status, join, _) = api.create_match(&catalog, &words, Some(UMLAUT_TILES)).await;
+    let (status, join, _) = api
+        .create_match(&catalog, &words, None, Some(UMLAUT_TILES))
+        .await;
     assert_eq!(status, 200, "{join}");
     let match_id = join["matchId"].as_str().unwrap().to_owned();
     api.stop().await;
-    let api = Api::start_with(root.path(), false).await;
+    let api = Api::start_with(root.path(), false, &[]).await;
     let (status, body) = api.get(&format!("/games/{match_id}")).await;
     assert_eq!(
         status, 200,
