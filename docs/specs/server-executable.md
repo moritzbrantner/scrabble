@@ -107,7 +107,15 @@ square-board profile independently, plus advanced rack/scoring/exchange/player
 rules. See [the catalog and initialization contract](predefined-match-setup.md).
 `SCRABBLE_PROFILE_CATALOG_FILE` points to the strict source catalog; relative
 word paths resolve beside that file. Without a catalog, the existing deployment
-configuration remains available, including unchanged untouched v2 creation.
+configuration remains available, including unchanged untouched v2 creation. A
+catalog with `"includeBuiltin": true` starts from those built-in profiles (the
+deployment word list, default and CH/SCH tiles, built-in square and hex boards and
+their default selection) and appends its own rows; `builtinWordListLabel` names the
+built-in word list, and `defaultSelection` and `boardProfiles` become optional. Without
+`includeBuiltin` the catalog must list every kind and its `defaultSelection`. Source
+names stay unique and each kind holds 1 to 32 rows, built-in rows included. The
+generated word-list presets use this form (#153; see
+[word-list presets](production-deployment.md#word-list-presets)).
 Explicit edits use configured v3 creation and an opaque `p_` match ID.
 
 When no operator catalog is configured and the deployment tiles exactly match

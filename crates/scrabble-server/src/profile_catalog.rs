@@ -121,10 +121,22 @@ struct DefaultNames {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct SourceCatalog {
     version: u8,
+    /// Starts from the built-in profiles of the deployment dictionary and ruleset, so an
+    /// operator adds presets (#153) without restating the built-in boards and tiles.
+    #[serde(default)]
+    include_builtin: bool,
+    /// Label of the built-in deployment word list; only with `includeBuiltin`.
+    #[serde(default)]
+    builtin_word_list_label: Option<String>,
+    #[serde(default)]
     word_lists: Vec<WordSource>,
+    #[serde(default)]
     tile_profiles: Vec<TileSource>,
+    #[serde(default)]
     board_profiles: Vec<BoardSource>,
-    default_selection: DefaultNames,
+    /// Required without `includeBuiltin`; otherwise defaults to the built-in selection.
+    #[serde(default)]
+    default_selection: Option<DefaultNames>,
 }
 
 pub(crate) fn read_bounded(path: &Path, limit: u64) -> ErrorResult<Vec<u8>> {
@@ -160,6 +172,205 @@ fn validate_rows<'a>(
     Ok(())
 }
 
+type Profiles = (
+    Vec<Named<WordListProfile>>,
+    Vec<Named<TileProfile>>,
+    Vec<Named<BoardProfile>>,
+    DefaultNames,
+);
+/// The built-in profiles of the deployment dictionary and ruleset.
+fn builtin(legacy: &Ruleset, dictionary: &WordList) -> ErrorResult<Profiles> {
+    let words = WordListProfile::new(dictionary.clone())?;
+    let tiles = TileProfile::new(legacy.identity.clone(), legacy.tiles.clone())?;
+    // Offer centered, smaller square boards without inventing a second rules engine.
+    // Keep the original profile as the untouched default for v2 creation/recovery.
+    let mut boards = Vec::new();
+    for size in (5..legacy.board_size).step_by(2) {
+        let name = format!("builtin-square-{size}");
+        if name == legacy.identity.name {
+            continue;
+        }
+        let offset = usize::from((legacy.board_size - size) / 2);
+        let original_size = usize::from(legacy.board_size);
+        let side = usize::from(size);
+        let premiums = (0..side)
+            .flat_map(|row| {
+                (0..side).map(move |column| {
+                    legacy.premiums[(row + offset) * original_size + column + offset]
+                })
+            })
+            .collect();
+        boards.push(Named {
+            label: format!("Square {size} × {size}"),
+            profile: BoardProfile::new(
+                ContentIdentity {
+                    name,
+                    revision: "1".into(),
+                },
+                size,
+                premiums,
+            )?,
+        });
+    }
+    boards.push(Named {
+        label: "Default board".into(),
+        profile: BoardProfile::new(
+            legacy.identity.clone(),
+            legacy.board_size,
+            legacy.premiums.clone(),
+        )?,
+    });
+    for (name, label, policy) in [
+        (
+            "builtin-hex-all-word",
+            "Hex all-word",
+            PremiumPolicy::AllWord,
+        ),
+        (
+            "builtin-hex-main-word",
+            "Hex main-word-only",
+            PremiumPolicy::MainWordOnly,
+        ),
+    ] {
+        for (suffix, metric_label, metric) in [
+            ("", "tiles", WordLengthMetric::Tiles),
+            ("-letters", "letters", WordLengthMetric::Letters),
+        ] {
+            let mut premiums = vec![Premium::Normal; 37];
+            // Row-major on-board cells of the radius-three board.
+            premiums[18] = Premium::DoubleWord;
+            // Interior (3, 2) remains available for a later crossing-word premium.
+            premiums[17] = Premium::DoubleWord;
+            boards.push(Named {
+                label: format!("{label} ({metric_label})"),
+                profile: BoardProfile::with_geometry(
+                    ContentIdentity {
+                        name: format!("{name}{suffix}"),
+                        revision: "1".into(),
+                    },
+                    7,
+                    premiums,
+                    BoardShape::Hexagon,
+                    policy,
+                    metric,
+                )?,
+            });
+        }
+    }
+    let names = DefaultNames {
+        word_list: words.identity().name.clone(),
+        tile: tiles.identity().name.clone(),
+        board: legacy.identity.name.clone(),
+    };
+    let mut tile_profiles = vec![Named {
+        label: "Default tiles".into(),
+        profile: tiles,
+    }];
+    // This preset extends the known English distribution, never an operator's
+    // custom alphabet. Its immutable identity covers all counts and values.
+    let multiletter_name = "builtin-english-ch-sch";
+    if legacy.tiles == english_fixture().tiles && legacy.identity.name != multiletter_name {
+        let mut tiles = legacy.tiles.clone();
+        // Rare combined faces retain the summed value of their ordinary letters.
+        for (letters, count, value) in [("CH", 2, 7), ("SCH", 1, 8)] {
+            tiles.push(TileDefinition {
+                face: TileFace::Letters {
+                    letters: letters.into(),
+                },
+                count,
+                value,
+            });
+        }
+        tile_profiles.push(Named {
+            label: "English + CH / SCH".into(),
+            profile: TileProfile::new(
+                ContentIdentity {
+                    name: multiletter_name.into(),
+                    revision: "1".into(),
+                },
+                tiles,
+            )?,
+        });
+    }
+    Ok((
+        vec![Named {
+            label: dictionary.identity().name.clone(),
+            profile: words,
+        }],
+        tile_profiles,
+        boards,
+        names,
+    ))
+}
+fn from_file(path: &Path, legacy: &Ruleset, dictionary: &WordList) -> ErrorResult<Profiles> {
+    let raw: SourceCatalog = serde_json::from_slice(&read_bounded(path, 1024 * 1024)?)?;
+    if raw.version != 1 {
+        return Err("unsupported catalog version".into());
+    }
+    let (mut words, mut tiles, mut boards, builtin_names) = if raw.include_builtin {
+        let (mut words, tiles, boards, names) = builtin(legacy, dictionary)?;
+        if let (Some(label), Some(row)) = (raw.builtin_word_list_label, words.first_mut()) {
+            row.label = label;
+        }
+        (words, tiles, boards, Some(names))
+    } else {
+        if raw.builtin_word_list_label.is_some() {
+            return Err("builtinWordListLabel requires includeBuiltin".into());
+        }
+        (Vec::new(), Vec::new(), Vec::new(), None)
+    };
+    let directory = path.parent().unwrap_or(Path::new("."));
+    let mut total = words
+        .iter()
+        .map(|row| row.profile.content().0.len())
+        .sum::<usize>();
+    for row in raw.word_lists {
+        let bytes = read_bounded(&directory.join(row.file), 64 * 1024 * 1024)?;
+        total = total
+            .checked_add(bytes.len())
+            .ok_or("catalog words exceed supported size")?;
+        if total > 64 * 1024 * 1024 {
+            return Err("catalog words exceed 64 MiB total".into());
+        }
+        let source = WordList::from_text(row.identity, std::str::from_utf8(&bytes)?)?;
+        words.push(Named {
+            label: row.label,
+            profile: WordListProfile::new(source)?,
+        });
+    }
+    for r in raw.tile_profiles {
+        tiles.push(Named {
+            label: r.label,
+            profile: TileProfile::new(r.identity, r.tiles)?,
+        });
+    }
+    for r in raw.board_profiles {
+        boards.push(Named {
+            label: r.label,
+            profile: BoardProfile::with_geometry(
+                r.identity,
+                r.board_size,
+                r.premiums,
+                r.board_shape,
+                r.premium_policy,
+                r.main_word_length,
+            )?,
+        });
+    }
+    validate_rows(words.iter().map(|r| (r.label.as_str(), r.profile.source())))?;
+    validate_rows(tiles.iter().map(|r| (r.label.as_str(), r.profile.source())))?;
+    validate_rows(
+        boards
+            .iter()
+            .map(|r| (r.label.as_str(), r.profile.source())),
+    )?;
+    let names = raw
+        .default_selection
+        .or(builtin_names)
+        .ok_or("catalog requires a defaultSelection")?;
+    Ok((words, tiles, boards, names))
+}
+
 pub(crate) struct ProfileCatalog {
     words: Vec<Named<WordListProfile>>,
     tiles: Vec<Named<TileProfile>>,
@@ -169,193 +380,9 @@ pub(crate) struct ProfileCatalog {
 }
 impl ProfileCatalog {
     pub fn load(path: Option<&Path>, legacy: &Ruleset, dictionary: &WordList) -> ErrorResult<Self> {
-        let (words, tiles, boards, names) = if let Some(path) = path {
-            let raw: SourceCatalog = serde_json::from_slice(&read_bounded(path, 1024 * 1024)?)?;
-            if raw.version != 1 {
-                return Err("unsupported catalog version".into());
-            }
-            validate_rows(
-                raw.word_lists
-                    .iter()
-                    .map(|r| (r.label.as_str(), &r.identity)),
-            )?;
-            validate_rows(
-                raw.tile_profiles
-                    .iter()
-                    .map(|r| (r.label.as_str(), &r.identity)),
-            )?;
-            validate_rows(
-                raw.board_profiles
-                    .iter()
-                    .map(|r| (r.label.as_str(), &r.identity)),
-            )?;
-            let directory = path.parent().unwrap_or(Path::new("."));
-            let mut words = Vec::new();
-            let mut total = 0_usize;
-            for row in raw.word_lists {
-                let bytes = read_bounded(&directory.join(row.file), 64 * 1024 * 1024)?;
-                total = total
-                    .checked_add(bytes.len())
-                    .ok_or("catalog words exceed supported size")?;
-                if total > 64 * 1024 * 1024 {
-                    return Err("catalog words exceed 64 MiB total".into());
-                }
-                let source = WordList::from_text(row.identity, std::str::from_utf8(&bytes)?)?;
-                words.push(Named {
-                    label: row.label,
-                    profile: WordListProfile::new(source)?,
-                });
-            }
-            let tiles = raw
-                .tile_profiles
-                .into_iter()
-                .map(|r| {
-                    Ok(Named {
-                        label: r.label,
-                        profile: TileProfile::new(r.identity, r.tiles)?,
-                    })
-                })
-                .collect::<ErrorResult<Vec<_>>>()?;
-            let boards = raw
-                .board_profiles
-                .into_iter()
-                .map(|r| {
-                    Ok(Named {
-                        label: r.label,
-                        profile: BoardProfile::with_geometry(
-                            r.identity,
-                            r.board_size,
-                            r.premiums,
-                            r.board_shape,
-                            r.premium_policy,
-                            r.main_word_length,
-                        )?,
-                    })
-                })
-                .collect::<ErrorResult<Vec<_>>>()?;
-            (words, tiles, boards, raw.default_selection)
-        } else {
-            let words = WordListProfile::new(dictionary.clone())?;
-            let tiles = TileProfile::new(legacy.identity.clone(), legacy.tiles.clone())?;
-            // Offer centered, smaller square boards without inventing a second rules engine.
-            // Keep the original profile as the untouched default for v2 creation/recovery.
-            let mut boards = Vec::new();
-            for size in (5..legacy.board_size).step_by(2) {
-                let name = format!("builtin-square-{size}");
-                if name == legacy.identity.name {
-                    continue;
-                }
-                let offset = usize::from((legacy.board_size - size) / 2);
-                let original_size = usize::from(legacy.board_size);
-                let side = usize::from(size);
-                let premiums = (0..side)
-                    .flat_map(|row| {
-                        (0..side).map(move |column| {
-                            legacy.premiums[(row + offset) * original_size + column + offset]
-                        })
-                    })
-                    .collect();
-                boards.push(Named {
-                    label: format!("Square {size} × {size}"),
-                    profile: BoardProfile::new(
-                        ContentIdentity {
-                            name,
-                            revision: "1".into(),
-                        },
-                        size,
-                        premiums,
-                    )?,
-                });
-            }
-            boards.push(Named {
-                label: "Default board".into(),
-                profile: BoardProfile::new(
-                    legacy.identity.clone(),
-                    legacy.board_size,
-                    legacy.premiums.clone(),
-                )?,
-            });
-            for (name, label, policy) in [
-                (
-                    "builtin-hex-all-word",
-                    "Hex all-word",
-                    PremiumPolicy::AllWord,
-                ),
-                (
-                    "builtin-hex-main-word",
-                    "Hex main-word-only",
-                    PremiumPolicy::MainWordOnly,
-                ),
-            ] {
-                for (suffix, metric_label, metric) in [
-                    ("", "tiles", WordLengthMetric::Tiles),
-                    ("-letters", "letters", WordLengthMetric::Letters),
-                ] {
-                    let mut premiums = vec![Premium::Normal; 37];
-                    // Row-major on-board cells of the radius-three board.
-                    premiums[18] = Premium::DoubleWord;
-                    // Interior (3, 2) remains available for a later crossing-word premium.
-                    premiums[17] = Premium::DoubleWord;
-                    boards.push(Named {
-                        label: format!("{label} ({metric_label})"),
-                        profile: BoardProfile::with_geometry(
-                            ContentIdentity {
-                                name: format!("{name}{suffix}"),
-                                revision: "1".into(),
-                            },
-                            7,
-                            premiums,
-                            BoardShape::Hexagon,
-                            policy,
-                            metric,
-                        )?,
-                    });
-                }
-            }
-            let names = DefaultNames {
-                word_list: words.identity().name.clone(),
-                tile: tiles.identity().name.clone(),
-                board: legacy.identity.name.clone(),
-            };
-            let mut tile_profiles = vec![Named {
-                label: "Default tiles".into(),
-                profile: tiles,
-            }];
-            // This preset extends the known English distribution, never an operator's
-            // custom alphabet. Its immutable identity covers all counts and values.
-            let multiletter_name = "builtin-english-ch-sch";
-            if legacy.tiles == english_fixture().tiles && legacy.identity.name != multiletter_name {
-                let mut tiles = legacy.tiles.clone();
-                // Rare combined faces retain the summed value of their ordinary letters.
-                for (letters, count, value) in [("CH", 2, 7), ("SCH", 1, 8)] {
-                    tiles.push(TileDefinition {
-                        face: TileFace::Letters {
-                            letters: letters.into(),
-                        },
-                        count,
-                        value,
-                    });
-                }
-                tile_profiles.push(Named {
-                    label: "English + CH / SCH".into(),
-                    profile: TileProfile::new(
-                        ContentIdentity {
-                            name: multiletter_name.into(),
-                            revision: "1".into(),
-                        },
-                        tiles,
-                    )?,
-                });
-            }
-            (
-                vec![Named {
-                    label: dictionary.identity().name.clone(),
-                    profile: words,
-                }],
-                tile_profiles,
-                boards,
-                names,
-            )
+        let (words, tiles, boards, names) = match path {
+            Some(path) => from_file(path, legacy, dictionary)?,
+            None => builtin(legacy, dictionary)?,
         };
         let selection = Selection {
             word_list: words
