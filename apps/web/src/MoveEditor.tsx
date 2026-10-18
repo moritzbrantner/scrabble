@@ -87,8 +87,13 @@ export function MoveEditor({
   const reconciled = reconcile(snapshot, state.draft);
   const current = reconciled.draft;
   const stale = current !== state.draft;
-  const selected = stale ? undefined : state.selected;
-  const blank = stale ? undefined : state.blank;
+  // A kept pre-move also keeps an in-progress tile selection, so a turn that arrives
+  // between choosing a rack tile and its square does not swallow the placement.
+  const owned = (tileId: string | undefined) =>
+    tileId !== undefined && snapshot.own_rack.tiles.some((tile) => tile.id === tileId);
+  const kept = !stale || reconciled.reset === undefined;
+  const selected = kept && owned(state.selected) ? state.selected : undefined;
+  const blank = kept && owned(state.blank?.tileId) ? state.blank : undefined;
   const pending = !stale && state.pending !== undefined;
   const enabled = canAct && !pending;
   const editable = (canAct || canPrepare) && !pending;
@@ -181,14 +186,18 @@ export function MoveEditor({
       const reset = reconciled.reset;
       setState(
         reset === undefined
-          ? { draft: current }
+          ? {
+              draft: current,
+              ...(selected === undefined ? {} : { selected }),
+              ...(blank === undefined ? {} : { blank }),
+            }
           : {
               draft: current,
               message: copy(reset === "overlap" ? "editor.premoveOverlap" : "editor.cleared"),
             },
       );
     }
-  }, [current, stale, reconciled.reset]);
+  }, [current, stale, reconciled.reset, selected, blank]);
   useEffect(() => {
     persistDraft(persistKey, state.draft);
   }, [persistKey, state.draft]);
