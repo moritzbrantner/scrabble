@@ -224,11 +224,15 @@ test("an accepted move on any drafted square clears the entire pre-move", () => 
 
 test("same-device persistence restores only a compatible draft for the same match and player", () => {
   const store = new Map<string, string>();
-  globalThis.localStorage = {
-    getItem: (key: string) => store.get(key) ?? null,
-    setItem: (key: string, value: string) => void store.set(key, value),
-    removeItem: (key: string) => void store.delete(key),
-  } as Storage;
+  // Some runtimes expose a read-only global; replace it only for this test.
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => void store.set(key, value),
+      removeItem: (key: string) => void store.delete(key),
+    } as Storage,
+  });
   const waiting = waitingAt("1");
   const key = premoveKey(waiting);
   const draft = premove(waiting, 9, [7, 8]);
