@@ -283,9 +283,6 @@ function TileProfileEditor({
             <th scope="col">{t("tileEditor.face")}</th>
             <th scope="col">{t("tileEditor.count")}</th>
             <th scope="col">{t("tileEditor.points")}</th>
-            <th scope="col">
-              <span className="visually-hidden">{t("tileEditor.actions")}</span>
-            </th>
           </tr>
         </thead>
         <tbody>
@@ -307,7 +304,7 @@ function TileProfileEditor({
                 <td>
                   <input
                     type="number"
-                    min={1}
+                    min={0}
                     step={1}
                     aria-label={t("tileEditor.countRow", position)}
                     value={row.count}
@@ -323,18 +320,6 @@ function TileProfileEditor({
                     value={row.value}
                     onChange={(event) => setRow(index, "value", event.currentTarget.value)}
                   />
-                </td>
-                <td>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    aria-label={t("tileEditor.remove", position)}
-                    onClick={() =>
-                      update({ ...draft, rows: draft.rows.filter((_, at) => at !== index) })
-                    }
-                  >
-                    {t("tileEditor.removeShort")}
-                  </Button>
                 </td>
               </tr>
             );
