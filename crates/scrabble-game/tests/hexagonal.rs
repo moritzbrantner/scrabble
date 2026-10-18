@@ -881,10 +881,11 @@ fn square_rulesets_states_and_snapshots_stay_byte_identical() {
         (canonical.len(), fnv1a(&canonical)),
         (11704, 0x12c1_ef89_0fdb_ffe1)
     );
+    // Only the retired public `"preview":null` slot changed (#155); canonical bytes are unchanged.
     let snapshot = serde_json::to_vec(&state.public_snapshot()).unwrap();
     assert_eq!(
         (snapshot.len(), fnv1a(&snapshot)),
-        (4847, 0x89fc_1cd4_4238_0b7a)
+        (4832, 0x07c9_8abe_1d82_700f)
     );
 }
 

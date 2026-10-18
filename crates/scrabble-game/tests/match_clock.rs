@@ -513,7 +513,13 @@ fn expiry_applies_automatic_pass_exactly_once_and_rejects_later_moves() {
         1_000,
     )
     .unwrap();
-    assert!(session.public_snapshot().preview.is_some());
+    assert!(
+        session
+            .player_snapshot(PlayerId::new(P1))
+            .unwrap()
+            .own_preview
+            .is_some()
+    );
 
     // At and after the expiry instant every turn command is too late, deterministically.
     let before = evidence(&session);
@@ -558,8 +564,14 @@ fn expiry_applies_automatic_pass_exactly_once_and_rejects_later_moves() {
     // Exactly at expiry: one automatic pass through ordinary turn completion.
     timeout(&mut session, 0, 65_000).unwrap();
     playing(&session, P2, 1);
+    assert_eq!(
+        session
+            .player_snapshot(PlayerId::new(P1))
+            .unwrap()
+            .own_preview,
+        None
+    );
     let snapshot = session.public_snapshot();
-    assert_eq!(snapshot.preview, None);
     assert_eq!(snapshot.history.len(), 1);
     let turn = &snapshot.history[0];
     assert_eq!(turn.turn, TurnId::new(0));
@@ -1261,13 +1273,13 @@ fn untimed_matches_stay_byte_identical_and_ignore_instants() {
         );
         assert_eq!(
             pinned(&serde_json::to_vec(&session.public_snapshot()).unwrap()),
-            (5016, 0x61e4_7b4e_2f6f_4e15)
+            (5001, 0xfc3c_afdd_86c2_1bba)
         );
         assert_eq!(
             pinned(
                 &serde_json::to_vec(&session.player_snapshot(PlayerId::new(P1)).unwrap()).unwrap()
             ),
-            (5415, 0x2b49_6271_c836_fd46)
+            (5400, 0x10c1_d0ac_1873_1d5b)
         );
 
         // Commit fixture.
@@ -1296,7 +1308,7 @@ fn untimed_matches_stay_byte_identical_and_ignore_instants() {
                 .unwrap()
                 .contains("clock")
         );
-        assert_eq!(pinned(&snapshot), (3109, 0x12f3_0616_873d_3d29));
+        assert_eq!(pinned(&snapshot), (3094, 0x0cf1_eb4d_acc4_f32e));
 
         // No timeout exists for an untimed match.
         let before = evidence(&session);

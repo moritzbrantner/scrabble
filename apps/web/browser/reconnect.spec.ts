@@ -74,7 +74,7 @@ test("real board and phone resume interrupted connections without changing autho
         .getByRole("button", { name: new RegExp(`^Row 8, column ${8 + index}:`) })
         .click();
     }
-    await expect(page.locator(".tentative-tile")).toHaveCount(2);
+    await expect(page.locator(".tentative-tile")).toHaveCount(0);
     for (const client of [page, first]) {
       await client
         .getByRole("combobox", { name: "Interface language", exact: true })
@@ -102,7 +102,7 @@ test("real board and phone resume interrupted connections without changing autho
     expect(firstState()?.public.phase).toEqual(before?.public.phase);
     expect(secondState()?.own_rack).toEqual(other);
     await expect(editor.locator(".tentative-square")).toHaveCount(2);
-    await expect(page.locator(".tentative-tile")).toHaveCount(2);
+    await expect(page.locator(".tentative-tile")).toHaveCount(0);
     await editor.getByRole("button", { name: "Commit move", exact: true }).click();
     await expect.poll(() => boardState()?.public.board.length).toBe(2);
     await expect

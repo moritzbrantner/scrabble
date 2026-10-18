@@ -921,7 +921,6 @@ impl GameState {
                 .collect(),
             remaining_tiles: self.bag.len() as u16,
             history: self.history.clone(),
-            preview: None,
             clock: self.public_clock(),
         }
     }
@@ -958,6 +957,7 @@ impl GameState {
                     })
                     .collect(),
             },
+            own_preview: None,
         })
     }
     pub fn verify_tile_conservation(&self) -> Result<(), StateError> {
@@ -1055,7 +1055,10 @@ mod turn_counter_tests {
                 )
                 .unwrap();
             let before = session.state().canonical_bytes().unwrap();
-            let preview = session.public_snapshot().preview;
+            let preview = session
+                .player_snapshot(PlayerId::new(1))
+                .unwrap()
+                .own_preview;
             let action = if commit {
                 Command::Commit {
                     placements: placements.clone(),
@@ -1078,7 +1081,13 @@ mod turn_counter_tests {
                     }
                 );
                 assert_eq!(session.state().canonical_bytes().unwrap(), before);
-                assert_eq!(session.public_snapshot().preview, preview);
+                assert_eq!(
+                    session
+                        .player_snapshot(PlayerId::new(1))
+                        .unwrap()
+                        .own_preview,
+                    preview
+                );
                 session.state().verify_tile_conservation().unwrap();
             }
         }

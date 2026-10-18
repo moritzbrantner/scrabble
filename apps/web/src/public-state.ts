@@ -284,14 +284,6 @@ const snapshotFields = z.strictObject({
   remaining_tiles: z.int().min(0).max(65535),
   history: z.array(publicTurn).max(24),
   host: z.strictObject({ id: id.nullable() }).optional(),
-  preview: z
-    .strictObject({
-      player_id: id,
-      turn: id,
-      tiles: z.array(tile).max(15),
-      evaluation: placementEvaluation.optional(),
-    })
-    .nullable(),
 });
 export const publicSnapshot = snapshotFields.refine((snapshot) => {
   const bound = maxWordLength(snapshot.configuration);
@@ -312,5 +304,14 @@ export const playerSnapshot = z.strictObject({
     player_id: id,
     tiles: z.array(z.strictObject({ id, face: tileFace })).max(15),
   }),
+  /** Echo of this player's own proposed placement; never public (Decision 2.6). */
+  own_preview: z
+    .strictObject({
+      player_id: id,
+      turn: id,
+      tiles: z.array(tile).max(15),
+      evaluation: placementEvaluation.optional(),
+    })
+    .optional(),
 });
 export type PlayerSnapshot = z.infer<typeof playerSnapshot>;

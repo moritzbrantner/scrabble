@@ -276,7 +276,6 @@ fn board_and_phone_projections_have_exact_public_boundaries_and_rotated_epochs_s
                 "host",
                 "phase",
                 "players",
-                "preview",
                 "remaining_tiles",
                 "revision",
                 "ruleset",
@@ -319,6 +318,78 @@ fn board_and_phone_projections_have_exact_public_boundaries_and_rotated_epochs_s
     assert_eq!(runtime.snapshot().unwrap(), canonical);
     assert_eq!(runtime.replay_log().unwrap().records().len(), records);
     runtime.submit_command(2, 2, 2, &pass).unwrap();
+}
+
+/// Decision 2.6 (#155): a proposed placement, including one sent by a legacy client's
+/// obsolete preview command, never reaches the shared board or another player's wire view.
+#[test]
+fn legacy_preview_commands_stay_private_to_the_proposing_player() {
+    let (_directory, factory, id, mut runtime) = setup();
+    let game = game_id(&id);
+    let canonical = runtime.snapshot().unwrap();
+    let board_view = runtime.snapshot_for(1).unwrap();
+    let peer_view = runtime.snapshot_for(3).unwrap();
+    let rack = projected(&runtime, 2).own_rack.tiles;
+    let placements: Vec<_> = rack
+        .iter()
+        .take(2)
+        .enumerate()
+        .map(|(index, tile)| Placement {
+            tile_id: tile.id,
+            coordinate: Coordinate::new(7, 7 + index as u8).unwrap(),
+            blank_as: matches!(tile.face, scrabble_game::ruleset::TileFace::Blank {})
+                .then_some('A'),
+        })
+        .collect();
+    runtime
+        .submit_command(
+            2,
+            1,
+            2,
+            &serde_json::to_vec(&envelope(
+                game,
+                2,
+                2,
+                Command::Preview {
+                    placements: placements.clone(),
+                },
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+    // Own echo only; every other projection and the canonical state are byte-identical.
+    let own = projected(&runtime, 2).own_preview.unwrap();
+    assert_eq!(own.player_id, PlayerId::new(2));
+    assert_eq!(own.tiles.len(), placements.len());
+    assert_eq!(runtime.snapshot_for(1).unwrap(), board_view);
+    assert_eq!(runtime.snapshot_for(3).unwrap(), peer_view);
+    assert_eq!(runtime.snapshot().unwrap(), canonical);
+    for observer in [1, 3] {
+        let wire: Value =
+            serde_json::from_slice(&runtime.snapshot_for(observer).unwrap().payload).unwrap();
+        assert!(wire.get("own_preview").is_none());
+        assert!(wire["public"].get("preview").is_none());
+        assert!(wire["public"]["board"].as_array().unwrap().is_empty());
+    }
+    // Disconnect, reconnect and recovery cannot resurrect it for anyone.
+    assert!(runtime.disconnect(2, 1));
+    runtime
+        .reconnect(ReconnectToken([2; 16]), ReconnectToken([6; 16]))
+        .unwrap();
+    assert!(projected(&runtime, 2).own_preview.is_none());
+    assert_eq!(runtime.snapshot_for(3).unwrap(), peer_view);
+    runtime.freeze_for_recovery();
+    let restored = MatchRuntime::restore_from_recovery(
+        factory.create(&id).unwrap(),
+        runtime.recovery_image().unwrap(),
+    )
+    .unwrap();
+    for player in 1..=3 {
+        let wire: Value =
+            serde_json::from_slice(&restored.snapshot_for(player).unwrap().payload).unwrap();
+        assert!(wire.get("own_preview").is_none());
+        assert!(wire["public"].get("preview").is_none());
+    }
 }
 
 #[test]

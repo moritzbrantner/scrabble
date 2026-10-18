@@ -2,7 +2,7 @@
 use crate::dictionary::{Dictionary, authored_fixture};
 use crate::identity::{GameId, PlayerId, TurnId};
 use crate::protocol::{
-    Command, CommandEnvelope, Phase, PlayerSnapshot, PublicPreview, PublicSnapshot, TurnAction,
+    Command, CommandEnvelope, Phase, PlayerSnapshot, PrivatePreview, PublicSnapshot, TurnAction,
 };
 use crate::ruleset::ExpiryConsequence;
 use crate::state::{ClockError, GameState, StateError};
@@ -38,7 +38,7 @@ pub struct GameSession {
     state: GameState,
     dictionary: Arc<dyn Dictionary>,
     last_sequences: BTreeMap<PlayerId, u32>,
-    preview: Option<PublicPreview>,
+    preview: Option<PrivatePreview>,
     // Reconstructed by replay; excluded from canonical evidence to preserve existing pass logs.
     last_timeout: Option<crate::protocol::ClockTimeout>,
 }
@@ -68,7 +68,6 @@ impl GameSession {
     }
     pub fn public_snapshot(&self) -> PublicSnapshot {
         let mut snapshot = self.state.public_snapshot();
-        snapshot.preview = self.preview.clone();
         if let Some(clock) = &mut snapshot.clock {
             clock.last_timeout = self.last_timeout.clone();
         }
@@ -76,7 +75,11 @@ impl GameSession {
     }
     pub fn player_snapshot(&self, player: PlayerId) -> Result<PlayerSnapshot, StateError> {
         let mut snapshot = self.state.player_snapshot(player)?;
-        snapshot.public.preview = self.preview.clone();
+        snapshot.own_preview = self
+            .preview
+            .as_ref()
+            .filter(|preview| preview.player_id == player)
+            .cloned();
         if let Some(clock) = &mut snapshot.public.clock {
             clock.last_timeout = self.last_timeout.clone();
         }
@@ -223,7 +226,7 @@ impl GameSession {
                         self.preview = if tiles.is_empty() {
                             None
                         } else {
-                            Some(PublicPreview {
+                            Some(PrivatePreview {
                                 player_id: player,
                                 turn: *turn,
                                 tiles,

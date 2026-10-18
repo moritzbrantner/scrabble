@@ -80,7 +80,7 @@ fn accepted_commit_scores_transfers_advances_and_clears_preview_once() {
             turn: TurnId::new(1)
         }
     );
-    assert!(snapshot.public.preview.is_none());
+    assert!(snapshot.own_preview.is_none());
     let canonical = session.state().canonical_bytes().unwrap();
     assert_eq!(
         session.apply(PlayerId::new(1), 3, &command),
@@ -110,7 +110,10 @@ fn dictionary_rejection_preserves_canonical_and_preview_and_allows_corrected_ret
         )
         .unwrap();
     let before = session.state().canonical_bytes().unwrap();
-    let preview = session.public_snapshot().preview;
+    let preview = session
+        .player_snapshot(PlayerId::new(1))
+        .unwrap()
+        .own_preview;
     let mut invalid = placements.clone();
     invalid[0].coordinate = placements[1].coordinate;
     invalid[1].coordinate = placements[0].coordinate;
@@ -132,7 +135,13 @@ fn dictionary_rejection_preserves_canonical_and_preview_and_allows_corrected_ret
         )))
     );
     assert_eq!(session.state().canonical_bytes().unwrap(), before);
-    assert_eq!(session.public_snapshot().preview, preview);
+    assert_eq!(
+        session
+            .player_snapshot(PlayerId::new(1))
+            .unwrap()
+            .own_preview,
+        preview
+    );
     session
         .apply(
             PlayerId::new(1),

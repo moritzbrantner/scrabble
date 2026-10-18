@@ -117,7 +117,6 @@ fn public_snapshot_has_no_private_fields_and_rejects_injected_racks() {
         }],
         remaining_tiles: 100,
         history: vec![],
-        preview: None,
     };
     let mut encoded = serde_json::to_value(&snapshot).unwrap();
     assert!(encoded.get("racks").is_none());
@@ -131,6 +130,10 @@ fn public_snapshot_has_no_private_fields_and_rejects_injected_racks() {
     assert!(serde_json::from_value::<PublicSnapshot>(encoded).is_err());
     let mut encoded = serde_json::to_value(&snapshot).unwrap();
     encoded["bag"] = json!(["Q"]);
+    assert!(serde_json::from_value::<PublicSnapshot>(encoded).is_err());
+    // Proposed placements are private (Decision 2.6); the public wire has no preview slot.
+    let mut encoded = serde_json::to_value(&snapshot).unwrap();
+    encoded["preview"] = serde_json::Value::Null;
     assert!(serde_json::from_value::<PublicSnapshot>(encoded).is_err());
 }
 

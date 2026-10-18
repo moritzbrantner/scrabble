@@ -16,9 +16,10 @@ board and compact phone controller show the actual hex layout and agree with the
 same authoritative match. Production-like browser evidence precedes merge; public
 acceptance after the exact deployment precedes completion of #96.
 
-Before commit, both board and player can inspect the authoritative main word,
+Before commit, the player can inspect the authoritative main word,
 length metric, deterministic tie-break explanation, each formed word's score and
-total. A preview cannot alter committed board, score or turn. Cancel clears only
+total. Decision 2.6 (#155) keeps this private: the shared board shows accepted
+moves only. A preview cannot alter committed board, score or turn. Cancel clears only
 the tentative draft/preview. Accepted results and their explanations remain
 consistent after reconnect and canonical replay. This contract does not prescribe
 an API endpoint, transport representation, UI wording or rendering technology.
@@ -118,7 +119,7 @@ it does not make arbitrary words valid.
 
 Before accepting each move the browser requires main word, selected metric,
 every formed word's score (including three separate AA entries on turn 2), and
-total on both actual shared board and actor. It checks no committed board,
+total on the actor; the shared board shows no analysis or tentative tile. It checks no committed board,
 player scores or phase change. A valid score preview is canceled, must disappear,
 and is recreated before turn 1. An off-center opening and an invalid crossing
 (A plus blank-as-T before turn 2) leave authority/rack/history intact and expose

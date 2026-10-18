@@ -342,7 +342,7 @@ test("a real match plays CH, A, T as CHAT and SCH, A through CH as SCHACH on who
     await expect(blankChoices).toHaveCount(0);
     await expect(adaEditor.locator(".tentative-square")).toHaveCount(0);
 
-    // Draft and shared-board preview: CH occupies one square and keeps its whole face.
+    // Private draft: CH occupies one square and keeps its whole face; the board stays committed-only.
     await placeByKeyboard(`CH, ${ch} points`, 7, 7);
     await placeByKeyboard(`A, ${valueOf(tiles, "A")} points`, 7, 8);
     await expect(
@@ -350,11 +350,8 @@ test("a real match plays CH, A, T as CHAT and SCH, A through CH as SCHACH on who
     ).toBeVisible();
     await expect(adaEditor.locator(".tentative-square")).toHaveCount(2);
     await expectFaceFits(adaEditor.locator(".tentative-square").first(), "CH", "desktop draft");
-    await expect(
-      page.getByRole("cell", { name: `Row 8, column 8: Tentative CH, ${ch} points`, exact: true }),
-    ).toBeVisible();
-    await expect(page.locator(".tentative-tile")).toHaveCount(2);
-    await expectFaceFits(page.locator(".tentative-tile").first(), "CH", "board preview");
+    await expect(page.getByRole("cell", { name: /Tentative/ })).toHaveCount(0);
+    await expect(page.locator(".tentative-tile")).toHaveCount(0);
     await attach(testInfo, page, "desktop-board-preview-ch.png");
     await attach(testInfo, ada, "desktop-draft-ch.png");
 
@@ -458,13 +455,7 @@ test("a real match plays CH, A, T as CHAT and SCH, A through CH as SCHACH on who
       "SCH",
       "mobile draft",
     );
-    await expect(
-      page.getByRole("cell", {
-        name: `Row 6, column 8: Tentative SCH, ${sch} points`,
-        exact: true,
-      }),
-    ).toBeVisible();
-    await expectFaceFits(page.locator(".tentative-tile").first(), "SCH", "board preview");
+    await expect(page.getByRole("cell", { name: /Tentative/ })).toHaveCount(0);
     await attach(testInfo, lin, "mobile-draft-sch.png");
     await linEditor.getByRole("button", { name: "Commit move", exact: true }).tap();
     const schach = score([

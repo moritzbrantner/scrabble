@@ -118,8 +118,8 @@ test("authoritative changes reset drafts while presence and previews preserve th
     public: {
       ...snapshot.public,
       players: snapshot.public.players.map((player) => ({ ...player, connected: false })),
-      preview: { player_id: "1", turn: "0", tiles: [] },
     },
+    own_preview: { player_id: "1", turn: "0", tiles: [] },
   };
   expect(reconcileDraft(presentation, draft)).toBe(draft);
   for (const next of [
