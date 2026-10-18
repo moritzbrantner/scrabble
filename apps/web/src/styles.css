@@ -288,6 +288,30 @@ body {
   background: var(--accent);
   border: 2px dashed var(--primary);
 }
+/* Drag sources own their gestures; empty squares still scroll the board. */
+.move-editor .phone-rack button,
+.move-editor .tentative-square {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.move-editor [data-dragging] {
+  opacity: 0.4;
+}
+.drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 50;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  pointer-events: none;
+  box-shadow: 0 4px 12px color-mix(in oklch, var(--foreground) 30%, transparent);
+}
+.drag-ghost[hidden] {
+  display: none;
+}
 .committed-square {
   font-weight: 700;
 }

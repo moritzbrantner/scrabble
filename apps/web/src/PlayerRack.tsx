@@ -1,4 +1,5 @@
 import { Button } from "@moritzbrantner/ui/client";
+import { type KeyboardEvent, type PointerEvent } from "react";
 
 import { useCopy } from "./preferences";
 import { faceClass } from "./tile-face";
@@ -18,6 +19,10 @@ export function PlayerRack({
     selected: string[];
     placed: string[];
     onSelect: (tileId: string) => void;
+    /** Starts a possible drag; a plain tap still selects through `onSelect`. */
+    onPointerDown?: (tileId: string, event: PointerEvent<HTMLButtonElement>) => void;
+    onKeyDown?: (tileId: string, event: KeyboardEvent<HTMLButtonElement>) => void;
+    dragging?: string;
   };
 }) {
   const { t, number } = useCopy();
@@ -34,7 +39,12 @@ export function PlayerRack({
             points: value ?? t("score.unknown"),
           });
           return (
-            <li key={tile.id} data-tile-id={tile.id} aria-label={description}>
+            <li
+              key={tile.id}
+              data-tile-id={tile.id}
+              data-dragging={selection?.dragging === tile.id ? true : undefined}
+              aria-label={description}
+            >
               {selection === undefined ? (
                 <span className={`rack-tile${blank ? " blank-tile" : ""}`} aria-hidden="true">
                   <span className={faceClass(letter)}>{letter}</span>
@@ -52,6 +62,12 @@ export function PlayerRack({
                   }
                   aria-pressed={selection.selected.includes(tile.id)}
                   onClick={() => selection.onSelect(tile.id)}
+                  onPointerDown={(event: PointerEvent<HTMLButtonElement>) =>
+                    selection.onPointerDown?.(tile.id, event)
+                  }
+                  onKeyDown={(event: KeyboardEvent<HTMLButtonElement>) =>
+                    selection.onKeyDown?.(tile.id, event)
+                  }
                 >
                   <span aria-hidden="true" className={faceClass(letter)}>
                     {letter}

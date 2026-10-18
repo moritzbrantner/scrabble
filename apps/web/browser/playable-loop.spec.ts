@@ -5,6 +5,7 @@ import { expect, test, type Page, type Locator } from "@playwright/test";
 
 import fixtures from "../src/fixtures/public.json" with { type: "json" };
 import { selectOpening } from "./game-fixture";
+import { touchDrag } from "./drag";
 import { observeSnapshots } from "./pages-observer";
 
 async function phoneVisual(page: Page, name: string) {
@@ -184,8 +185,24 @@ test("built Pages client plays consecutive turns through isolated phones", async
     await expect(page.getByRole("cell", { name: /: Committed / })).toHaveCount(0);
     expect(rackIds()).toEqual(initial);
     await openingEditor.getByRole("button", { name: "Cancel move", exact: true }).click();
-    await place(first, "T", 8);
-    await place(first, "A", 9);
+    // #157: compose the accepted opening by real touch drags from the rack.
+    for (const [letter, column] of [
+      ["T", 8],
+      ["A", 9],
+    ] as const) {
+      const region = first.getByRole("region", { name: "Move editor", exact: true });
+      const target = region.getByRole("button", { name: new RegExp(`^Row 8, column ${column}:`) });
+      await target.scrollIntoViewIfNeeded();
+      await touchDrag(
+        first,
+        first
+          .getByRole("list", { name: "Your rack", exact: true })
+          .getByRole("button", { name: new RegExp(`^${letter},`) })
+          .first(),
+        target,
+      );
+      await expect(target).toHaveAccessibleName(new RegExp(`tentative ${letter}$`));
+    }
     await expect.poll(() => firstState()?.own_preview?.tiles.length).toBe(2);
     await expect(page.locator(".tentative-tile, .tentative-square")).toHaveCount(0);
     await commitWithKeyboard(first);
