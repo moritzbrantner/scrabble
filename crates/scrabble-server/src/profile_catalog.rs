@@ -62,6 +62,7 @@ impl From<&Ruleset> for MatchRules {
             scoreless_turn_limit: rules.scoreless_turn_limit,
             minimum_players: rules.minimum_players,
             maximum_players: rules.maximum_players,
+            dictionary_hints: rules.dictionary_hints,
         }
     }
 }

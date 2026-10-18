@@ -5,7 +5,6 @@ import { type MoveDraft } from "./move-draft";
 export function draftEvaluation(snapshot: PlayerSnapshot, draft: MoveDraft) {
   const preview = snapshot.own_preview;
   if (
-    snapshot.public.configuration.board_shape !== "hexagon" ||
     snapshot.public.phase.kind !== "playing" ||
     preview?.player_id !== snapshot.own_rack.player_id ||
     preview.turn !== snapshot.public.phase.turn ||

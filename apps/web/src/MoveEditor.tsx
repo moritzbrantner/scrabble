@@ -5,6 +5,7 @@ import { copy, type Copy, type CopyKey } from "./copy";
 import { boardCells, containsCell, hexCellStyle, hexBoardStyle } from "./board-geometry";
 import { draftEvaluation } from "./hex-preview";
 import { MoveAnalysis } from "./MoveAnalysis";
+import { estimateScore } from "./score-estimate";
 import { boardCommands } from "./editor-commands";
 import { type CommandEnvelope, type TurnRejection } from "./game-protocol";
 import { useTouchInput } from "./input-capability";
@@ -151,7 +152,12 @@ export function MoveEditor({
   }, [exchanging, enabled]);
   const passButton = useRef<HTMLButtonElement>(null);
   const problem = draftProblem(snapshot, rules, current);
+  // Active turn: the server's private estimate (Decision 1.55). Waiting: a local,
+  // non-authoritative estimate without dictionary hints (Decision 1.54).
   const evaluation = canAct ? draftEvaluation(snapshot, current) : undefined;
+  const localEstimate =
+    !canAct && current.placements.length > 0 ? estimateScore(snapshot, rules, current) : undefined;
+  const hex = rules.board_shape === "hexagon";
   const awaitingAnalysis = rules.board_shape === "hexagon" && evaluation?.status !== "valid";
   const previewCallback = useRef(onPreview);
   const previewPaused = useRef(false);
@@ -616,8 +622,18 @@ export function MoveEditor({
           })}
         </div>
       </div>
-      {evaluation?.status === "valid" && <MoveAnalysis analysis={evaluation.analysis} preview />}
-      {evaluation?.status === "invalid" && (
+      {evaluation?.status === "valid" && (
+        <MoveAnalysis
+          analysis={evaluation.analysis}
+          preview
+          hex={hex}
+          note={rules.dictionary_hints === true ? "estimate.hintsValid" : "estimate.unchecked"}
+        />
+      )}
+      {localEstimate !== undefined && (
+        <MoveAnalysis analysis={localEstimate} preview hex={hex} note="estimate.premove" />
+      )}
+      {evaluation?.status === "invalid" && (hex || evaluation.problem === "invalid_words") && (
         <p role="status">
           {t(`hex.error.${evaluation.problem}`, { words: evaluation.words.join(", ") })}
         </p>

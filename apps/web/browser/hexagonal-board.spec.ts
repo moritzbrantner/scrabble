@@ -509,7 +509,9 @@ for (const policy of ["all_word", "main_word_only"] as const) {
                 { coordinate: { row: 2, column: 4 }, letter: "A", is_blank: false },
                 { coordinate: { row: 2, column: 5 }, letter: "T", is_blank: true },
               ],
-              evaluation: expect.objectContaining({ status: "invalid", problem: "invalid_words" }),
+              // Decision 1.53: without dictionary hints the private estimate never reveals
+              // membership; the invalid word is reported only by the attempted commit.
+              evaluation: expect.objectContaining({ status: "valid" }),
             };
             await expect.poll(() => linState()?.own_preview).toEqual(rejectedCrossing);
             expect(boardState()?.own_preview).toBeUndefined();

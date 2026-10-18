@@ -203,6 +203,8 @@ export const ruleset = z
     exchange_minimum_bag: z.int().min(0).max(65535),
     scoreless_turn_limit: z.int().min(1).max(65535),
     time_control: timeControl.optional(),
+    /** Decision 1.53; omitted when off. */
+    dictionary_hints: z.literal(true).optional(),
     minimum_players: z.int().min(2).max(4),
     maximum_players: z.int().min(2).max(4),
   })

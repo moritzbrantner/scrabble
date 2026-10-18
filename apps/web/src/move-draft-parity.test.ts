@@ -5,6 +5,7 @@ import { z } from "zod";
 import { placement } from "./game-protocol";
 import { draftMessages, draftProblem, emptyDraft } from "./move-draft";
 import { playerSnapshot, ruleset } from "./public-state";
+import { estimateScore } from "./score-estimate";
 
 // Cargo may compile a different feature graph on a cold CI checkout; allow compilation time.
 test("browser structural guidance matches the Rust oracle across empty, committed and smaller boards", () => {
@@ -29,6 +30,7 @@ test("browser structural guidance matches the Rust oracle across empty, committe
             z.strictObject({
               placements: z.array(placement),
               expected: z.enum(Object.keys(draftMessages)).nullable(),
+              score: z.int().min(0).nullable(),
             }),
           ),
         }),
@@ -36,6 +38,7 @@ test("browser structural guidance matches the Rust oracle across empty, committe
     })
     .parse(JSON.parse(new TextDecoder().decode(result.stdout)));
   let checked = 0;
+  let scored = 0;
   for (const group of oracle.groups) {
     for (const entry of group.cases) {
       const actual = draftProblem(group.snapshot, group.ruleset, {
@@ -43,8 +46,18 @@ test("browser structural guidance matches the Rust oracle across empty, committe
         placements: entry.placements,
       });
       expect<string | null>(actual ?? null).toBe(entry.expected);
+      // The local pre-move estimate equals the native score for every valid move.
+      const estimate = estimateScore(group.snapshot, group.ruleset, {
+        ...emptyDraft(group.snapshot),
+        placements: entry.placements,
+      });
+      if (entry.score !== null) {
+        expect(estimate?.total).toBe(entry.score);
+        scored++;
+      }
       checked++;
     }
   }
   expect(checked).toBe(1970);
+  expect(scored).toBeGreaterThan(0);
 }, 60_000);

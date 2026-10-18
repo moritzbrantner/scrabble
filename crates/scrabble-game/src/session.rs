@@ -230,17 +230,15 @@ impl GameSession {
                                 player_id: player,
                                 turn: *turn,
                                 tiles,
-                                evaluation: (self.state.ruleset().board_shape
-                                    == crate::ruleset::BoardShape::Hexagon)
-                                    .then(|| {
-                                        crate::analysis::evaluate_at(
-                                            &self.state,
-                                            player,
-                                            placements,
-                                            self.dictionary.as_ref(),
-                                            clock_now,
-                                        )
-                                    }),
+                                // Private estimate for every board shape (Decision 1.55);
+                                // dictionary membership only with hints enabled (1.53).
+                                evaluation: Some(crate::analysis::evaluate_at(
+                                    &self.state,
+                                    player,
+                                    placements,
+                                    self.dictionary.as_ref(),
+                                    clock_now,
+                                )),
                             })
                         };
                     }
