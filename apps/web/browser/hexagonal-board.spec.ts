@@ -534,7 +534,26 @@ for (const policy of ["all_word", "main_word_only"] as const) {
           const untouched = structuredClone(boardState()!.public);
           await place(move.actor, move.cells, move.touch);
           const actorState = move.actor === ada ? adaState : linState;
-          await expect.poll(() => actorState()?.own_preview?.tiles.length).toBe(move.cells.length);
+          try {
+            await expect
+              .poll(() => actorState()?.own_preview?.tiles.length)
+              .toBe(move.cells.length);
+          } catch (error) {
+            // Diagnostic for an intermittent CI-only timeout (#156): record what the actor saw.
+            const editor = move.actor.getByRole("region", { name: "Move editor", exact: true });
+            throw new Error(
+              `turn ${index + 1}: ${JSON.stringify({
+                phase: actorState()?.public.phase,
+                preview: actorState()?.own_preview ?? null,
+                tentative: await editor.locator(".tentative-square").count(),
+                status: await editor.getByRole("status").allInnerTexts(),
+                connection: await move.actor
+                  .getByText(/Connected|Reconnect|Restoring/)
+                  .allInnerTexts(),
+              })}`,
+              { cause: error },
+            );
+          }
           await expectBreakdown(move.actor, move.main, metric, move.words, move.total);
           await expect(analysis(page)).toHaveCount(0);
           if (index === 4 && metric === "tiles") {
