@@ -28,6 +28,10 @@ pub struct ServerConfig {
     pub word_list_directory: PathBuf,
     /// Durable private guest tile-profile library (#100).
     pub tile_profile_directory: PathBuf,
+    /// Private VAPID key and turn-notification subscriptions (#158).
+    pub push_directory: PathBuf,
+    /// Local test servers only: permit plain-HTTP mock push services.
+    pub push_insecure_test: bool,
     /// Operator-configurable guest word-list bounds (#97, Decision 1.50).
     pub word_list_limits: crate::word_list_library::WordListLimits,
     pub port: u16,
@@ -63,6 +67,8 @@ const KEYS: &[&str] = &[
     "SCRABBLE_BOARD_LAYOUT_DIR",
     "SCRABBLE_WORD_LIST_DIR",
     "SCRABBLE_TILE_PROFILE_DIR",
+    "SCRABBLE_PUSH_DIR",
+    "SCRABBLE_PUSH_INSECURE_TEST",
     "SCRABBLE_WORD_LIST_MAX_BYTES",
     "SCRABBLE_WORD_LIST_MAX_WORDS",
     "SCRABBLE_WORD_LIST_MAX_LISTS",
@@ -318,6 +324,23 @@ impl ServerConfig {
                 .unwrap_or(std::path::Path::new("."))
                 .join("tile-profiles"),
         };
+        let push_directory = match values.get("SCRABBLE_PUSH_DIR") {
+            Some(_) => path(values, "SCRABBLE_PUSH_DIR", "")?,
+            None => path(values, "SCRABBLE_SEED_FILE", ".local/server/seed")?
+                .parent()
+                .unwrap_or(std::path::Path::new("."))
+                .join("push"),
+        };
+        let push_insecure_test = match value(values, "SCRABBLE_PUSH_INSECURE_TEST", "0") {
+            "0" => false,
+            "1" if matches!(mode, Mode::Local) => true,
+            "1" => {
+                return Err(fail(
+                    "SCRABBLE_PUSH_INSECURE_TEST is forbidden in production",
+                ));
+            }
+            _ => return Err(fail("SCRABBLE_PUSH_INSECURE_TEST must be 0 or 1")),
+        };
         let word_list_limits = {
             use crate::word_list_library::{
                 CEILING_BYTES, CEILING_LISTS, CEILING_STORED_BYTES, CEILING_VERSIONS,
@@ -359,6 +382,8 @@ impl ServerConfig {
             board_layout_directory,
             word_list_directory,
             tile_profile_directory,
+            push_directory,
+            push_insecure_test,
             word_list_limits,
             profile_catalog_file,
             match_configuration_directory,

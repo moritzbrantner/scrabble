@@ -856,8 +856,11 @@ dependencies = [
 name = "scrabble-server"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "game-server",
  "ring",
+ "rustls",
+ "rustls-native-certs",
  "scrabble-game",
  "serde",
  "serde_json",

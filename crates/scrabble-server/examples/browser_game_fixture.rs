@@ -180,6 +180,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         ("SCRABBLE_API_PORT".into(), api_port.to_string()),
         ("SCRABBLE_BOARD_ORIGIN".into(), origin),
         ("SCRABBLE_MATCH_IDS".into(), String::new()),
+        // Browser tests deliver turn notifications to a local plain-HTTP push stand-in.
+        ("SCRABBLE_PUSH_INSECURE_TEST".into(), "1".into()),
         // One shared fixture server hosts every match the browser suites create; the
         // production default (16) is too small for the whole suite, so use the bound (64).
         ("SCRABBLE_MAX_MATCHES".into(), "64".into()),

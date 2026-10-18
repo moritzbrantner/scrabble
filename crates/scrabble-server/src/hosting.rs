@@ -1,7 +1,7 @@
 use crate::{config::ServerConfig, factory::MatchFactory, game_api, games::Games};
 use game_server::{
     MatchHostRecoveryConfig, MatchHostStatusConfig, MatchHostWebTransportConfig,
-    RejectMatchControlService, prepare_live_match_host_for_recovery,
+    prepare_live_match_host_for_recovery,
     serve_prepared_live_match_host_with_status_and_control_and_shutdown,
 };
 use std::{error::Error, sync::Arc};
@@ -36,6 +36,13 @@ pub async fn serve(
         },
     )
     .await?;
+    let push = Arc::new(crate::push::PushService::open(
+        &config.push_directory,
+        config.board_origin.clone(),
+        config.push_insecure_test,
+    )?);
+    let watcher = tokio::spawn(crate::push::watch(prepared.host(), Arc::clone(&push)));
+    let _watcher = Forwarder(watcher.abort_handle());
     let listener = TcpListener::bind(("0.0.0.0", config.api_port)).await?;
     let games = Arc::new(Games::new(
         prepared.host(),
@@ -55,7 +62,7 @@ pub async fn serve(
     let _forwarder = Forwarder(forwarder.abort_handle());
     let transport = serve_prepared_live_match_host_with_status_and_control_and_shutdown(
         prepared,
-        RejectMatchControlService,
+        crate::push::PushControl(push),
         MatchHostWebTransportConfig {
             port: config.port,
             certificate_pem: config.certificate,

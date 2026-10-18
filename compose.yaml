@@ -22,6 +22,7 @@ services:
       SCRABBLE_BOARD_LAYOUT_DIR: /state/layouts
       SCRABBLE_WORD_LIST_DIR: /state/word-lists
       SCRABBLE_TILE_PROFILE_DIR: /state/tile-profiles
+      SCRABBLE_PUSH_DIR: /state/push
       SCRABBLE_ROUTE_PREFIX: /game
       SCRABBLE_MATCH_IDS: ""
       SCRABBLE_MAX_MATCHES: "16"
