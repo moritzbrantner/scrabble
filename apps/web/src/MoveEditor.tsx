@@ -1,5 +1,5 @@
 import { Button } from "@moritzbrantner/ui/client";
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 
 import { copy, type Copy, type CopyKey } from "./copy";
 import { boardCells, containsCell, hexCellStyle, hexBoardStyle } from "./board-geometry";
@@ -17,6 +17,7 @@ import {
   type MoveDraft,
 } from "./move-draft";
 import { PlayerRack } from "./PlayerRack";
+import { arrangeRack, moveInOrder } from "./rack-order";
 import { useCopy } from "./preferences";
 import { faceText, type PlayerSnapshot, type Ruleset } from "./public-state";
 import { faceClass } from "./tile-face";
@@ -30,6 +31,16 @@ type EditorState = {
   exchange?: string[];
   confirmPass?: true;
 };
+type Drag = {
+  tileId: string;
+  from: "rack" | "board";
+  pointerId: number;
+  x: number;
+  y: number;
+  active: boolean;
+};
+/** Pointer travel before a press becomes a drag; shorter presses stay taps. */
+const DRAG_THRESHOLD_PX = 8;
 export function MoveEditor({
   snapshot,
   rules,
@@ -54,6 +65,15 @@ export function MoveEditor({
     () => Math.floor(rules.board_size / 2) * rules.board_size + Math.floor(rules.board_size / 2),
   );
   const [state, setState] = useState<EditorState>(() => ({ draft: emptyDraft(snapshot) }));
+  // Physical rack arrangement is player-local presentation, never authoritative state.
+  const [rackOrder, setRackOrder] = useState<string[]>([]);
+  const rackTiles = arrangeRack(snapshot.own_rack.tiles, rackOrder);
+  const rackIds = rackTiles.map((tile) => tile.id);
+  const [dragging, setDragging] = useState<string>();
+  const drag = useRef<Drag>(undefined);
+  const ghost = useRef<HTMLDivElement>(null);
+  const suppressClick = useRef(false);
+  const dropRef = useRef<(drag: Drag, x: number, y: number) => void>(() => {});
   const current = reconcileDraft(snapshot, state.draft);
   const stale = current !== state.draft;
   const selected = stale ? undefined : state.selected;
@@ -241,6 +261,145 @@ export function MoveEditor({
   const proposed = new Map(
     current.placements.map((tile) => [`${tile.coordinate.row},${tile.coordinate.column}`, tile]),
   );
+  function drop(source: Drag, x: number, y: number) {
+    const target = document.elementFromPoint(x, y);
+    const squareElement = target?.closest<HTMLElement>("[data-square-index]");
+    if (squareElement !== null && squareElement !== undefined) {
+      if (!editor.current?.contains(squareElement)) {
+        return;
+      }
+      const index = Number(squareElement.dataset.squareIndex);
+      const row = Math.floor(index / rules.board_size);
+      const column = index % rules.board_size;
+      setFocusSquare(index);
+      if (committed.has(`${row},${column}`)) {
+        setState({ draft: current, message: copy("draft.occupied") });
+        return;
+      }
+      const existing = current.placements.find((tile) => tile.tile_id === source.tileId);
+      const tile = snapshot.own_rack.tiles.find((tile) => tile.id === source.tileId);
+      if (tile?.face.kind === "blank" && (existing?.blank_as ?? null) === null) {
+        setState({
+          draft: current,
+          selected: source.tileId,
+          blank: { tileId: source.tileId, row, column },
+        });
+      } else {
+        edit({
+          kind: "place",
+          tileId: source.tileId,
+          coordinate: { row, column },
+          blankAs: existing?.blank_as ?? null,
+        });
+      }
+      return;
+    }
+    const rackItem = target?.closest<HTMLElement>(".phone-rack li[data-tile-id]");
+    if (!target?.closest(".phone-rack") || !editor.current?.contains(target)) {
+      return;
+    }
+    if (source.from === "board") {
+      edit({ kind: "remove", tileId: source.tileId });
+    }
+    const targetId = rackItem?.dataset.tileId;
+    if (targetId !== source.tileId) {
+      setRackOrder(
+        moveInOrder(
+          rackIds,
+          source.tileId,
+          targetId === undefined ? rackIds.length : rackIds.indexOf(targetId),
+        ),
+      );
+    }
+  }
+  useEffect(() => {
+    dropRef.current = drop;
+  });
+  function beginDrag(tileId: string, from: Drag["from"], event: PointerEvent<HTMLElement>) {
+    if (!enabled || exchanging || drag.current !== undefined || event.button !== 0) {
+      return;
+    }
+    drag.current = {
+      tileId,
+      from,
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      active: false,
+    };
+    const move = (moved: globalThis.PointerEvent) => {
+      const source = drag.current;
+      if (source === undefined || moved.pointerId !== source.pointerId) {
+        return;
+      }
+      if (!source.active) {
+        if (Math.hypot(moved.clientX - source.x, moved.clientY - source.y) < DRAG_THRESHOLD_PX) {
+          return;
+        }
+        source.active = true;
+        setDragging(source.tileId);
+      }
+      moved.preventDefault();
+      ghost.current?.style.setProperty(
+        "transform",
+        `translate(${moved.clientX}px, ${moved.clientY}px) translate(-50%, -50%)`,
+      );
+    };
+    const finish = (ended: globalThis.PointerEvent) => {
+      const source = drag.current;
+      if (source === undefined || ended.pointerId !== source.pointerId) {
+        return;
+      }
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+      drag.current = undefined;
+      if (!source.active) {
+        return;
+      }
+      setDragging(undefined);
+      // The release must not also count as a tap on whatever lies beneath it.
+      suppressClick.current = true;
+      setTimeout(() => {
+        suppressClick.current = false;
+      }, 0);
+      if (ended.type === "pointerup") {
+        dropRef.current(source, ended.clientX, ended.clientY);
+      } else {
+        setState((previous) => ({
+          draft: previous.draft,
+          message: copy("editor.dragCancelled"),
+        }));
+      }
+    };
+    window.addEventListener("pointermove", move, { passive: false });
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", finish);
+  }
+  function rackKey(tileId: string, event: KeyboardEvent<HTMLButtonElement>) {
+    const step = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 }[event.key];
+    if (!event.altKey || step === undefined || exchanging) {
+      return;
+    }
+    event.preventDefault();
+    const position = Math.max(0, Math.min(rackIds.indexOf(tileId) + step, rackIds.length - 1));
+    setRackOrder(moveInOrder(rackIds, tileId, position));
+    setState({
+      draft: current,
+      ...(selected === undefined ? {} : { selected }),
+      message: copy("editor.rackMoved", { position: position + 1, count: rackIds.length }),
+    });
+    requestAnimationFrame(() =>
+      editor.current
+        ?.querySelector<HTMLButtonElement>(`.phone-rack li[data-tile-id="${tileId}"] button`)
+        ?.focus(),
+    );
+  }
+  const draggedTile = snapshot.own_rack.tiles.find((tile) => tile.id === dragging);
+  const draggedPlacement = current.placements.find((tile) => tile.tile_id === dragging);
+  const draggedLetter =
+    draggedPlacement?.blank_as ??
+    (draggedTile === undefined ? undefined : (faceText(draggedTile.face) ?? "◇"));
 
   let feedback = state.message ?? copy(problem === undefined ? "editor.ready" : `draft.${problem}`);
   const ownTurn =
@@ -305,14 +464,17 @@ export function MoveEditor({
       }}
     >
       <PlayerRack
-        rack={snapshot.own_rack}
+        rack={{ ...snapshot.own_rack, tiles: rackTiles }}
         rules={rules}
         canAct={enabled}
         selection={{
           selected: exchange ?? (selected === undefined ? [] : [selected]),
           placed: current.placements.map((tile) => tile.tile_id),
+          ...(dragging === undefined ? {} : { dragging }),
+          onPointerDown: (tileId, event) => beginDrag(tileId, "rack", event),
+          onKeyDown: rackKey,
           onSelect: (tileId) => {
-            if (enabled) {
+            if (enabled && !suppressClick.current) {
               setState(
                 exchange === undefined
                   ? { draft: current, selected: tileId }
@@ -396,8 +558,14 @@ export function MoveEditor({
                 aria-pressed={draft !== undefined && selected === draft.tile_id}
                 disabled={!enabled || exchanging}
                 aria-disabled={fixed !== undefined}
+                data-dragging={draft !== undefined && dragging === draft.tile_id ? true : undefined}
+                onPointerDown={(event: PointerEvent<HTMLButtonElement>) => {
+                  if (draft !== undefined) {
+                    beginDrag(draft.tile_id, "board", event);
+                  }
+                }}
                 onClick={() => {
-                  if (fixed === undefined) {
+                  if (fixed === undefined && !suppressClick.current) {
                     square(row, column);
                   }
                 }}
@@ -444,8 +612,19 @@ export function MoveEditor({
             </dt>
             <dd>{t("command.cancel")}</dd>
           </div>
+          <div>
+            <dt>
+              <kbd>Alt + ← / →</kbd>
+            </dt>
+            <dd>{t("command.rackMove")}</dd>
+          </div>
         </dl>
       </details>
+      <div ref={ghost} className="drag-ghost rack-tile" aria-hidden="true" hidden={!draggedLetter}>
+        {draggedLetter !== undefined && (
+          <span className={faceClass(draggedLetter)}>{draggedLetter}</span>
+        )}
+      </div>
       {blank !== undefined && enabled && (
         <div className="blank-choices" role="group" aria-label={t("editor.blankTitle")}>
           {rules.tiles.flatMap((tile, index) =>
