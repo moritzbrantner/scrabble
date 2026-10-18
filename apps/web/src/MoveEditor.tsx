@@ -12,7 +12,9 @@ import {
   draftProblem,
   editDraft,
   emptyDraft,
-  reconcileDraft,
+  persistDraft,
+  reconcile,
+  restoreDraft,
   type DraftAction,
   type MoveDraft,
 } from "./move-draft";
@@ -45,6 +47,8 @@ export function MoveEditor({
   snapshot,
   rules,
   canAct,
+  canPrepare = false,
+  persistKey,
   onTurnAction,
   onPreview,
   turnRejection,
@@ -52,6 +56,10 @@ export function MoveEditor({
   snapshot: PlayerSnapshot;
   rules: Ruleset;
   canAct: boolean;
+  /** A connected seated player may prepare a private pre-move while waiting (Decision 2.8). */
+  canPrepare?: boolean;
+  /** Same-device persistence of the single pre-move (Decision 2.10); omitted in harnesses. */
+  persistKey?: string;
   onTurnAction: (
     command: Extract<CommandEnvelope["command"], { kind: "commit" | "pass" | "exchange" }>,
   ) => Promise<void>;
@@ -64,7 +72,9 @@ export function MoveEditor({
   const [focusSquare, setFocusSquare] = useState(
     () => Math.floor(rules.board_size / 2) * rules.board_size + Math.floor(rules.board_size / 2),
   );
-  const [state, setState] = useState<EditorState>(() => ({ draft: emptyDraft(snapshot) }));
+  const [state, setState] = useState<EditorState>(() => ({
+    draft: restoreDraft(persistKey, snapshot, rules) ?? emptyDraft(snapshot),
+  }));
   // Physical rack arrangement is player-local presentation, never authoritative state.
   const [rackOrder, setRackOrder] = useState<string[]>([]);
   const rackTiles = arrangeRack(snapshot.own_rack.tiles, rackOrder);
@@ -74,12 +84,19 @@ export function MoveEditor({
   const ghost = useRef<HTMLDivElement>(null);
   const suppressClick = useRef(false);
   const dropRef = useRef<(drag: Drag, x: number, y: number) => void>(() => {});
-  const current = reconcileDraft(snapshot, state.draft);
+  const reconciled = reconcile(snapshot, state.draft);
+  const current = reconciled.draft;
   const stale = current !== state.draft;
-  const selected = stale ? undefined : state.selected;
-  const blank = stale ? undefined : state.blank;
+  // A kept pre-move also keeps an in-progress tile selection, so a turn that arrives
+  // between choosing a rack tile and its square does not swallow the placement.
+  const owned = (tileId: string | undefined) =>
+    tileId !== undefined && snapshot.own_rack.tiles.some((tile) => tile.id === tileId);
+  const kept = !stale || reconciled.reset === undefined;
+  const selected = kept && owned(state.selected) ? state.selected : undefined;
+  const blank = kept && owned(state.blank?.tileId) ? state.blank : undefined;
   const pending = !stale && state.pending !== undefined;
   const enabled = canAct && !pending;
+  const editable = (canAct || canPrepare) && !pending;
   const exchange = stale ? undefined : state.exchange;
   const exchanging = exchange !== undefined;
   const canExchange = snapshot.public.remaining_tiles >= rules.exchange_minimum_bag;
@@ -166,10 +183,27 @@ export function MoveEditor({
   }, [canAct, pending, current.context, previewPlacements, exchanging]);
   useEffect(() => {
     if (stale) {
-      setState({ draft: current, message: copy("editor.cleared") });
+      const reset = reconciled.reset;
+      setState(
+        reset === undefined
+          ? {
+              draft: current,
+              ...(selected === undefined ? {} : { selected }),
+              ...(blank === undefined ? {} : { blank }),
+            }
+          : {
+              draft: current,
+              message: copy(reset === "overlap" ? "editor.premoveOverlap" : "editor.cleared"),
+            },
+      );
     }
-  }, [current, stale]);
-  useEffect(() => () => clearTimeout(timer.current), [current.context]);
+  }, [current, stale, reconciled.reset, selected, blank]);
+  useEffect(() => {
+    persistDraft(persistKey, state.draft);
+  }, [persistKey, state.draft]);
+  // Any authoritative position change settles a pending submission; its timeout must not
+  // later overwrite the next turn's editing state (a kept pre-move keeps its context).
+  useEffect(() => () => clearTimeout(timer.current), [current.context, current.turn]);
   useEffect(() => {
     const center = board.current?.querySelector('[data-center="true"]');
     if (center instanceof HTMLElement && board.current !== null) {
@@ -180,7 +214,7 @@ export function MoveEditor({
     }
   }, [snapshot.public.game_id]);
   function edit(action: DraftAction) {
-    if (exchanging || (!enabled && action.kind !== "reset")) {
+    if (exchanging || (!editable && action.kind !== "reset")) {
       return;
     }
     const result = editDraft(snapshot, rules, current, action);
@@ -190,7 +224,7 @@ export function MoveEditor({
     });
   }
   function square(row: number, column: number) {
-    if (!enabled || exchanging) {
+    if (!editable || exchanging) {
       return;
     }
     const placed = current.placements.find(
@@ -230,7 +264,7 @@ export function MoveEditor({
     setState({ draft, pending: action });
     timer.current = setTimeout(() => {
       setState((previous) =>
-        previous.draft.context === draft.context
+        previous.draft.context === draft.context && previous.draft.turn === draft.turn
           ? {
               draft: previous.draft,
               message: copy(`editor.${action}Timeout`),
@@ -249,7 +283,7 @@ export function MoveEditor({
     } catch {
       clearTimeout(timer.current);
       setState((previous) =>
-        previous.draft.context === draft.context
+        previous.draft.context === draft.context && previous.draft.turn === draft.turn
           ? { draft: previous.draft, message: copy(`editor.${action}Failed`) }
           : previous,
       );
@@ -316,7 +350,7 @@ export function MoveEditor({
     dropRef.current = drop;
   });
   function beginDrag(tileId: string, from: Drag["from"], event: PointerEvent<HTMLElement>) {
-    if (!enabled || exchanging || drag.current !== undefined || event.button !== 0) {
+    if (!editable || exchanging || drag.current !== undefined || event.button !== 0) {
       return;
     }
     drag.current = {
@@ -406,7 +440,7 @@ export function MoveEditor({
     snapshot.public.phase.kind === "playing" &&
     snapshot.public.phase.active_player === snapshot.own_rack.player_id;
   if (!ownTurn) {
-    feedback = copy("draft.waiting");
+    feedback = copy(current.placements.length > 0 && editable ? "draft.premove" : "draft.waiting");
   } else if (!canAct && state.message === undefined) {
     feedback = copy("editor.reconnect");
   }
@@ -417,7 +451,7 @@ export function MoveEditor({
     feedback = copy(`editor.${state.pending}Pending`);
   }
   function cancelSelection() {
-    if (!enabled) {
+    if (!editable) {
       return;
     }
     setState((previous) => ({
@@ -466,7 +500,7 @@ export function MoveEditor({
       <PlayerRack
         rack={{ ...snapshot.own_rack, tiles: rackTiles }}
         rules={rules}
-        canAct={enabled}
+        canAct={editable}
         selection={{
           selected: exchange ?? (selected === undefined ? [] : [selected]),
           placed: current.placements.map((tile) => tile.tile_id),
@@ -474,7 +508,7 @@ export function MoveEditor({
           onPointerDown: (tileId, event) => beginDrag(tileId, "rack", event),
           onKeyDown: rackKey,
           onSelect: (tileId) => {
-            if (enabled && !suppressClick.current) {
+            if (editable && !suppressClick.current) {
               setState(
                 exchange === undefined
                   ? { draft: current, selected: tileId }
@@ -496,7 +530,7 @@ export function MoveEditor({
         className="phone-board"
         ref={board}
         role="region"
-        tabIndex={enabled && !exchanging ? -1 : 0}
+        tabIndex={editable && !exchanging ? -1 : 0}
         aria-label={t("editor.board")}
       >
         <div
@@ -556,7 +590,7 @@ export function MoveEditor({
                 aria-label={label}
                 aria-description={t(`premium.${premium}`)}
                 aria-pressed={draft !== undefined && selected === draft.tile_id}
-                disabled={!enabled || exchanging}
+                disabled={!editable || exchanging}
                 aria-disabled={fixed !== undefined}
                 data-dragging={draft !== undefined && dragging === draft.tile_id ? true : undefined}
                 onPointerDown={(event: PointerEvent<HTMLButtonElement>) => {
@@ -625,7 +659,7 @@ export function MoveEditor({
           <span className={faceClass(draggedLetter)}>{draggedLetter}</span>
         )}
       </div>
-      {blank !== undefined && enabled && (
+      {blank !== undefined && editable && (
         <div className="blank-choices" role="group" aria-label={t("editor.blankTitle")}>
           {rules.tiles.flatMap((tile, index) =>
             tile.face.kind === "letter"
@@ -667,7 +701,7 @@ export function MoveEditor({
       <div className="draft-actions">
         <Button
           disabled={
-            !enabled ||
+            !editable ||
             exchanging ||
             selected === undefined ||
             !current.placements.some((tile) => tile.tile_id === selected)

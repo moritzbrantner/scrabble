@@ -1,9 +1,22 @@
 import { containsCell } from "./board-geometry";
-import { type CommandEnvelope } from "./game-protocol";
+import { z } from "zod";
+
+import { placement, type CommandEnvelope } from "./game-protocol";
 import { type PlayerSnapshot, type Ruleset } from "./public-state";
 
 type Placement = Extract<CommandEnvelope["command"], { kind: "preview" }>["placements"][number];
-export type MoveDraft = { context: string; placements: Placement[] };
+/**
+ * One private, player-local working draft (Decisions 2.8–2.10, 2.13). `turn` is the authoritative
+ * position it was last reconciled against; `own` records whether that was this player's turn.
+ */
+export type MoveDraft = {
+  context: string;
+  turn: string | null;
+  own: boolean;
+  placements: Placement[];
+};
+/** Why a reconciled draft lost its placements. */
+export type DraftReset = "changed" | "overlap";
 export type DraftAction =
   | { kind: "place"; tileId: string; coordinate: Placement["coordinate"]; blankAs: string | null }
   | { kind: "remove"; tileId: string }
@@ -43,19 +56,53 @@ function key(coordinate: Placement["coordinate"]): string {
   return `${coordinate.row},${coordinate.column}`;
 }
 function context(snapshot: PlayerSnapshot): string {
-  return JSON.stringify({
-    game: snapshot.public.game_id,
-    player: snapshot.own_rack.player_id,
-    phase: snapshot.public.phase,
-    rack: snapshot.own_rack.tiles,
-    board: snapshot.public.board,
-  });
+  return JSON.stringify({ game: snapshot.public.game_id, player: snapshot.own_rack.player_id });
+}
+/** Authoritative position: any accepted turn changes the revision and/or the active turn. */
+function turnOf(snapshot: PlayerSnapshot): string | null {
+  return snapshot.public.phase.kind === "playing"
+    ? `${snapshot.public.revision}:${snapshot.public.phase.turn}`
+    : null;
 }
 export function emptyDraft(snapshot: PlayerSnapshot): MoveDraft {
-  return { context: context(snapshot), placements: [] };
+  return {
+    context: context(snapshot),
+    turn: turnOf(snapshot),
+    own: active(snapshot),
+    placements: [],
+  };
+}
+/**
+ * Carries a draft across authoritative updates. Presence and score-only updates keep it as is.
+ * The end of this player's own turn, a different match/player/phase, or a tile that left the rack
+ * clears it. An opponent's accepted tile on any drafted square clears the whole draft (2.9 C);
+ * otherwise a compatible pre-move survives for explicit review. Nothing is ever submitted here.
+ */
+export function reconcile(
+  snapshot: PlayerSnapshot,
+  draft: MoveDraft,
+): { draft: MoveDraft; reset?: DraftReset } {
+  const turn = turnOf(snapshot);
+  if (draft.context === context(snapshot) && draft.turn === turn) {
+    return { draft };
+  }
+  const fresh = emptyDraft(snapshot);
+  const reset = draft.placements.length === 0 ? {} : { reset: "changed" as const };
+  if (draft.context !== fresh.context || turn === null || draft.own) {
+    return { draft: fresh, ...reset };
+  }
+  const rack = new Set(snapshot.own_rack.tiles.map((tile) => tile.id));
+  if (draft.placements.some((tile) => !rack.has(tile.tile_id))) {
+    return { draft: fresh, ...reset };
+  }
+  const committed = new Set(snapshot.public.board.map((tile) => key(tile.coordinate)));
+  if (draft.placements.some((tile) => committed.has(key(tile.coordinate)))) {
+    return { draft: fresh, reset: "overlap" };
+  }
+  return { draft: { ...fresh, placements: draft.placements } };
 }
 export function reconcileDraft(snapshot: PlayerSnapshot, draft: MoveDraft): MoveDraft {
-  return draft.context === context(snapshot) ? draft : emptyDraft(snapshot);
+  return reconcile(snapshot, draft).draft;
 }
 function active(snapshot: PlayerSnapshot): boolean {
   return (
@@ -125,7 +172,8 @@ export function editDraft(
   if (current !== draft) {
     return { draft: current, problem: "changed" };
   }
-  if (!active(snapshot)) {
+  // Waiting players may prepare a private pre-move; only submission requires the active turn.
+  if (snapshot.public.phase.kind !== "playing") {
     return { draft: current, problem: "waiting" };
   }
 
@@ -223,4 +271,59 @@ export function draftProblem(
     return "disconnected";
   }
   return undefined;
+}
+
+const storedDraft = z.strictObject({
+  version: z.literal(1),
+  context: z.string().max(256),
+  turn: z.string().max(32).nullable(),
+  own: z.boolean(),
+  placements: z.array(placement).max(15),
+});
+/** Same-device storage key, bound to the match and authenticated player (Decision 2.10). */
+export function premoveKey(snapshot: PlayerSnapshot): string {
+  return `scrabble:premove:${snapshot.public.game_id}:${snapshot.own_rack.player_id}`;
+}
+/** Restores only a well-formed draft for this exact match/player; reconciliation does the rest. */
+export function restoreDraft(
+  key: string | undefined,
+  snapshot: PlayerSnapshot,
+  rules: Ruleset,
+): MoveDraft | undefined {
+  if (key === undefined) {
+    return undefined;
+  }
+  try {
+    const parsed = storedDraft.safeParse(JSON.parse(localStorage.getItem(key) ?? "null"));
+    if (!parsed.success || parsed.data.context !== context(snapshot)) {
+      localStorage.removeItem(key);
+      return undefined;
+    }
+    const { version: _version, ...draft } = parsed.data;
+    const restored = reconcile(snapshot, draft);
+    if (
+      restored.draft.placements.length === 0 ||
+      placementProblem(snapshot, rules, restored.draft.placements) !== undefined
+    ) {
+      localStorage.removeItem(key);
+      return undefined;
+    }
+    return restored.draft;
+  } catch {
+    return undefined;
+  }
+}
+export function persistDraft(key: string | undefined, draft: MoveDraft) {
+  if (key === undefined) {
+    return;
+  }
+  try {
+    if (draft.placements.length === 0) {
+      localStorage.removeItem(key);
+    } else {
+      localStorage.setItem(key, JSON.stringify({ version: 1, ...draft }));
+    }
+  } catch {
+    // Storage may be unavailable (private mode); the draft stays in memory only.
+  }
 }

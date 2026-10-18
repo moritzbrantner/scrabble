@@ -300,6 +300,8 @@ export const en = {
   "push.failed": "Turn notifications could not be set up. Try again.",
   "editor.dragCancelled": "Drag cancelled. Your tiles are unchanged.",
   "editor.rackMoved": "Tile moved to rack position {position} of {count}.",
+  "editor.premoveOverlap":
+    "An accepted move used one of your squares, so your whole pre-move was cleared.",
   "editor.squareEmpty": "Row {row}, column {column}: empty",
   "editor.squareCenter": "Row {row}, column {column}: center",
   "editor.squareDraft": "Row {row}, column {column}: tentative {letter}",
@@ -316,6 +318,8 @@ export const en = {
   "history.score": "{name} {delta} ({score})",
   "draft.changed": "The game changed. Start a fresh draft.",
   "draft.waiting": "Wait for your turn.",
+  "draft.premove":
+    "Private pre-move saved on this device. Review and commit it when your turn starts.",
   "draft.empty": "Select a tile and a board square.",
   "draft.too-many": "Use no more tiles than your rack holds.",
   "draft.not-owned": "This tile is no longer in your rack.",
@@ -821,6 +825,8 @@ const de: Record<CopyKey, string> = {
   "push.failed": "Zug-Benachrichtigungen konnten nicht eingerichtet werden. Versuche es erneut.",
   "editor.dragCancelled": "Ziehen abgebrochen. Deine Steine sind unverändert.",
   "editor.rackMoved": "Stein auf Ablageplatz {position} von {count} verschoben.",
+  "editor.premoveOverlap":
+    "Ein angenommener Zug belegt eines deiner Felder; dein ganzer Vorab-Zug wurde gelöscht.",
   "editor.squareEmpty": "Zeile {row}, Spalte {column}: leer",
   "editor.squareCenter": "Zeile {row}, Spalte {column}: Mitte",
   "editor.squareDraft": "Zeile {row}, Spalte {column}: vorläufig {letter}",
@@ -837,6 +843,8 @@ const de: Record<CopyKey, string> = {
   "history.score": "{name} {delta} ({score})",
   "draft.changed": "Das Spiel hat sich geändert. Beginne einen neuen Entwurf.",
   "draft.waiting": "Warte, bis du am Zug bist.",
+  "draft.premove":
+    "Privater Vorab-Zug auf diesem Gerät gespeichert. Prüfe und bestätige ihn, wenn du am Zug bist.",
   "draft.empty": "Wähle einen Stein und ein Feld.",
   "draft.too-many": "Verwende höchstens die Steine deiner Ablage.",
   "draft.not-owned": "Dieser Stein ist nicht mehr in deiner Ablage.",
@@ -1338,6 +1346,8 @@ const es: Record<CopyKey, string> = {
   "push.failed": "No se pudieron configurar los avisos de turno. Inténtalo de nuevo.",
   "editor.dragCancelled": "Arrastre cancelado. Tus fichas no han cambiado.",
   "editor.rackMoved": "Ficha movida a la posición {position} de {count} del atril.",
+  "editor.premoveOverlap":
+    "Una jugada aceptada ocupó una de tus casillas; se borró toda tu jugada preparada.",
   "editor.squareEmpty": "Fila {row}, columna {column}: vacía",
   "editor.squareCenter": "Fila {row}, columna {column}: centro",
   "editor.squareDraft": "Fila {row}, columna {column}: provisional {letter}",
@@ -1354,6 +1364,8 @@ const es: Record<CopyKey, string> = {
   "history.score": "{name} {delta} ({score})",
   "draft.changed": "La partida cambió. Empieza un borrador nuevo.",
   "draft.waiting": "Espera tu turno.",
+  "draft.premove":
+    "Jugada preparada guardada en este dispositivo. Revísala y confírmala cuando sea tu turno.",
   "draft.empty": "Selecciona una ficha y una casilla.",
   "draft.too-many": "No uses más fichas de las que tiene tu atril.",
   "draft.not-owned": "Esta ficha ya no está en tu atril.",
