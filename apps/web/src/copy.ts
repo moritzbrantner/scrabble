@@ -52,6 +52,18 @@ export const en = {
   "hex.bingo": "Bingo: {points}",
   "hex.total": "Total: {points}",
   "hex.preview": "Proposed move breakdown",
+  "estimate.title": "Estimated score: {points}.",
+  "estimate.unchecked":
+    "Not a promise that the words are valid: the dictionary is checked when you commit.",
+  "estimate.hintsValid": "Dictionary hints: every word is in the match dictionary.",
+  "estimate.premove":
+    "Calculated on this device while you wait; dictionary hints are not available for pre-moves.",
+  "estimate.horizontal": "Across",
+  "estimate.vertical": "Down",
+  "estimate.diagonal": "Diagonal",
+  "create.dictionaryHints": "Dictionary hints",
+  "create.dictionaryHintsHelp":
+    "Let players privately check their words against the match dictionary before committing. Off by default; fixed for the whole match.",
   "hex.board": "Hexagonal board, side {size}",
   "profiles.wordList": "Word list",
   "profiles.tiles": "Tile profile",
@@ -561,6 +573,18 @@ const de: Record<CopyKey, string> = {
   "hex.bingo": "Bingo: {points}",
   "hex.total": "Gesamt: {points}",
   "hex.preview": "Wertung des Zugentwurfs",
+  "estimate.title": "Geschätzte Wertung: {points}.",
+  "estimate.unchecked":
+    "Keine Garantie, dass die Wörter gültig sind: Das Wörterbuch wird beim Bestätigen geprüft.",
+  "estimate.hintsValid": "Wörterbuch-Hinweise: Alle Wörter stehen im Wörterbuch der Partie.",
+  "estimate.premove":
+    "Auf diesem Gerät berechnet, während du wartest; für Vorab-Züge gibt es keine Wörterbuch-Hinweise.",
+  "estimate.horizontal": "Waagerecht",
+  "estimate.vertical": "Senkrecht",
+  "estimate.diagonal": "Diagonal",
+  "create.dictionaryHints": "Wörterbuch-Hinweise",
+  "create.dictionaryHintsHelp":
+    "Spieler können ihre Wörter vor dem Bestätigen privat mit dem Wörterbuch der Partie prüfen. Standardmäßig aus; gilt für die ganze Partie.",
   "hex.board": "Sechseckiges Brett, Seitenmaß {size}",
   "profiles.wordList": "Wortliste",
   "profiles.tiles": "Buchstabenprofil",
@@ -1093,6 +1117,19 @@ const es: Record<CopyKey, string> = {
   "hex.bingo": "Bingo: {points}",
   "hex.total": "Total: {points}",
   "hex.preview": "Desglose de la jugada propuesta",
+  "estimate.title": "Puntuación estimada: {points}.",
+  "estimate.unchecked":
+    "No garantiza que las palabras sean válidas: el diccionario se comprueba al confirmar.",
+  "estimate.hintsValid":
+    "Pistas del diccionario: todas las palabras están en el diccionario de la partida.",
+  "estimate.premove":
+    "Calculada en este dispositivo mientras esperas; las pistas del diccionario no están disponibles para jugadas preparadas.",
+  "estimate.horizontal": "Horizontal",
+  "estimate.vertical": "Vertical",
+  "estimate.diagonal": "Diagonal",
+  "create.dictionaryHints": "Pistas del diccionario",
+  "create.dictionaryHintsHelp":
+    "Permite comprobar en privado las palabras con el diccionario de la partida antes de confirmar. Desactivado por defecto; fijo para toda la partida.",
   "hex.board": "Tablero hexagonal, tamaño {size}",
   "profiles.wordList": "Lista de palabras",
   "profiles.tiles": "Perfil de fichas",

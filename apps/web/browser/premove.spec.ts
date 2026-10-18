@@ -97,10 +97,14 @@ test("waiting players prepare, persist and review a private pre-move; overlap cl
       .poll(() => linState()?.public.phase)
       .toMatchObject({ kind: "playing", active_player: "2" });
     await draft(lin, [
+      [9, 8],
       [10, 8],
-      [10, 9],
     ]);
     await expect(linEditor.locator(".tentative-square")).toHaveCount(2);
+    // Decision 1.54: a waiting pre-move gets a local, non-authoritative estimate, no hints.
+    const estimate = linEditor.getByRole("region", { name: "Proposed move breakdown" });
+    await expect(estimate).toContainText("Estimated score:");
+    await expect(estimate).toContainText("Calculated on this device while you wait");
     const placed = await linEditor.locator(".tentative-square").allInnerTexts();
     // Same-device reload restores exactly that draft.
     await lin.reload();

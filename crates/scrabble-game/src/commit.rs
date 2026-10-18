@@ -70,6 +70,19 @@ pub(crate) fn prepare_with_dictionary_at(
     dictionary: &dyn Dictionary,
     now_ms: Option<u64>,
 ) -> Result<(GameState, MoveScore), CommitError> {
+    prepare_at(state, player, placements, Some(dictionary), now_ms)
+}
+
+/// As `prepare_with_dictionary_at`; `None` skips only dictionary membership, for a private
+/// estimate of an unsubmitted placement in a match without hints (Decision 1.53). A commit
+/// always checks the dictionary.
+pub(crate) fn prepare_at(
+    state: &GameState,
+    player: PlayerId,
+    placements: &[Placement],
+    dictionary: Option<&dyn Dictionary>,
+    now_ms: Option<u64>,
+) -> Result<(GameState, MoveScore), CommitError> {
     if !matches!(state.phase(), Phase::Playing { active_player, .. } if *active_player == player) {
         return Err(CommitError::NotActive);
     }
@@ -82,7 +95,9 @@ pub(crate) fn prepare_with_dictionary_at(
     };
     let validated =
         placement::validate(state, player, placements).map_err(CommitError::Placement)?;
-    dictionary::validate(&validated, dictionary).map_err(CommitError::Dictionary)?;
+    if let Some(dictionary) = dictionary {
+        dictionary::validate(&validated, dictionary).map_err(CommitError::Dictionary)?;
+    }
     let words = validated.words().iter().map(|word| word.text()).collect();
     let blank_count = validated
         .words()

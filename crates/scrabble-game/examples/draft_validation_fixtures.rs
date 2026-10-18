@@ -87,8 +87,16 @@ fn cases(state: &GameState) -> Result<Value, Box<dyn std::error::Error>> {
     let results: Vec<_> = inputs
         .into_iter()
         .map(|placements| {
-            let expected = validate(state, player, &placements).err().map(problem);
-            json!({ "placements": placements, "expected": expected })
+            let validated = validate(state, player, &placements);
+            // Native score of each structurally valid move, the oracle for the browser's
+            // non-authoritative pre-move estimate (Decision 1.54).
+            let score = validated
+                .as_ref()
+                .ok()
+                .and_then(|validated| scrabble_game::scoring::calculate(validated).ok())
+                .map(|score| score.total());
+            let expected = validated.err().map(problem);
+            json!({ "placements": placements, "expected": expected, "score": score })
         })
         .collect();
     Ok(json!({ "ruleset": state.ruleset(), "snapshot": snapshot, "cases": results }))

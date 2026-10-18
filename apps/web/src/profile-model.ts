@@ -14,6 +14,7 @@ export const matchSettings = z
     scoreless_turn_limit: ruleset.shape.scoreless_turn_limit,
     minimum_players: ruleset.shape.minimum_players,
     maximum_players: ruleset.shape.maximum_players,
+    dictionary_hints: z.literal(true).optional(),
   })
   .refine((value) => value.minimum_players <= value.maximum_players);
 export type MatchSettings = z.infer<typeof matchSettings>;

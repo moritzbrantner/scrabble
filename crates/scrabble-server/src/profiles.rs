@@ -249,6 +249,9 @@ pub struct MatchRules {
     pub scoreless_turn_limit: u16,
     pub minimum_players: u8,
     pub maximum_players: u8,
+    /// Host's fixed match option (Decision 1.53); absent means off.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub dictionary_hints: bool,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -316,6 +319,7 @@ pub fn compose_timed_profiles(
         premium_policy: board.policy,
         main_word_length: board.metric,
         time_control,
+        dictionary_hints: settings.dictionary_hints,
     };
     rules
         .validate()

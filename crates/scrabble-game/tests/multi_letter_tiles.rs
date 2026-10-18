@@ -1010,7 +1010,7 @@ fn single_letter_rulesets_states_and_snapshots_stay_byte_identical() {
     );
     assert_eq!(
         pinned(&serde_json::to_vec(&session.player_snapshot(P1).unwrap()).unwrap()),
-        (5697, 0xe985_f3ce_b69c_3b77)
+        (5849, 0x2b23_cdf3_1dff_2ddc)
     );
 }
 
