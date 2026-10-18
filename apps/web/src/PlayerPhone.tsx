@@ -18,6 +18,7 @@ import { matchRules, requireMatchRules } from "./match-rules";
 import { MatchClocks, type ClockObservation } from "./MatchClocks";
 import { TurnHistory } from "./TurnHistory";
 import { MoveEditor } from "./MoveEditor";
+import { premoveKey } from "./move-draft";
 import { TurnNotifications } from "./TurnNotifications";
 import { PlayerRack } from "./PlayerRack";
 import { useCopy } from "./preferences";
@@ -479,6 +480,8 @@ export function PlayerPhone({
                   snapshot={snapshot}
                   rules={rules}
                   canAct={canAct}
+                  canPrepare={state.kind === "joined" && connection.kind === "connected"}
+                  persistKey={premoveKey(snapshot)}
                   {...(turnRejection === undefined ? {} : { turnRejection })}
                   onPreview={async (placements) => {
                     const client = activeClient.current;

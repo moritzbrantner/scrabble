@@ -1,7 +1,17 @@
 import { expect, test } from "bun:test";
 
 import data from "./fixtures/private-rack.json";
-import { draftProblem, editDraft, emptyDraft, reconcileDraft, type MoveDraft } from "./move-draft";
+import {
+  draftProblem,
+  editDraft,
+  emptyDraft,
+  persistDraft,
+  premoveKey,
+  reconcile,
+  reconcileDraft,
+  restoreDraft,
+  type MoveDraft,
+} from "./move-draft";
 import { playerSnapshot, ruleset, type PlayerSnapshot } from "./public-state";
 const snapshot = playerSnapshot.parse(data.snapshots.playing);
 const rules = ruleset.parse(data.ruleset);
@@ -140,11 +150,11 @@ test("authoritative changes reset drafts while presence and previews preserve th
     expect(result.problem).toBe("changed");
     expect(result.draft.placements).toEqual([]);
   }
-  const waiting: PlayerSnapshot = {
+  const finished: PlayerSnapshot = {
     ...snapshot,
-    public: { ...snapshot.public, phase: { kind: "playing", active_player: "2", turn: "0" } },
+    public: { ...snapshot.public, phase: { kind: "finished", winners: ["1"] } },
   };
-  const result = editDraft(waiting, rules, emptyDraft(waiting), {
+  const result = editDraft(finished, rules, emptyDraft(finished), {
     kind: "place",
     tileId: tiles[0]?.id ?? "",
     coordinate: { row: 7, column: 7 },
@@ -152,4 +162,91 @@ test("authoritative changes reset drafts while presence and previews preserve th
   });
   expect(result.problem).toBe("waiting");
   expect(result.draft.placements).toEqual([]);
+});
+
+const waitingAt = (turn: string, board = snapshot.public.board): PlayerSnapshot => ({
+  ...snapshot,
+  public: {
+    ...snapshot.public,
+    board,
+    phase: { kind: "playing", active_player: turn === "2" ? "1" : "2", turn },
+  },
+});
+const premove = (at: PlayerSnapshot, row: number, columns: number[]) =>
+  columns.reduce((draft, column, index) => {
+    const result = editDraft(at, rules, draft, {
+      kind: "place",
+      tileId: tiles[index]?.id ?? "",
+      coordinate: { row, column },
+      blankAs: null,
+    });
+    expect(result.problem).toBeUndefined();
+    return result.draft;
+  }, emptyDraft(at));
+
+test("waiting players keep one compatible private pre-move but never submit it", () => {
+  const waiting = waitingAt("1");
+  const draft = premove(waiting, 9, [7, 8]);
+  expect(draft.placements).toHaveLength(2);
+  expect(draftProblem(waiting, rules, draft)).toBe("waiting");
+  // A non-overlapping accepted opponent move keeps the whole draft for explicit review.
+  const own = waitingAt("2", [{ coordinate: { row: 7, column: 7 }, letter: "A", is_blank: false }]);
+  const kept = reconcile(own, draft);
+  expect(kept.reset).toBeUndefined();
+  expect(kept.draft.placements).toEqual(draft.placements);
+  expect(kept.draft.own).toBe(true);
+  // The end of the player's own turn (commit, pass, exchange or timeout) ends it.
+  expect(reconcile(waitingAt("3"), kept.draft)).toMatchObject({
+    reset: "changed",
+    draft: { placements: [] },
+  });
+});
+
+test("an accepted move on any drafted square clears the entire pre-move", () => {
+  const draft = premove(waitingAt("1"), 9, [7, 8, 9]);
+  const overlapping = waitingAt("2", [
+    { coordinate: { row: 9, column: 9 }, letter: "A", is_blank: false },
+  ]);
+  expect(reconcile(overlapping, draft)).toMatchObject({
+    reset: "overlap",
+    draft: { placements: [] },
+  });
+  // A tile that left the rack is stale, never partially kept.
+  const lost: PlayerSnapshot = {
+    ...waitingAt("2"),
+    own_rack: { ...snapshot.own_rack, tiles: snapshot.own_rack.tiles.slice(1) },
+  };
+  const first = draft.placements[0]?.tile_id;
+  expect(lost.own_rack.tiles.some((tile) => tile.id === first)).toBe(
+    snapshot.own_rack.tiles[0]?.id !== first,
+  );
+});
+
+test("same-device persistence restores only a compatible draft for the same match and player", () => {
+  const store = new Map<string, string>();
+  globalThis.localStorage = {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => void store.set(key, value),
+    removeItem: (key: string) => void store.delete(key),
+  } as Storage;
+  const waiting = waitingAt("1");
+  const key = premoveKey(waiting);
+  const draft = premove(waiting, 9, [7, 8]);
+  persistDraft(key, draft);
+  expect(restoreDraft(key, waiting, rules)?.placements).toEqual(draft.placements);
+  expect(restoreDraft(key, waitingAt("2"), rules)?.placements).toEqual(draft.placements);
+  // A foreign match/player binding or corrupt record is discarded.
+  const foreign: PlayerSnapshot = { ...waiting, public: { ...waiting.public, game_id: "9" } };
+  expect(restoreDraft(key, foreign, rules)).toBeUndefined();
+  expect(store.has(key)).toBe(false);
+  store.set(key, "{not json");
+  expect(restoreDraft(key, waiting, rules)).toBeUndefined();
+  persistDraft(key, draft);
+  const overlap = waitingAt("2", [
+    { coordinate: { row: 9, column: 7 }, letter: "A", is_blank: false },
+  ]);
+  expect(restoreDraft(key, overlap, rules)).toBeUndefined();
+  expect(store.has(key)).toBe(false);
+  persistDraft(key, emptyDraft(waiting));
+  expect(store.has(key)).toBe(false);
 });

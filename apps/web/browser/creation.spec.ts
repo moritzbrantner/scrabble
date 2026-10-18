@@ -462,12 +462,10 @@ test("phone names preserve distinct identities across refresh and full-game fail
           .getByRole("listitem")
           .evaluateAll((tiles) => tiles.map((tile) => tile.getAttribute("data-tile-id"))),
       ).toEqual(projection?.tileIds);
-      await expect(rack).toHaveAttribute("aria-disabled", phone === first ? "false" : "true");
+      // Waiting players may arrange a private pre-move (Decision 2.8) but cannot submit.
+      await expect(rack).toHaveAttribute("aria-disabled", "false");
       await expect(rack.getByRole("button")).toHaveCount(7);
       if (phone !== first) {
-        for (const button of await rack.getByRole("button").all()) {
-          await expect(button).toBeDisabled();
-        }
         await expect(
           phone.getByRole("button", { name: "Commit move", exact: true }),
         ).toBeDisabled();
