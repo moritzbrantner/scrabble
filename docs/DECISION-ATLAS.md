@@ -220,6 +220,14 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
   Status: owner-approved 2026-10-17 (direct gameplay steering).  
   The host may enable **dictionary membership hints** for the match; the option starts **disabled** for every new match. With it disabled, preparing or rearranging a proposed placement does not check whether its words occur in the selected dictionary; that check happens on actual move submission. With it enabled, players may privately check candidate words against the selected match dictionary before submission. **Estimated score preview and structural placement guidance remain available by default without revealing dictionary membership**; a score estimate must not imply that a word is legal. Dictionary checks and scoring on committed moves remain authoritative and mandatory in either mode. The chosen assistance setting applies equally to every player, cannot change during a running match, and must survive match recovery without altering an older match's interpretation. Respect Decision 2.6: drafts and hints must not be published to other players or the shared board.
 
+- **1.54 Waiting pre-moves are scored in the browser.**  
+  Status: owner-approved 2026-10-18 (unblock session). Answers [#165](https://github.com/moritzbrantner/scrabble/issues/165) Q1 (choice B).  
+  A waiting player's pre-move stays on the device, as Decision 2.10 requires. The browser computes its **estimated score** locally; the draft is not sent to the server. The owner judged the estimate simple enough ("we are just adding numbers") to justify this second, **non-authoritative** score estimator in the client. Because the full dictionary must never reach the browser, **dictionary hints are unavailable while waiting**, even in matches that enable them. They appear once it is the player's turn. Server scoring and dictionary checks on submission remain authoritative (1.53).
+
+- **1.55 The estimated score covers every board shape.**  
+  Status: owner-approved 2026-10-18 (unblock session). Answers [#165](https://github.com/moritzbrantner/scrabble/issues/165) Q2 (choice A).  
+  Square and hex boards both show a private, **estimated** score for a proposed move, as Decision 1.53's "available by default" wording implies. During the player's own turn the estimate comes from the server's private evaluation; while waiting it comes from the browser (1.54). Dictionary validity stays hidden unless the match enables hints.
+
 ## 2. Game clients and interface controls
 
 - **2.1 Mobile-style client experience across devices.**  
