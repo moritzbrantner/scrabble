@@ -18,6 +18,7 @@ import { matchRules, requireMatchRules } from "./match-rules";
 import { MatchClocks, type ClockObservation } from "./MatchClocks";
 import { TurnHistory } from "./TurnHistory";
 import { MoveEditor } from "./MoveEditor";
+import { TurnNotifications } from "./TurnNotifications";
 import { PlayerRack } from "./PlayerRack";
 import { useCopy } from "./preferences";
 import {
@@ -531,6 +532,23 @@ export function PlayerPhone({
                 />
               ) : (
                 <PlayerRack rack={snapshot.own_rack} rules={rules} canAct={false} />
+              )}
+              {phase?.kind === "playing" && !own.forfeited && state.kind === "joined" && (
+                <TurnNotifications
+                  gameId={snapshot.public.game_id}
+                  playerId={snapshot.own_rack.player_id}
+                  control={
+                    connection.kind === "connected"
+                      ? async (payload) => {
+                          const client = activeClient.current;
+                          if (client === undefined) {
+                            throw new Error("Not connected");
+                          }
+                          return client.control(payload);
+                        }
+                      : undefined
+                  }
+                />
               )}
               <ol className="phone-scores" aria-label={t("board.players")}>
                 {[...snapshot.public.players]

@@ -24,23 +24,24 @@ export const gameFixture = z
   .parse(JSON.parse(readFileSync(path, "utf8")));
 
 const directory = dirname(path);
+/** A newly derived native A/T opening deal that differs from `excluded`. */
+export function freshOpening(excluded: string) {
+  return openingSchema.parse(
+    JSON.parse(
+      execFileSync(
+        resolve(process.env.CARGO_TARGET_DIR ?? "target", "debug/examples/browser_game_fixture"),
+        ["--fresh-opening", directory, excluded],
+        { encoding: "utf8", timeout: 10_000 },
+      ),
+    ),
+  );
+}
 export async function selectOpening(page: Page, candidate = gameFixture.opening) {
   // Startup deals are derived from timestamped IDs. Slow suites must select a fresh native
   // deal rather than extending the production creation window or changing its identity.
   const opening =
     Date.now() - candidate.requestedAt * 1000 >= 60_000
-      ? openingSchema.parse(
-          JSON.parse(
-            execFileSync(
-              resolve(
-                process.env.CARGO_TARGET_DIR ?? "target",
-                "debug/examples/browser_game_fixture",
-              ),
-              ["--fresh-opening", directory, candidate.requestId],
-              { encoding: "utf8", timeout: 10_000 },
-            ),
-          ),
-        )
+      ? freshOpening(candidate.requestId)
       : candidate;
   await page.evaluate(({ requestId, requestedAt }) => {
     const original = crypto.getRandomValues.bind(crypto);
