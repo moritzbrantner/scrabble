@@ -201,7 +201,9 @@ export function MoveEditor({
   useEffect(() => {
     persistDraft(persistKey, state.draft);
   }, [persistKey, state.draft]);
-  useEffect(() => () => clearTimeout(timer.current), [current.context]);
+  // Any authoritative position change settles a pending submission; its timeout must not
+  // later overwrite the next turn's editing state (a kept pre-move keeps its context).
+  useEffect(() => () => clearTimeout(timer.current), [current.context, current.turn]);
   useEffect(() => {
     const center = board.current?.querySelector('[data-center="true"]');
     if (center instanceof HTMLElement && board.current !== null) {
@@ -262,7 +264,7 @@ export function MoveEditor({
     setState({ draft, pending: action });
     timer.current = setTimeout(() => {
       setState((previous) =>
-        previous.draft.context === draft.context
+        previous.draft.context === draft.context && previous.draft.turn === draft.turn
           ? {
               draft: previous.draft,
               message: copy(`editor.${action}Timeout`),
@@ -281,7 +283,7 @@ export function MoveEditor({
     } catch {
       clearTimeout(timer.current);
       setState((previous) =>
-        previous.draft.context === draft.context
+        previous.draft.context === draft.context && previous.draft.turn === draft.turn
           ? { draft: previous.draft, message: copy(`editor.${action}Failed`) }
           : previous,
       );
