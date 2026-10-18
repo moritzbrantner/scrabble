@@ -215,8 +215,11 @@ export function tilesFrom(
     const face = row.face.trim().toLocaleUpperCase();
     const count = whole(row.count);
     const value = whole(row.value);
-    if (face === "" || /\s/.test(face) || !Number.isFinite(count) || !Number.isFinite(value)) {
+    if (!Number.isFinite(count) || (count > 0 && (face === "" || /\s/.test(face) || !Number.isFinite(value)))) {
       return { row: index + 1 };
+    }
+    if (count === 0) {
+      continue;
     }
     tiles.push({
       face:
