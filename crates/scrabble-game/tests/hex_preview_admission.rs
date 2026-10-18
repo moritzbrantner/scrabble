@@ -108,7 +108,13 @@ fn assert_preview_rejects_the_same_score_as_commit(
         before,
         "preview cannot mutate authority"
     );
-    let evaluation = s.public_snapshot().preview.unwrap().evaluation.unwrap();
+    let evaluation = s
+        .player_snapshot(PlayerId::new(1))
+        .unwrap()
+        .own_preview
+        .unwrap()
+        .evaluation
+        .unwrap();
     let rejected = command(
         &mut s,
         1,

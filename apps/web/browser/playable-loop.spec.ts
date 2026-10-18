@@ -154,7 +154,7 @@ test("built Pages client plays consecutive turns through isolated phones", async
       expect(board?.public.board.map((tile) => tile.letter).join("")).toBe(word);
       expect(board?.public.players.map((player) => player.score)).toEqual(scores);
       expect(board?.public.remaining_tiles).toBe(remaining);
-      expect(board?.public.preview).toBeNull();
+      expect(board?.own_preview).toBeUndefined();
       for (const phone of [first, second]) {
         await expect(
           phone
@@ -186,7 +186,8 @@ test("built Pages client plays consecutive turns through isolated phones", async
     await openingEditor.getByRole("button", { name: "Cancel move", exact: true }).click();
     await place(first, "T", 8);
     await place(first, "A", 9);
-    await expect(page.locator(".tentative-tile")).toHaveCount(2);
+    await expect.poll(() => firstState()?.own_preview?.tiles.length).toBe(2);
+    await expect(page.locator(".tentative-tile, .tentative-square")).toHaveCount(0);
     await commitWithKeyboard(first);
     await converge("1", "TA", [4, 0], 84);
     await expect(second.getByRole("list", { name: "Your rack", exact: true })).toHaveAttribute(
@@ -217,8 +218,9 @@ test("built Pages client plays consecutive turns through isolated phones", async
     await waiting(first);
     await expect(second.getByText("It is your turn.", { exact: true })).toBeVisible();
     await place(second, "C", 7);
-    await expect(page.locator(".tentative-tile")).toHaveCount(1);
-    await expect(page.getByRole("cell", { name: /^Row 8, column 7: Tentative C/ })).toBeVisible();
+    await expect.poll(() => secondState()?.own_preview?.tiles.length).toBe(1);
+    await expect(page.locator(".tentative-tile, .tentative-square")).toHaveCount(0);
+    await expect(page.getByRole("cell", { name: /Tentative/ })).toHaveCount(0);
     await commitWithKeyboard(second);
     await converge("2", "CTA", [4, 5], 83);
     const afterSecond = rackIds();
@@ -246,7 +248,8 @@ test("built Pages client plays consecutive turns through isolated phones", async
         .getByRole("button", { name: "A", exact: true })
         .click();
     }
-    await expect(page.locator(".tentative-tile")).toHaveCount(1);
+    await expect.poll(() => firstState()?.own_preview?.tiles.length).toBe(1);
+    await expect(page.locator(".tentative-tile, .tentative-square")).toHaveCount(0);
     const pass = first.getByRole("button", { name: "Pass turn", exact: true });
     await pass.click();
     const confirmation = first.getByRole("group", { name: "Confirm pass", exact: true });
@@ -260,7 +263,8 @@ test("built Pages client plays consecutive turns through isolated phones", async
     await confirmation.getByRole("button", { name: "Confirm pass", exact: true }).click();
     await converge("3", "CTA", [4, 5], 83);
     expect(rackIds()).toEqual(afterSecond);
-    await expect(page.locator(".tentative-tile")).toHaveCount(0);
+    await expect.poll(() => firstState()?.own_preview).toBeUndefined();
+    await expect(page.locator(".tentative-tile, .tentative-square")).toHaveCount(0);
     await expect(editor.locator(".tentative-square")).toHaveCount(0);
     await waiting(first);
     await expect(second.getByText("It is your turn.", { exact: true })).toBeVisible();
@@ -278,7 +282,8 @@ test("built Pages client plays consecutive turns through isolated phones", async
         .getByRole("button", { name: "A", exact: true })
         .click();
     }
-    await expect(page.locator(".tentative-tile")).toHaveCount(1);
+    await expect.poll(() => secondState()?.own_preview?.tiles.length).toBe(1);
+    await expect(page.locator(".tentative-tile, .tentative-square")).toHaveCount(0);
     const exchange = second.getByRole("button", { name: "Exchange tiles", exact: true });
     await exchange.click();
     const exchangeGroup = second.getByRole("group", { name: "Exchange tiles", exact: true });
@@ -288,7 +293,8 @@ test("built Pages client plays consecutive turns through isolated phones", async
     });
     await expect(confirmExchange).toBeDisabled();
     await expect(secondRack.getByRole("button").first()).toBeFocused();
-    await expect(page.locator(".tentative-tile")).toHaveCount(0);
+    await expect.poll(() => secondState()?.own_preview).toBeUndefined();
+    await expect(page.locator(".tentative-tile, .tentative-square")).toHaveCount(0);
     for (const id of selectedIds) {
       const tile = secondRack.locator(`[data-tile-id="${id}"]`).getByRole("button");
       await tile.click();
@@ -303,9 +309,11 @@ test("built Pages client plays consecutive turns through isolated phones", async
     await exchangeGroup.getByRole("button", { name: "Keep playing", exact: true }).click();
     await expect(exchange).toBeFocused();
     await expect(secondEditor.locator(".tentative-square")).toHaveCount(1);
-    await expect(page.locator(".tentative-tile")).toHaveCount(1);
+    await expect.poll(() => secondState()?.own_preview?.tiles.length).toBe(1);
+    await expect(page.locator(".tentative-tile, .tentative-square")).toHaveCount(0);
     await exchange.click();
-    await expect(page.locator(".tentative-tile")).toHaveCount(0);
+    await expect.poll(() => secondState()?.own_preview).toBeUndefined();
+    await expect(page.locator(".tentative-tile, .tentative-square")).toHaveCount(0);
     for (const id of selectedIds) {
       await secondRack.locator(`[data-tile-id="${id}"]`).getByRole("button").click();
     }
@@ -365,7 +373,7 @@ test("built Pages client plays consecutive turns through isolated phones", async
     expect(boardState()?.public.players.map((player) => player.score)).toEqual(finalScores);
     expect(boardState()?.own_rack.tiles).toEqual([]);
     expect(rackIds()).toEqual(afterExchange);
-    expect(boardState()?.public.preview).toBeNull();
+    expect(boardState()?.own_preview).toBeUndefined();
     await expect(page.getByText("Game finished", { exact: true })).toBeVisible();
     const history = page.getByRole("region", { name: "Turn history", exact: true });
     await expect(history.getByRole("listitem")).toHaveCount(8);

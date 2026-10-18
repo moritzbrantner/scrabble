@@ -3,7 +3,7 @@ import { type MoveDraft } from "./move-draft";
 
 /** Never apply a delayed evaluation to another draft, player, turn or connection. */
 export function draftEvaluation(snapshot: PlayerSnapshot, draft: MoveDraft) {
-  const preview = snapshot.public.preview;
+  const preview = snapshot.own_preview;
   if (
     snapshot.public.configuration.board_shape !== "hexagon" ||
     snapshot.public.phase.kind !== "playing" ||

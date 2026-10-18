@@ -118,7 +118,13 @@ fn going_out_transfers_every_opponents_rack_value_once_and_freezes_all_commands(
             })
             .collect();
         assert_eq!(scores(&session), expected);
-        assert!(session.public_snapshot().preview.is_none());
+        assert!(
+            session
+                .player_snapshot(PlayerId::new(1))
+                .unwrap()
+                .own_preview
+                .is_none()
+        );
         assert_eq!(session.public_snapshot().remaining_tiles, 0);
         session.state().verify_tile_conservation().unwrap();
         let before = session.state().canonical_bytes().unwrap();

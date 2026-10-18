@@ -452,7 +452,7 @@ test("native match keeps draft, connection, identity and rack through settings a
       await editor.getByRole("button", { name: new RegExp(`^Row 8, column ${column}:`) }).click();
     }
     await expect(editor.locator(".tentative-square")).toHaveCount(2);
-    await expect(page.locator(".tentative-tile")).toHaveCount(2);
+    await expect(page.locator(".tentative-tile")).toHaveCount(0);
 
     const before = activeState();
     const boardBefore = boardState();
@@ -498,7 +498,7 @@ test("native match keeps draft, connection, identity and rack through settings a
 
     // Nothing above reconnected, remounted, or altered authority, identity, rack or draft.
     await expect(editor.locator(".tentative-square")).toHaveCount(2);
-    await expect(page.locator(".tentative-tile")).toHaveCount(2);
+    await expect(page.locator(".tentative-tile")).toHaveCount(0);
     await expect(connected).toBeVisible();
     const sessionAfter = await sessionDump(active);
     expect(sessionAfter.identity).toEqual(sessionBefore.identity);

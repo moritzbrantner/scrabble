@@ -1080,7 +1080,6 @@
           "score": -10
         }
       ],
-      "preview": null,
       "remaining_tiles": 86,
       "revision": "10",
       "ruleset": {
@@ -1562,7 +1561,6 @@
         "kind": "lobby"
       },
       "players": [],
-      "preview": null,
       "remaining_tiles": 100,
       "revision": "0",
       "ruleset": {
@@ -2076,7 +2074,6 @@
           "score": 0
         }
       ],
-      "preview": null,
       "remaining_tiles": 86,
       "revision": "4",
       "ruleset": {

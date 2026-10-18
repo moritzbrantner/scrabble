@@ -50,8 +50,25 @@ fn previews_replace_cancel_and_disconnect_without_touching_canonical_state() {
     let rack = session.state().rack(PlayerId::new(1)).unwrap().to_vec();
     let first = draft(&session, 7);
     apply(&mut session, &command(1, 2, 0, first)).unwrap();
+    // Decision 2.6: neither the public projection nor another player sees the draft.
+    let public = serde_json::to_value(session.public_snapshot()).unwrap();
+    assert!(public.get("preview").is_none());
+    let other = session.player_snapshot(PlayerId::new(2)).unwrap();
+    assert!(other.own_preview.is_none());
+    assert!(
+        serde_json::to_value(&other)
+            .unwrap()
+            .get("own_preview")
+            .is_none()
+    );
     assert_eq!(
-        session.public_snapshot().preview.as_ref().unwrap().tiles[0]
+        session
+            .player_snapshot(PlayerId::new(1))
+            .unwrap()
+            .own_preview
+            .as_ref()
+            .unwrap()
+            .tiles[0]
             .coordinate
             .column(),
         7
@@ -59,15 +76,33 @@ fn previews_replace_cancel_and_disconnect_without_touching_canonical_state() {
     let second = draft(&session, 8);
     apply(&mut session, &command(1, 3, 0, second)).unwrap();
     assert_eq!(
-        session.public_snapshot().preview.as_ref().unwrap().tiles[0]
+        session
+            .player_snapshot(PlayerId::new(1))
+            .unwrap()
+            .own_preview
+            .as_ref()
+            .unwrap()
+            .tiles[0]
             .coordinate
             .column(),
         8
     );
     session.clear_preview_for(PlayerId::new(2));
-    assert!(session.public_snapshot().preview.is_some());
+    assert!(
+        session
+            .player_snapshot(PlayerId::new(1))
+            .unwrap()
+            .own_preview
+            .is_some()
+    );
     session.clear_preview_for(PlayerId::new(1));
-    assert!(session.public_snapshot().preview.is_none());
+    assert!(
+        session
+            .player_snapshot(PlayerId::new(1))
+            .unwrap()
+            .own_preview
+            .is_none()
+    );
     let again = draft(&session, 7);
     apply(&mut session, &command(1, 4, 0, again)).unwrap();
     apply(
@@ -75,7 +110,13 @@ fn previews_replace_cancel_and_disconnect_without_touching_canonical_state() {
         &command(1, 5, 0, Command::Preview { placements: vec![] }),
     )
     .unwrap();
-    assert!(session.public_snapshot().preview.is_none());
+    assert!(
+        session
+            .player_snapshot(PlayerId::new(1))
+            .unwrap()
+            .own_preview
+            .is_none()
+    );
     assert!(session.public_snapshot().board.is_empty());
     assert_eq!(session.state().rack(PlayerId::new(1)).unwrap(), rack);
     assert_eq!(session.state().canonical_bytes().unwrap(), bytes);
@@ -149,7 +190,13 @@ fn replay_and_turn_rollover_are_deterministic_and_clear_previews() {
             turn: TurnId::new(3)
         }
     );
-    assert!(first.public_snapshot().preview.is_none());
+    assert!(
+        first
+            .player_snapshot(PlayerId::new(1))
+            .unwrap()
+            .own_preview
+            .is_none()
+    );
     first.state().verify_tile_conservation().unwrap();
 }
 

@@ -161,7 +161,6 @@ fn committing_a_word_and_reading_the_public_board_fit_50ms() {
                 turn: TurnId::new(9),
             }
         );
-        assert!(snapshot.preview.is_none());
         session.state().verify_tile_conservation().unwrap();
     }
 

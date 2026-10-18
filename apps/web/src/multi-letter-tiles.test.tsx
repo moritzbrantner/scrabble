@@ -127,11 +127,13 @@ test("rulesets and the public catalog carry CH and SCH beside C, H and S but no 
 
 test("snapshots carry whole faces on board, preview, history and the private rack", () => {
   const preview = { player_id: "1", turn: "0", tiles: [boardTile("SCH", 6, 7)] };
-  const accepted = rawSnapshot({
-    board: [boardTile("CH", 7, 7), boardTile("A", 7, 8), boardTile("T", 7, 9)],
-    preview,
-    history: committed(["CHAT", "SCH".repeat(15)]),
-  });
+  const accepted = {
+    ...rawSnapshot({
+      board: [boardTile("CH", 7, 7), boardTile("A", 7, 8), boardTile("T", 7, 9)],
+      history: committed(["CHAT", "SCH".repeat(15)]),
+    }),
+    own_preview: preview,
+  };
   expect(playerSnapshot.safeParse(accepted).success).toBe(true);
   expect(publicSnapshot.safeParse(accepted.public).success).toBe(true);
   // A spelled word may be longer than 15 characters, but never longer than the board's 15
@@ -144,7 +146,9 @@ test("snapshots carry whole faces on board, preview, history and the private rac
     rawSnapshot({ board: [boardTile("", 7, 7)] }),
     // Blank assignments stay single-letter.
     rawSnapshot({ board: [boardTile("CH", 7, 7, true)] }),
-    rawSnapshot({ preview: { ...preview, tiles: [boardTile("Sch", 6, 7)] } }),
+    { ...rawSnapshot(), own_preview: { ...preview, tiles: [boardTile("Sch", 6, 7)] } },
+    // Proposed placements are private (Decision 2.6); a public preview slot is rejected.
+    rawSnapshot({ preview }),
   ]) {
     expect(playerSnapshot.safeParse(invalid).success).toBe(false);
   }
@@ -156,8 +160,12 @@ test("snapshots carry whole faces on board, preview, history and the private rac
 test("rack and shared board render one tile per face with its single value", () => {
   const snapshot = playerSnapshot.parse(
     rawSnapshot({
-      board: [boardTile("CH", 7, 7), boardTile("A", 7, 8), boardTile("T", 7, 9)],
-      preview: { player_id: "1", turn: "0", tiles: [boardTile("SCH", 6, 7)] },
+      board: [
+        boardTile("SCH", 6, 7),
+        boardTile("CH", 7, 7),
+        boardTile("A", 7, 8),
+        boardTile("T", 7, 9),
+      ],
     }),
   );
   const rules = ruleset.parse(rawRules);
@@ -172,7 +180,8 @@ test("rack and shared board render one tile per face with its single value", () 
   expect(rack).toMatch(/>SCH</);
   const board = renderToStaticMarkup(<SharedBoard snapshot={snapshot.public} rules={rules} />);
   expect(board).toContain("Row 8, column 8: Committed CH, 5 points");
-  expect(board).toContain("Row 7, column 8: Tentative SCH, 8 points");
+  expect(board).toContain("Row 7, column 8: Committed SCH, 8 points");
+  expect(board).not.toContain("Tentative");
   expect(board).toMatch(/>CH</);
   expect(board).toMatch(/>SCH</);
   expect(board).not.toContain("Committed CH, ? points");

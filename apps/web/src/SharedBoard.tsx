@@ -1,6 +1,5 @@
 import { HexBoard } from "./HexBoard";
 import { MatchClocks, type ClockObservation } from "./MatchClocks";
-import { MoveAnalysis } from "./MoveAnalysis";
 import { useCopy } from "./preferences";
 import { faceValues, type Premium, type PublicSnapshot, type Ruleset } from "./public-state";
 import { faceClass } from "./tile-face";
@@ -19,26 +18,16 @@ export function SharedBoard({
   const cells = new Map(
     snapshot.board.map((tile) => [`${tile.coordinate.row},${tile.coordinate.column}`, tile]),
   );
-  const preview =
-    snapshot.phase.kind === "playing" &&
-    snapshot.preview?.player_id === snapshot.phase.active_player &&
-    snapshot.preview.turn === snapshot.phase.turn
-      ? snapshot.preview
-      : null;
-  const tentative = new Map(
-    preview?.tiles.map((tile) => [`${tile.coordinate.row},${tile.coordinate.column}`, tile]) ?? [],
-  );
+  // Proposed placements are private to each phone (Decision 2.6); only accepted tiles render.
   const values = faceValues(rules);
   const tileDescription = (
     tile: Pick<PublicSnapshot["board"][number], "letter" | "is_blank"> | undefined,
-    pending: boolean,
     premium: Premium,
   ) => {
     if (tile === undefined) {
       return t(`premium.${premium}`);
     }
-    const key = pending ? "board.preview" : "board.committed";
-    return t(tile.is_blank ? `${key}Blank` : key, {
+    return t(tile.is_blank ? "board.committedBlank" : "board.committed", {
       letter: tile.letter,
       points: tile.is_blank ? 0 : (values.get(tile.letter) ?? t("score.unknown")),
     });
@@ -90,21 +79,15 @@ export function SharedBoard({
           className="board"
           style={{ width: "100%" }}
           cellLabel={(row, column, index) => {
-            const committed = cells.get(`${row},${column}`);
-            const tile = committed ?? tentative.get(`${row},${column}`);
+            const tile = cells.get(`${row},${column}`);
             return t("board.square", {
               row: row + 1,
               column: column + 1,
-              description: tileDescription(
-                tile,
-                committed === undefined,
-                rules.premiums[index] ?? "normal",
-              ),
+              description: tileDescription(tile, rules.premiums[index] ?? "normal"),
             });
           }}
           renderCell={(row, column, index) => {
-            const committed = cells.get(`${row},${column}`);
-            const tile = committed ?? tentative.get(`${row},${column}`);
+            const tile = cells.get(`${row},${column}`);
             const premium = rules.premiums[index] ?? "normal";
             return (
               <div className={`board-cell premium-${premium.replaceAll("_", "-")}`}>
@@ -113,7 +96,7 @@ export function SharedBoard({
                 </span>
                 {tile && (
                   <span
-                    className={`letter-tile${tile.is_blank ? " blank-tile" : ""}${committed ? "" : " tentative-tile"}`}
+                    className={`letter-tile${tile.is_blank ? " blank-tile" : ""}`}
                     aria-hidden="true"
                   >
                     <span className={faceClass(tile.letter)}>{tile.letter}</span>
@@ -147,12 +130,9 @@ export function SharedBoard({
                 <th scope="row">{number(row + 1)}</th>
                 {indices.map((column) => {
                   const kind = rules.premiums[row * rules.board_size + column] ?? "normal";
-                  const committed = cells.get(`${row},${column}`);
-                  const pending =
-                    committed === undefined ? tentative.get(`${row},${column}`) : undefined;
-                  const tile = committed ?? pending;
+                  const tile = cells.get(`${row},${column}`);
                   const value = tile?.is_blank ? 0 : values.get(tile?.letter ?? "");
-                  const description = tileDescription(tile, pending !== undefined, kind);
+                  const description = tileDescription(tile, kind);
                   return (
                     <td
                       key={column}
@@ -168,7 +148,7 @@ export function SharedBoard({
                         </span>
                         {tile && (
                           <span
-                            className={`letter-tile${tile.is_blank ? " blank-tile" : ""}${pending === undefined ? "" : " tentative-tile"}`}
+                            className={`letter-tile${tile.is_blank ? " blank-tile" : ""}`}
                             aria-hidden="true"
                           >
                             <span className={faceClass(tile.letter)}>{tile.letter}</span>
@@ -194,10 +174,6 @@ export function SharedBoard({
         />
         {snapshot.phase.kind === "playing" && (
           <p>{t("board.turnNumber", { turn: BigInt(snapshot.phase.turn) + 1n })}</p>
-        )}
-        {preview !== null && preview.tiles.length > 0 && <p>{t("board.tentative")}</p>}
-        {preview?.evaluation?.status === "valid" && (
-          <MoveAnalysis analysis={preview.evaluation.analysis} preview />
         )}
         {snapshot.phase.kind === "finished" && <p>{t("board.finished")}</p>}
         {snapshot.players.length > 0 && (

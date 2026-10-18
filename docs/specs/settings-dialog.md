@@ -31,7 +31,7 @@ Every application route renders one compact preferences chrome: the shared board
 - One preferences source: `{locale, theme}` in `localStorage["scrabble:preferences:v1"]`, plus the single `lang` URL parameter, keep their existing meaning (`mobile-accessibility.md`). Language changes rewrite only `lang` in the current URL. Other query parameters (`server`, `api`, `certificate`, `match`, `view`) are unchanged.
 - Opening or closing the dialog, and changing either visible preference, on the shared board or on a joined player controller of a real native match does not:
   - create a new WebTransport connection (connection count stays 1);
-  - clear the tentative draft on the controller or the preview on the shared board;
+  - clear the tentative draft on the controller (the shared board never shows drafts);
   - change the player's session storage (identity and credential) or connection status. The transport `sequence` counter in the session entry is not identity: it advances while the draft preview is re-published, so it may only grow;
   - change the private rack, the authoritative phase/active turn, the ruleset or the dictionary.
 - Interface language changes labels and messages only. It never changes the word list, tile distribution or rules.

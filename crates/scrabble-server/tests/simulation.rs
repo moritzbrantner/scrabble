@@ -375,7 +375,7 @@ fn rejection_is_atomic_and_only_authenticated_sequenced_commands_mutate() {
     simulation
         .apply_command(1, 2, &command(1, 2, 0, preview))
         .unwrap();
-    assert!(projected(&simulation, 2).public.preview.is_some());
+    assert!(projected(&simulation, 1).own_preview.is_some());
     assert_eq!(simulation.snapshot().unwrap(), before); // preview is ephemeral
     simulation
         .apply_command(1, 3, &command(1, 3, 0, Command::Pass {}))
@@ -387,7 +387,7 @@ fn rejection_is_atomic_and_only_authenticated_sequenced_commands_mutate() {
             turn: TurnId::new(1)
         }
     );
-    assert!(projected(&simulation, 2).public.preview.is_none());
+    assert!(projected(&simulation, 1).own_preview.is_none());
 }
 
 #[test]
@@ -672,7 +672,7 @@ fn preview_expiry_clears_lost_cancel_without_changing_gameplay() {
     previewing
         .apply_command(1, 2, &command(1, 2, 0, draft(&first)))
         .unwrap();
-    let preview = projected(&previewing, 2).public.preview.unwrap();
+    let preview = projected(&previewing, 1).own_preview.unwrap();
     assert_eq!(preview.tiles.len(), 1);
     assert_eq!(preview.player_id, PlayerId::new(1));
     assert_eq!(preview.turn, TurnId::new(0));
@@ -680,10 +680,10 @@ fn preview_expiry_clears_lost_cancel_without_changing_gameplay() {
         previewing.advance_tick().unwrap();
         untouched.advance_tick().unwrap();
     }
-    assert!(projected(&previewing, 2).public.preview.is_some());
+    assert!(projected(&previewing, 1).own_preview.is_some());
     previewing.advance_tick().unwrap();
     untouched.advance_tick().unwrap();
-    assert!(projected(&previewing, 2).public.preview.is_none());
+    assert!(projected(&previewing, 1).own_preview.is_none());
     assert_eq!(
         previewing.snapshot().unwrap(),
         untouched.snapshot().unwrap()
@@ -713,7 +713,7 @@ fn preview_packets_are_sequenced_and_disconnect_resume_cannot_resurrect_them() {
     runtime
         .submit_command(1, first.connection_epoch, 2, &payload)
         .unwrap();
-    assert_eq!(read(&runtime, 2).public.preview.unwrap().tiles.len(), 1);
+    assert_eq!(read(&runtime, 1).own_preview.unwrap().tiles.len(), 1);
     runtime
         .submit_command(
             1,
@@ -728,7 +728,7 @@ fn preview_packets_are_sequenced_and_disconnect_resume_cannot_resurrect_them() {
             .unwrap(),
         CommandOutcome::IgnoredStale
     );
-    assert!(read(&runtime, 2).public.preview.is_none());
+    assert!(read(&runtime, 1).own_preview.is_none());
     runtime
         .submit_command(
             1,
@@ -738,13 +738,13 @@ fn preview_packets_are_sequenced_and_disconnect_resume_cannot_resurrect_them() {
         )
         .unwrap();
     assert!(!runtime.disconnect(1, first.connection_epoch + 1));
-    assert!(read(&runtime, 2).public.preview.is_some());
+    assert!(read(&runtime, 1).own_preview.is_some());
     assert!(runtime.disconnect(1, first.connection_epoch));
-    assert!(read(&runtime, 2).public.preview.is_none());
+    assert!(read(&runtime, 1).own_preview.is_none());
     let resumed = runtime
         .reconnect(first.reconnect_token, ReconnectToken([3; 16]))
         .unwrap();
-    assert!(read(&runtime, 2).public.preview.is_none());
+    assert!(read(&runtime, 1).own_preview.is_none());
     assert!(
         runtime
             .submit_command(
@@ -758,19 +758,19 @@ fn preview_packets_are_sequenced_and_disconnect_resume_cannot_resurrect_them() {
     runtime
         .submit_command(1, resumed.connection_epoch, 5, &command(1, 5, 0, placement))
         .unwrap();
-    assert!(read(&runtime, 2).public.preview.is_some());
+    assert!(read(&runtime, 1).own_preview.is_some());
     // The runtime rejects reconnect while the current lease is still connected.
     assert!(
         runtime
             .reconnect(resumed.reconnect_token, ReconnectToken([4; 16]))
             .is_err()
     );
-    assert!(read(&runtime, 2).public.preview.is_some());
+    assert!(read(&runtime, 1).own_preview.is_some());
     assert!(runtime.disconnect(1, resumed.connection_epoch));
     runtime
         .reconnect(resumed.reconnect_token, ReconnectToken([4; 16]))
         .unwrap();
-    assert!(read(&runtime, 2).public.preview.is_none());
+    assert!(read(&runtime, 1).own_preview.is_none());
     assert_eq!(runtime.snapshot().unwrap(), canonical);
     assert_eq!(second.player_id, 2);
 }
@@ -799,7 +799,7 @@ fn stale_turn_and_forged_rack_preview_cannot_replace_active_preview() {
         );
         assert_eq!(simulation.snapshot_for(2).unwrap(), before);
     }
-    let preview = projected(&simulation, 1).public.preview.unwrap();
+    let preview = projected(&simulation, 2).own_preview.unwrap();
     assert_eq!(preview.player_id, PlayerId::new(2));
     assert_eq!(preview.turn, TurnId::new(1));
     assert_eq!(preview.tiles.len(), 1);
@@ -819,24 +819,24 @@ fn replay_recovery_hides_offline_preview_and_resume_clears_it() {
         )
         .unwrap();
     let read = |runtime: &MatchRuntime<ScrabbleSimulation>| -> PlayerSnapshot {
-        serde_json::from_slice(&runtime.snapshot_for(2).unwrap().payload).unwrap()
+        serde_json::from_slice(&runtime.snapshot_for(1).unwrap().payload).unwrap()
     };
     let own: PlayerSnapshot =
         serde_json::from_slice(&runtime.snapshot_for(1).unwrap().payload).unwrap();
     runtime
         .submit_command(1, first.connection_epoch, 2, &command(1, 2, 0, draft(&own)))
         .unwrap();
-    assert!(read(&runtime).public.preview.is_some());
+    assert!(read(&runtime).own_preview.is_some());
     let canonical = runtime.snapshot().unwrap();
     runtime.freeze_for_recovery();
     let mut restored =
         MatchRuntime::restore_from_recovery(simulation(), runtime.recovery_image().unwrap())
             .unwrap();
-    assert!(read(&restored).public.preview.is_none());
+    assert!(read(&restored).own_preview.is_none());
     restored
         .reconnect(first.reconnect_token, ReconnectToken([3; 16]))
         .unwrap();
-    assert!(read(&restored).public.preview.is_none());
+    assert!(read(&restored).own_preview.is_none());
     assert_eq!(restored.snapshot().unwrap(), canonical);
 }
 
@@ -943,7 +943,7 @@ fn committed_turn_converges_privately_and_replays_with_exactly_once_scoring() {
     assert_eq!(first.public, second.public);
     assert_eq!(first.public.players[0].score, 4);
     assert_eq!(first.public.board.len(), 2);
-    assert!(first.public.preview.is_none());
+    assert!(first.own_preview.is_none());
     assert_eq!(
         first.public.phase,
         Phase::Playing {
@@ -1061,7 +1061,7 @@ fn pass_is_fenced_exactly_once_and_replays_without_changing_tile_ownership() {
             turn: TurnId::new(1)
         }
     );
-    assert!(projection.public.preview.is_none());
+    assert!(projection.own_preview.is_none());
     assert_eq!(projection.own_rack, own.own_rack);
     let before: Value = serde_json::from_slice(&before.payload).unwrap();
     let after: Value = serde_json::from_slice(&passed.payload).unwrap();
@@ -1186,7 +1186,7 @@ fn exchanged_racks_remain_private_and_replay_through_recovery() {
     assert_eq!(first.public.board, own.public.board);
     assert_eq!(first.public.players, own.public.players);
     assert_eq!(first.public.remaining_tiles, own.public.remaining_tiles);
-    assert!(first.public.preview.is_none());
+    assert!(first.own_preview.is_none());
     assert_eq!(
         first.public.phase,
         Phase::Playing {

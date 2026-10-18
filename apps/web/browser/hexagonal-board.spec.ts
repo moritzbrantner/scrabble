@@ -392,12 +392,13 @@ for (const policy of ["all_word", "main_word_only"] as const) {
           ],
           evaluation: expect.objectContaining({ status: "invalid", problem: "center" }),
         };
-        for (const observed of [boardState, adaState]) {
-          await expect.poll(() => observed()?.public.preview).toEqual(rejectedOpening);
-        }
+        // Decision 2.6: only Ada receives her draft and its evaluation; the board never does.
+        await expect.poll(() => adaState()?.own_preview).toEqual(rejectedOpening);
+        expect(boardState()?.own_preview).toBeUndefined();
+        expect(linState()?.own_preview).toBeUndefined();
         expect(boardState()!.public.board).toEqual(before.board);
         await activate(ada, ada.getByRole("button", { name: "Cancel move", exact: true }), false);
-        await expect.poll(() => boardState()?.public.preview).toBeNull();
+        await expect.poll(() => adaState()?.own_preview).toBeUndefined();
 
         let total = 24;
         if (policy === "main_word_only") {
@@ -510,9 +511,9 @@ for (const policy of ["all_word", "main_word_only"] as const) {
               ],
               evaluation: expect.objectContaining({ status: "invalid", problem: "invalid_words" }),
             };
-            for (const observed of [boardState, linState]) {
-              await expect.poll(() => observed()?.public.preview).toEqual(rejectedCrossing);
-            }
+            await expect.poll(() => linState()?.own_preview).toEqual(rejectedCrossing);
+            expect(boardState()?.own_preview).toBeUndefined();
+            expect(adaState()?.own_preview).toBeUndefined();
             expect(boardState()!.public.board).toEqual(unchanged.board);
             expect(boardState()!.public.players).toEqual(unchanged.players);
             expect(boardState()!.public.phase).toEqual(unchanged.phase);
@@ -523,7 +524,7 @@ for (const policy of ["all_word", "main_word_only"] as const) {
               lin.getByRole("button", { name: "Cancel move", exact: true }),
               true,
             );
-            await expect.poll(() => boardState()?.public.preview).toBeNull();
+            await expect.poll(() => linState()?.own_preview).toBeUndefined();
           }
           // The phone also exposes the combined-face metric comparison in
           // landscape, while Ada remains a genuine non-touch desktop context.
@@ -532,14 +533,12 @@ for (const policy of ["all_word", "main_word_only"] as const) {
           }
           const untouched = structuredClone(boardState()!.public);
           await place(move.actor, move.cells, move.touch);
-          await expect
-            .poll(() => boardState()?.public.preview?.tiles.length)
-            .toBe(move.cells.length);
-          for (const client of [page, move.actor]) {
-            await expectBreakdown(client, move.main, metric, move.words, move.total);
-          }
+          const actorState = move.actor === ada ? adaState : linState;
+          await expect.poll(() => actorState()?.own_preview?.tiles.length).toBe(move.cells.length);
+          await expectBreakdown(move.actor, move.main, metric, move.words, move.total);
+          await expect(analysis(page)).toHaveCount(0);
           if (index === 4 && metric === "tiles") {
-            for (const client of [page, move.actor]) {
+            for (const client of [move.actor]) {
               await expect(analysis(client)).toContainText(
                 /tie|priority|vertical[\s\S]*diagonal|diagonal[\s\S]*vertical/i,
               );
@@ -570,18 +569,14 @@ for (const policy of ["all_word", "main_word_only"] as const) {
               ada.getByRole("button", { name: "Cancel move", exact: true }),
               false,
             );
-            await expect.poll(() => boardState()?.public.preview).toBeNull();
+            await expect.poll(() => adaState()?.own_preview).toBeUndefined();
             for (const client of [page, ada]) {
               await expect(analysis(client).filter({ hasText: /\bSCHA\b/ })).toHaveCount(0);
             }
             expect(boardState()!.public.board).toEqual(untouched.board);
             await place(ada, move.cells, false);
-            await expect
-              .poll(() => boardState()?.public.preview?.tiles.length)
-              .toBe(move.cells.length);
-            for (const client of [page, ada]) {
-              await expectBreakdown(client, move.main, metric, move.words, move.total);
-            }
+            await expect.poll(() => adaState()?.own_preview?.tiles.length).toBe(move.cells.length);
+            await expectBreakdown(ada, move.main, metric, move.words, move.total);
           }
           expect(boardState()!.public.board).toEqual(untouched.board);
           expect(boardState()!.public.players).toEqual(untouched.players);

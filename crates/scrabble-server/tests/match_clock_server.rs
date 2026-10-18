@@ -656,8 +656,8 @@ fn untimed_runtime_evidence_is_byte_identical_to_the_pre_clock_server() {
 const PINNED_UNTIMED_EVIDENCE: [&str; 6] = [
     "11",
     "9f5af2a2721416eda37e4f8b532c4d56ec68ddb8d70b609bf4e69412a58a1084",
-    "8ffe43fca59a00e55f108ea11589fbd52b21e09297d1d170cee993a8012aaccd",
-    "6ab23b8bb8a48ab13dc793644cfe22ff6c28e34a22c4d56b48d4fc5241b3e463",
+    "e25ad91e05f933222b074ecfd54001d4df2fb701c3d1cf705e156b1301a0dd73",
+    "9805f2eccb337d93196f2012b7acb98d8630f3c3e7c10b25efeb83ac9a66ee8a",
     "a8887e4ce33cf78fc12afaceaa8d0255c5b6d7967f12ccf7403c374bd401619b",
     "da37f010e2ef401840e098c0090fc715c3e95ab7e1334763e35e3b5365e98f8f",
 ];

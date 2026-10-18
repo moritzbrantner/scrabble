@@ -594,15 +594,15 @@ test("active phones edit tentative moves and retain rejected drafts without disc
       }
     }
     await placeTile(0, 8, 8);
-    await expect(page.locator(".tentative-tile")).toHaveCount(1);
-    await expect(page.getByRole("cell", { name: /^Row 8, column 8: Tentative/ })).toBeVisible();
+    await expect(page.locator(".tentative-tile")).toHaveCount(0);
+    await expect(page.getByRole("cell", { name: /Tentative/ })).toHaveCount(0);
     await expect(editor.getByRole("status")).toContainText("at least two letters");
     await placeTile(1, 8, 9);
-    await expect(page.locator(".tentative-tile")).toHaveCount(2);
+    await expect(page.locator(".tentative-tile")).toHaveCount(0);
     await expect(editor.getByRole("status")).toContainText("Ready to commit");
     await expect(editor.locator(".tentative-square")).toHaveCount(2);
     await placeTile(1, 8, 10);
-    await expect(page.getByRole("cell", { name: /^Row 8, column 10: Tentative/ })).toBeVisible();
+    await expect(page.getByRole("cell", { name: /Tentative/ })).toHaveCount(0);
     await expect(page.getByRole("cell", { name: /^Row 8, column 9: Normal square/ })).toBeVisible();
     await expect(editor.getByRole("status")).toContainText("Fill the gaps");
     await expect(editor.getByRole("button", { name: "Commit move", exact: true })).toBeDisabled();
@@ -631,7 +631,7 @@ test("active phones edit tentative moves and retain rejected drafts without disc
     await expect(page.getByRole("cell", { name: /: Committed / })).toHaveCount(0);
     await expect(first.getByText("It is your turn.", { exact: true })).toBeVisible();
     await expect(editor.getByRole("button", { name: "Commit move", exact: true })).toBeEnabled();
-    await expect(page.locator(".tentative-tile")).toHaveCount(2);
+    await expect(page.locator(".tentative-tile")).toHaveCount(0);
     await editor.getByRole("button", { name: "Cancel move", exact: true }).click();
     await expect(page.locator(".tentative-tile")).toHaveCount(0);
   } finally {
@@ -681,7 +681,7 @@ test("closing an active phone clears its tentative board without committing tile
         .getByRole("button", { name: "A", exact: true })
         .click();
     }
-    await expect(page.locator(".tentative-tile")).toHaveCount(1);
+    await expect(page.locator(".tentative-tile")).toHaveCount(0);
     await first.close();
     await expect(page.getByRole("listitem").filter({ hasText: "Ada" })).toContainText(
       "Disconnected",
@@ -743,7 +743,7 @@ test("an authoritative AT commit converges on the board and both private phones"
         .getByRole("button", { name: new RegExp(`^Row 8, column ${8 + index}:`) })
         .click();
     }
-    await expect(page.locator(".tentative-tile")).toHaveCount(2);
+    await expect(page.locator(".tentative-tile")).toHaveCount(0);
     await editor.getByRole("button", { name: "Commit move", exact: true }).click();
     await expect(page.getByText("Turn 2", { exact: true })).toBeVisible();
     await expect(

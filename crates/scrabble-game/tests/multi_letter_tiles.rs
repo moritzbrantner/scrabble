@@ -776,8 +776,14 @@ fn multi_letter_matches_serialize_reconstruct_and_replay_canonically() {
             ),
         ),
     );
-    let preview = serde_json::to_value(original.public_snapshot()).unwrap();
-    let mut previewed: Vec<_> = preview["preview"]["tiles"]
+    assert!(
+        serde_json::to_value(original.public_snapshot())
+            .unwrap()
+            .get("preview")
+            .is_none()
+    );
+    let preview = serde_json::to_value(original.player_snapshot(P2).unwrap()).unwrap();
+    let mut previewed: Vec<_> = preview["own_preview"]["tiles"]
         .as_array()
         .unwrap()
         .iter()
@@ -993,18 +999,18 @@ fn single_letter_rulesets_states_and_snapshots_stay_byte_identical() {
             ),
         )
         .unwrap();
-    assert!(session.public_snapshot().preview.is_some());
+    assert!(session.player_snapshot(P1).unwrap().own_preview.is_some());
     assert_eq!(
         pinned(&session.state().canonical_bytes().unwrap()),
         (12052, 0x30db_b2d4_443a_9286)
     );
     assert_eq!(
         pinned(&serde_json::to_vec(&session.public_snapshot()).unwrap()),
-        (5294, 0xce3e_219d_6f59_aa3e)
+        (5179, 0xda0e_9947_03ab_8360)
     );
     assert_eq!(
         pinned(&serde_json::to_vec(&session.player_snapshot(P1).unwrap()).unwrap()),
-        (5693, 0x6707_de97_4555_b482)
+        (5697, 0xe985_f3ce_b69c_3b77)
     );
 }
 

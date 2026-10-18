@@ -36,8 +36,13 @@ export async function observeSnapshots(
           return;
         }
         expect(parsed.data.own_rack.player_id).toBe(recipient);
+        // Decision 2.6: a proposed placement only ever reaches its own player's wire view.
+        if (parsed.data.own_preview !== undefined) {
+          expect(parsed.data.own_preview.player_id).toBe(recipient);
+        }
         if (board) {
           expect(parsed.data.own_rack.tiles.length).toBe(0);
+          expect(parsed.data.own_preview).toBeUndefined();
         }
         latest = parsed.data;
         inspectedPayload = payload;

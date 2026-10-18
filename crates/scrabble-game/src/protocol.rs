@@ -128,7 +128,8 @@ pub struct PreviewTile {
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct PublicPreview {
+/// The authenticated player's own tentative placement; only ever in that player's projection.
+pub struct PrivatePreview {
     pub player_id: PlayerId,
     pub turn: TurnId,
     pub tiles: Vec<PreviewTile>,
@@ -233,8 +234,6 @@ pub struct PublicSnapshot {
     pub players: Vec<PublicPlayer>,
     pub remaining_tiles: u16,
     pub history: Vec<PublicTurn>,
-    /// Ephemeral projection. Never part of canonical replay or score calculation.
-    pub preview: Option<PublicPreview>,
     /// Present only for matches with a shared board outside the playing roster.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host: Option<PublicHost>,
@@ -301,4 +300,8 @@ impl fmt::Debug for PrivateRack {
 pub struct PlayerSnapshot {
     pub public: PublicSnapshot,
     pub own_rack: PrivateRack,
+    /// Ephemeral echo of this player's own proposed placement. Never public, canonical or
+    /// part of score calculation; other players and the shared board never receive it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub own_preview: Option<PrivatePreview>,
 }

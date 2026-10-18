@@ -194,6 +194,7 @@ impl ScrabbleSimulation {
                     player_id: player,
                     tiles: vec![],
                 },
+                own_preview: None,
             }
         } else {
             self.session.player_snapshot(player).map_err(error)?
@@ -447,12 +448,9 @@ impl GameSimulation for ScrabbleSimulation {
             let id = u32::try_from(player.id.get()).map_err(error)?;
             player.connected = Some(context.is_connected(id));
         }
-        if snapshot.public.preview.as_ref().is_some_and(|preview| {
-            u32::try_from(preview.player_id.get())
-                .map(|id| !context.is_connected(id))
-                .unwrap_or(true)
-        }) {
-            snapshot.public.preview = None;
+        // A recovered replay may re-derive an offline player's draft; never echo it back.
+        if !context.is_connected(player_id) {
+            snapshot.own_preview = None;
         }
         let payload = serde_json::to_vec(&snapshot).map_err(error)?;
         Ok(SimulationSnapshot::new(self.tick, payload))

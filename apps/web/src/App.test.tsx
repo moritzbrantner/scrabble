@@ -64,33 +64,17 @@ test("finished ties display every winner and final negative scores", () => {
   expect(html).toContain("Game finished");
 });
 
-test("tentative overlay is turn-scoped and cannot replace committed tiles", () => {
+test("shared board renders only committed tiles, never a proposed placement", () => {
   const snapshot = fixtures.snapshots.playing;
-  if (snapshot.phase.kind !== "playing") {
-    throw new Error("Expected a playing fixture");
-  }
-  const preview = {
-    player_id: snapshot.phase.active_player,
-    turn: snapshot.phase.turn,
-    tiles: [
-      { coordinate: { row: 6, column: 8 }, letter: "Q", is_blank: false },
-      { coordinate: { row: 7, column: 7 }, letter: "Z", is_blank: false },
-    ],
-  };
-  const render = (playerId: string, turn: string) =>
-    renderToStaticMarkup(
-      <SharedBoard
-        snapshot={{ ...snapshot, preview: { ...preview, player_id: playerId, turn } }}
-        rules={fixtures.ruleset}
-      />,
-    );
-  const html = render(preview.player_id, preview.turn);
-  expect(html).toContain("Tentative Q");
-  expect(html).not.toContain("Tentative Z");
+  // A legacy client's leaked preview field is not part of the public contract (Decision 2.6).
+  expect(
+    publicSnapshot.safeParse({
+      ...snapshot,
+      preview: { player_id: "1", turn: "0", tiles: [] },
+    }).success,
+  ).toBe(false);
+  const html = renderToStaticMarkup(<SharedBoard snapshot={snapshot} rules={fixtures.ruleset} />);
   expect(html).toContain("Committed A");
-  expect(html).toContain("Dashed tiles are tentative.");
-  expect(render("999", preview.turn)).not.toContain("Tentative");
-  expect(render(preview.player_id, (BigInt(preview.turn) + 1n).toString())).not.toContain(
-    "Tentative",
-  );
+  expect(html).not.toContain("Tentative");
+  expect(html).not.toContain("tentative-tile");
 });
