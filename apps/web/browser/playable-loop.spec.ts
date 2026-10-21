@@ -202,7 +202,7 @@ test("built Pages client plays consecutive turns through isolated phones", async
           .first(),
         target,
       );
-      await expect(target).toHaveAccessibleName(new RegExp(`tentative ${letter}$`));
+      await expect(target).toHaveAccessibleName(new RegExp(`tentative ${letter},`));
     }
     await expect.poll(() => firstState()?.own_preview?.tiles.length).toBe(2);
     await expect(page.locator(".tentative-tile, .tentative-square")).toHaveCount(0);

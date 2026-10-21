@@ -570,11 +570,15 @@ export function MoveEditor({
             if (fixed !== undefined) {
               squareKey = "editor.squareFixed";
             }
-            const label = t(squareKey, {
+            const reference = `${String.fromCharCode(65 + column)}${row + 1}`;
+            const shown = letter ?? (center ? "★" : t(`premiumShort.${premium}`) || "·");
+            // The name ends with the visible reference and face ("Row 8, column 8: empty, H8
+            // TW"), so it contains the visible text (axe label-content-name-mismatch).
+            const label = `${t(squareKey, {
               row: row + 1,
               column: column + 1,
               letter: letter ?? "",
-            });
+            })}, ${reference} ${shown}`;
             return (
               <Button
                 key={key}
@@ -611,11 +615,10 @@ export function MoveEditor({
                 }}
               >
                 <small className="square-reference" aria-hidden="true">
-                  {String.fromCharCode(65 + column)}
-                  {row + 1}
-                </small>
+                  {reference}
+                </small>{" "}
                 <span aria-hidden="true" className={letter && faceClass(letter)}>
-                  {letter ?? (center ? "★" : t(`premiumShort.${premium}`) || "·")}
+                  {shown}
                 </span>
               </Button>
             );

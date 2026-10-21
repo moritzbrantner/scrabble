@@ -6,7 +6,7 @@ Status: accepted technical direction from owner `/steer` on 2026-10-21 (Q1–Q10
 
 An explicit, reviewed, version-controlled state/transition contract belongs to the **development verification tooling**, not to React routing or Rust game logic. It is the independent expected-behavior oracle for the explorer and model-derived browser journeys. Do not derive the expected graph by importing the application's route/transition implementation; doing so would make implementation defects self-validating. Do not insert an application-wide runtime state machine solely to support tests.
 
-The existing Rust match/session/protocol implementations retain gameplay authority and privacy. Observable browser behavior and authorized server responses establish the *observed* state. The explorer may match those observations to expected graph states; it must report ambiguity and unknown states instead of inventing an expected transition.
+The existing Rust match/session/protocol implementations retain gameplay authority and privacy. Observable browser behavior and authorized server responses establish the _observed_ state. The explorer may match those observations to expected graph states; it must report ambiguity and unknown states instead of inventing an expected transition.
 
 ## Execution
 

@@ -346,7 +346,7 @@ test("a real match plays CH, A, T as CHAT and SCH, A through CH as SCHACH on who
     await placeByKeyboard(`CH, ${ch} points`, 7, 7);
     await placeByKeyboard(`A, ${valueOf(tiles, "A")} points`, 7, 8);
     await expect(
-      adaEditor.getByRole("button", { name: "Row 8, column 8: tentative CH", exact: true }),
+      adaEditor.getByRole("button", { name: /^Row 8, column 8: tentative CH,/ }),
     ).toBeVisible();
     await expect(adaEditor.locator(".tentative-square")).toHaveCount(2);
     await expectFaceFits(adaEditor.locator(".tentative-square").first(), "CH", "desktop draft");
@@ -424,7 +424,7 @@ test("a real match plays CH, A, T as CHAT and SCH, A through CH as SCHACH on who
       `Turn 1: Ada — CHAT · ${chat} points`,
     );
     await expect(
-      adaEditor.getByRole("button", { name: "Row 8, column 8: committed CH", exact: true }),
+      adaEditor.getByRole("button", { name: /^Row 8, column 8: committed CH,/ }),
     ).toBeVisible();
     await attach(testInfo, page, "desktop-board-chat.png");
 
@@ -435,7 +435,7 @@ test("a real match plays CH, A, T as CHAT and SCH, A through CH as SCHACH on who
     await expect(schTile.first()).toBeVisible();
     const linEditor = lin.getByRole("region", { name: "Move editor", exact: true });
     await expect(
-      linEditor.getByRole("button", { name: "Row 8, column 8: committed CH", exact: true }),
+      linEditor.getByRole("button", { name: /^Row 8, column 8: committed CH,/ }),
     ).toBeVisible();
     await expect(linEditor).toHaveAttribute("data-input", "touch");
 
@@ -448,10 +448,10 @@ test("a real match plays CH, A, T as CHAT and SCH, A through CH as SCHACH on who
       .tap();
     await linEditor.getByRole("button", { name: /^Row 7, column 8:/ }).tap();
     await expect(
-      linEditor.getByRole("button", { name: "Row 6, column 8: tentative SCH", exact: true }),
+      linEditor.getByRole("button", { name: /^Row 6, column 8: tentative SCH,/ }),
     ).toBeVisible();
     await expectFaceFits(
-      linEditor.getByRole("button", { name: "Row 6, column 8: tentative SCH", exact: true }),
+      linEditor.getByRole("button", { name: /^Row 6, column 8: tentative SCH,/ }),
       "SCH",
       "mobile draft",
     );
@@ -483,7 +483,7 @@ test("a real match plays CH, A, T as CHAT and SCH, A through CH as SCHACH on who
       `Turn 2: Lin — SCHACH · ${schach} points`,
     );
     await expectFaceFits(
-      linEditor.getByRole("button", { name: "Row 6, column 8: committed SCH", exact: true }),
+      linEditor.getByRole("button", { name: /^Row 6, column 8: committed SCH,/ }),
       "SCH",
       "mobile committed square",
     );
