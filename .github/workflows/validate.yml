@@ -5,7 +5,7 @@ name: Validate
 # push cancels the older run.
 on:
   pull_request:
-    types: [opened, reopened, synchronize, ready_for_review]
+    types: [opened, reopened, synchronize, ready_for_review, converted_to_draft]
   workflow_dispatch:
 
 concurrency:
@@ -41,3 +41,17 @@ jobs:
       - run: rustup toolchain install
       - run: bun install --frozen-lockfile
       - run: bun run test:deployment
+
+  merge-ready:
+    name: ${{ github.event_name == 'pull_request' && !github.event.pull_request.draft && 'merge-ready' || 'validation-summary' }}
+    if: ${{ always() }}
+    needs: ["validate", "deployment"]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: moritzbrantner/reusable-workflows/.github/actions/merge-ready@b0f25f241d76af2584dfc9e375084ff5c5cb97da
+        with:
+          needs: ${{ toJSON(needs) }}
+          required: '["validate", "deployment"]'
+          allow-skipped: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && '["validate", "deployment"]' || '[]' }}
