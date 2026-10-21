@@ -37,7 +37,7 @@ test("mouse drag reorders the rack and places, moves and returns draft tiles", a
   const tile = (id: string | undefined) =>
     editor.locator(`.phone-rack li[data-tile-id="${id}"]`).getByRole("button");
   const square = (column: number, state: string) =>
-    editor.getByRole("button", { name: `Row 8, column ${column}: ${state}`, exact: true });
+    editor.getByRole("button", { name: new RegExp(`^Row 8, column ${column}: ${state},`) });
 
   // Rack → rack: physical rearrangement keeps identity and count.
   await mouseDrag(page, tile(initial[0]), tile(initial[2]));
@@ -97,7 +97,7 @@ for (const viewport of [
       const tile = editor
         .locator(`.phone-rack li[data-tile-id="${letter.id}"]`)
         .getByRole("button");
-      const centre = editor.getByRole("button", { name: "Row 8, column 8: center", exact: true });
+      const centre = editor.getByRole("button", { name: /^Row 8, column 8: center,/ });
       await centre.scrollIntoViewIfNeeded();
       await tile.scrollIntoViewIfNeeded();
       await touchDrag(page, tile, centre, true);
