@@ -359,6 +359,20 @@ Source: owner free-form steering session, 2026-10-13. Previous completed impleme
   Status: owner-approved 2026-10-17 (asked by the work-loop orchestrator). Answers 5.2 (choice A).
   "Host it yourself" means the local checkout runs the existing native Rust Scrabble game server, and the clients connect to it. There is one authority implementation, with the same protocol, replay and privacy guarantees as moenarch.com. No browser-peer authority and no host migration.
 
+## 6. Developer review and model-based state exploration
+
+- **6.1 Interactive development-only multiplayer state explorer.**
+  Status: owner-approved 2026-10-21 (`/steer` Q2=A, Q3=A, Q4=A, Q7=A).
+  From a local development session, a reviewer can explore the Scrabble UI through a **clickable graph of expected states and transitions**, alongside **three independently interactive live browser views**: the public shared board, Player 1 and Player 2. Clicking a state prepares the real application at that state; clicking a transition performs its real UI action. The reviewer can take over any browser view and continue interacting. The modeled journey spans **create, invite/join, start, play, finish and rematch**, with relevant rejection, error, disconnect and reconnect states—not merely static phase fixtures. This is a separate development-only review surface, never additional public-game navigation. Reuse the reproducible browser-takeover capability of [#185](https://github.com/moritzbrantner/scrabble/issues/185).
+
+- **6.2 Automated traversal, live observation and unmodeled-action discovery.**
+  Status: owner-approved 2026-10-21 (`/steer` Q5=A, Q6=A, Q9=B).
+  On demand, the explorer **generates and runs browser journeys for all declared reachable states and transitions**, including modeled invalid/rejected paths, and reports **passed, failed and untested** coverage with useful screenshots/traces. When the reviewer interacts directly with a live client, the explorer follows **observable UI outcomes and authoritative game responses** and highlights the corresponding state; an unrecognized state is reported rather than guessed. Compare visible actionable controls with modeled transitions, report potential omissions, and allow deliberate exclusions without assuming every unknown control is a product defect. Coverage describes the **declared model**, not a proof that every possible application behavior is represented. Do not add the full exploration as a required expensive check on every PR by default.
+
+- **6.3 Independent reviewed contract and isolated deterministic state replay.**
+  Status: owner-approved 2026-10-21 (`/steer` Q1=A, Q8=A, Q10=A).
+  Maintain an **explicit, version-controlled expected UI state graph independent of Scrabble's implementation**; discovered behavior may suggest graph changes but must never silently rewrite the approved contract. Reaching an earlier or arbitrarily selected state starts a **fresh disposable match** and deterministically replays the necessary real actions to that state, verifying what the real application displays. The current review match remains untouched; saved-state checkpoint restoration is not the initial approach. Rust remains the sole game/rules/turn authority, and each player's private rack and proposed placement remain private under 2.5–2.10. Do not introduce a duplicate frontend rules engine or a production state-manipulation backdoor.
+
 ## Existing baseline and boundaries
 
 The current application has an authoritative Rust ruleset with deployment-selected dictionary/tile/board configuration, a separate shared-board and phone-player role, persisted English/German/Spanish interface translations, and a directly visible Light/Dark/System appearance selector. See `docs/specs/configurable-rulesets.md`, `docs/specs/mobile-accessibility.md`, `docs/adr/0007-shared-board-authority.md`, and [merged PR #92](https://github.com/moritzbrantner/scrabble/pull/92). These may fulfill parts of the above intent; they do **not** establish that player-selectable profiles, a gear modal, hexagonal play, or clocks are available today.
