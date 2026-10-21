@@ -32,7 +32,7 @@ const numericFields = [
   "minimum_players",
   "maximum_players",
 ] as const;
-type DraftRules = Record<keyof MatchSettings, string>;
+type DraftRules = Record<(typeof numericFields)[number], string>;
 function initialRules(rules: MatchSettings): DraftRules {
   return {
     rack_size: String(rules.rack_size),
@@ -72,6 +72,8 @@ export function CreateBoard({
   const [edits, setEdits] = useState<DraftRules>();
   const [touched, setTouched] = useState(false);
   const [clockDraft, setClockDraft] = useState(initialClockDraft);
+  // Decision 1.53: dictionary hints are off for every new match unless the host opts in.
+  const [dictionaryHints, setDictionaryHints] = useState(false);
   const request = useRef<CreateRequest>(undefined);
   const operation = useRef<AbortController>(undefined);
   const initialBoard = useRef(sharedBoard?.value);
@@ -178,18 +180,20 @@ export function CreateBoard({
           !customWordsSelected &&
           !customTilesSelected &&
           catalog.defaults.legacyCompatible &&
-          clock.control === undefined
+          clock.control === undefined &&
+          !dictionaryHints
         ) {
           request.current = intent;
         } else {
-          const rules = matchSettings.safeParse(
-            Object.fromEntries(
+          const rules = matchSettings.safeParse({
+            ...Object.fromEntries(
               numericFields.map((key) => [
                 key,
                 edits[key].trim() === "" ? NaN : Number(edits[key]),
               ]),
             ),
-          );
+            ...(dictionaryHints ? { dictionary_hints: true } : {}),
+          });
           const wordList = selectedWords?.identity;
           const wordListAccess = selectedWords?.access;
           const tile = selectedTiles?.identity;
@@ -375,6 +379,18 @@ export function CreateBoard({
                   setClockDraft(draft);
                 }}
               />
+              <label className="dictionary-hints">
+                <input
+                  type="checkbox"
+                  checked={dictionaryHints}
+                  onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                    change();
+                    setDictionaryHints(event.currentTarget.checked);
+                  }}
+                />{" "}
+                {t("create.dictionaryHints")}
+                <small className="setting-note">{t("create.dictionaryHintsHelp")}</small>
+              </label>
               <details className="advanced-rules">
                 <summary>{t("profiles.advanced")}</summary>
                 <div className="advanced-match-rules">

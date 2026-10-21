@@ -241,6 +241,7 @@ fn legal_composed_hex_history_with_analysis_fits_every_player_wire_projection() 
             scoreless_turn_limit: u16::MAX,
             minimum_players: 2,
             maximum_players: 4,
+            dictionary_hints: false,
         },
     )
     .unwrap();

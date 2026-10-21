@@ -94,7 +94,7 @@ for (const viewport of [
         throw new Error("No fixture letter");
       }
       await rack.locator(`[data-tile-id="${letter.id}"]`).getByRole("button").tap();
-      await region.getByRole("button", { name: "Row 8, column 8: center", exact: true }).tap();
+      await region.getByRole("button", { name: /^Row 8, column 8: center,/ }).tap();
       await expect(region.locator(".tentative-square")).toHaveCount(1);
       await button.tap();
       await expect(button).toHaveAttribute("aria-pressed", "true");
@@ -139,12 +139,10 @@ test("keyboard enters the board once, navigates squares, and leaves to turn acti
   for (let index = 0; index < playing.own_rack.tiles.length; index++) {
     await page.keyboard.press("Tab");
   }
-  const center = region.getByRole("button", { name: "Row 8, column 8: center", exact: true });
+  const center = region.getByRole("button", { name: /^Row 8, column 8: center,/ });
   await expect(center).toBeFocused();
   await page.keyboard.press("ArrowRight");
-  await expect(
-    region.getByRole("button", { name: "Row 8, column 9: empty", exact: true }),
-  ).toBeFocused();
+  await expect(region.getByRole("button", { name: /^Row 8, column 9: empty,/ })).toBeFocused();
   await page.keyboard.press("ArrowLeft");
   await expect(center).toBeFocused();
   await page.keyboard.press("Escape");

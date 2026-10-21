@@ -93,8 +93,9 @@ test("built Pages client plays consecutive turns through isolated phones", async
     const commit = (phone: Page) => phone.getByRole("button", { name: "Commit move", exact: true });
     const waiting = async (phone: Page) => {
       const rack = phone.getByRole("list", { name: "Your rack", exact: true });
-      await expect(rack).toHaveAttribute("aria-disabled", "true");
-      await expect(rack.locator("button:disabled")).toHaveCount(7);
+      // Decision 2.8: a waiting player may arrange a private pre-move but never submit it.
+      await expect(rack).toHaveAttribute("aria-disabled", "false");
+      await expect(rack.locator("button:disabled")).toHaveCount(0);
       await expect(commit(phone)).toBeDisabled();
       await expect(phone.getByRole("button", { name: "Pass turn", exact: true })).toBeDisabled();
       await expect(
@@ -201,7 +202,7 @@ test("built Pages client plays consecutive turns through isolated phones", async
           .first(),
         target,
       );
-      await expect(target).toHaveAccessibleName(new RegExp(`tentative ${letter}$`));
+      await expect(target).toHaveAccessibleName(new RegExp(`tentative ${letter},`));
     }
     await expect.poll(() => firstState()?.own_preview?.tiles.length).toBe(2);
     await expect(page.locator(".tentative-tile, .tentative-square")).toHaveCount(0);

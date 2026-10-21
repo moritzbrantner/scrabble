@@ -33,12 +33,12 @@ test("a second native ruleset drives compact rack geometry, board size and Unico
     expect(target?.height).toBeGreaterThanOrEqual(48);
     expect(target?.height).toBeLessThanOrEqual(72);
     await rack.getByRole("button", { name: "Blank tile, 0 points", exact: true }).click();
-    await editor.getByRole("button", { name: "Row 4, column 4: center", exact: true }).click();
+    await editor.getByRole("button", { name: /^Row 4, column 4: center,/ }).click();
     const choices = editor.getByRole("group", { name: "Choose blank letter", exact: true });
     await expect(choices.getByRole("button", { name: "X", exact: true })).toHaveCount(0);
     await choices.getByRole("button", { name: "Ö", exact: true }).click();
     await rack.getByRole("button", { name: "L, 2 points", exact: true }).click();
-    await editor.getByRole("button", { name: "Row 4, column 5: empty", exact: true }).click();
+    await editor.getByRole("button", { name: /^Row 4, column 5: empty,/ }).click();
     await expect(editor.getByRole("button", { name: "Commit move", exact: true })).toBeEnabled();
     await page.evaluate(
       async ({ snapshot, rules }) => {
@@ -51,7 +51,7 @@ test("a second native ruleset drives compact rack geometry, board size and Unico
     await expect(editor.locator(".committed-square")).toHaveCount(2);
     await expect(rack).toHaveAttribute("aria-disabled", "true");
     await expect(
-      editor.getByRole("button", { name: "Row 4, column 4: committed Ö", exact: true }),
+      editor.getByRole("button", { name: /^Row 4, column 4: committed Ö,/ }),
     ).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       390,

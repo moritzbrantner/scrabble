@@ -553,6 +553,7 @@ mod multi_letter {
                 scoreless_turn_limit: legacy.scoreless_turn_limit,
                 minimum_players: legacy.minimum_players,
                 maximum_players: legacy.maximum_players,
+                dictionary_hints: false,
             },
         )?
         .rules;

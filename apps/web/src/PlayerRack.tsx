@@ -47,7 +47,7 @@ export function PlayerRack({
             >
               {selection === undefined ? (
                 <span className={`rack-tile${blank ? " blank-tile" : ""}`} aria-hidden="true">
-                  <span className={faceClass(letter)}>{letter}</span>
+                  <span className={faceClass(letter)}>{letter}</span>{" "}
                   <small>{value === undefined ? "?" : number(value)}</small>
                 </span>
               ) : (
@@ -69,9 +69,12 @@ export function PlayerRack({
                     selection.onKeyDown?.(tile.id, event)
                   }
                 >
+                  {/* A space keeps the letter and value separate words, so the visible
+                      "N 1" stays part of the name "N, 1 points" (axe
+                      label-content-name-mismatch). */}
                   <span aria-hidden="true" className={faceClass(letter)}>
                     {letter}
-                  </span>
+                  </span>{" "}
                   <small aria-hidden="true">{value === undefined ? "?" : number(value)}</small>
                 </Button>
               )}

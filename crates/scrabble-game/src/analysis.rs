@@ -25,15 +25,16 @@ pub(crate) fn evaluate_at(
     dictionary: &dyn Dictionary,
     now_ms: Option<u64>,
 ) -> PlacementEvaluation {
-    let error =
-        match commit::prepare_with_dictionary_at(state, player, placements, dictionary, now_ms) {
-            Ok((_, score)) => {
-                return PlacementEvaluation::Valid {
-                    analysis: score.analysis(state.ruleset().main_word_length),
-                };
-            }
-            Err(error) => error,
-        };
+    // Without the host's hint option, an unsubmitted placement never reveals membership.
+    let dictionary = state.ruleset().dictionary_hints.then_some(dictionary);
+    let error = match commit::prepare_at(state, player, placements, dictionary, now_ms) {
+        Ok((_, score)) => {
+            return PlacementEvaluation::Valid {
+                analysis: score.analysis(state.ruleset().main_word_length),
+            };
+        }
+        Err(error) => error,
+    };
     let problem = match error {
         CommitError::Placement(error) | CommitError::Score(ScoredCommitError::Placement(error)) => {
             match error {

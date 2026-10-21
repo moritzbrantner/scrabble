@@ -52,6 +52,18 @@ export const en = {
   "hex.bingo": "Bingo: {points}",
   "hex.total": "Total: {points}",
   "hex.preview": "Proposed move breakdown",
+  "estimate.title": "Estimated score: {points}.",
+  "estimate.unchecked":
+    "Not a promise that the words are valid: the dictionary is checked when you commit.",
+  "estimate.hintsValid": "Dictionary hints: every word is in the match dictionary.",
+  "estimate.premove":
+    "Calculated on this device while you wait; dictionary hints are not available for pre-moves.",
+  "estimate.horizontal": "Across",
+  "estimate.vertical": "Down",
+  "estimate.diagonal": "Diagonal",
+  "create.dictionaryHints": "Dictionary hints",
+  "create.dictionaryHintsHelp":
+    "Let players privately check their words against the match dictionary before committing. Off by default; fixed for the whole match.",
   "hex.board": "Hexagonal board, side {size}",
   "profiles.wordList": "Word list",
   "profiles.tiles": "Tile profile",
@@ -300,6 +312,8 @@ export const en = {
   "push.failed": "Turn notifications could not be set up. Try again.",
   "editor.dragCancelled": "Drag cancelled. Your tiles are unchanged.",
   "editor.rackMoved": "Tile moved to rack position {position} of {count}.",
+  "editor.premoveOverlap":
+    "An accepted move used one of your squares, so your whole pre-move was cleared.",
   "editor.squareEmpty": "Row {row}, column {column}: empty",
   "editor.squareCenter": "Row {row}, column {column}: center",
   "editor.squareDraft": "Row {row}, column {column}: tentative {letter}",
@@ -316,6 +330,8 @@ export const en = {
   "history.score": "{name} {delta} ({score})",
   "draft.changed": "The game changed. Start a fresh draft.",
   "draft.waiting": "Wait for your turn.",
+  "draft.premove":
+    "Private pre-move saved on this device. Review and commit it when your turn starts.",
   "draft.empty": "Select a tile and a board square.",
   "draft.too-many": "Use no more tiles than your rack holds.",
   "draft.not-owned": "This tile is no longer in your rack.",
@@ -557,6 +573,18 @@ const de: Record<CopyKey, string> = {
   "hex.bingo": "Bingo: {points}",
   "hex.total": "Gesamt: {points}",
   "hex.preview": "Wertung des Zugentwurfs",
+  "estimate.title": "Geschätzte Wertung: {points}.",
+  "estimate.unchecked":
+    "Keine Garantie, dass die Wörter gültig sind: Das Wörterbuch wird beim Bestätigen geprüft.",
+  "estimate.hintsValid": "Wörterbuch-Hinweise: Alle Wörter stehen im Wörterbuch der Partie.",
+  "estimate.premove":
+    "Auf diesem Gerät berechnet, während du wartest; für Vorab-Züge gibt es keine Wörterbuch-Hinweise.",
+  "estimate.horizontal": "Waagerecht",
+  "estimate.vertical": "Senkrecht",
+  "estimate.diagonal": "Diagonal",
+  "create.dictionaryHints": "Wörterbuch-Hinweise",
+  "create.dictionaryHintsHelp":
+    "Spieler können ihre Wörter vor dem Bestätigen privat mit dem Wörterbuch der Partie prüfen. Standardmäßig aus; gilt für die ganze Partie.",
   "hex.board": "Sechseckiges Brett, Seitenmaß {size}",
   "profiles.wordList": "Wortliste",
   "profiles.tiles": "Buchstabenprofil",
@@ -821,6 +849,8 @@ const de: Record<CopyKey, string> = {
   "push.failed": "Zug-Benachrichtigungen konnten nicht eingerichtet werden. Versuche es erneut.",
   "editor.dragCancelled": "Ziehen abgebrochen. Deine Steine sind unverändert.",
   "editor.rackMoved": "Stein auf Ablageplatz {position} von {count} verschoben.",
+  "editor.premoveOverlap":
+    "Ein angenommener Zug belegt eines deiner Felder; dein ganzer Vorab-Zug wurde gelöscht.",
   "editor.squareEmpty": "Zeile {row}, Spalte {column}: leer",
   "editor.squareCenter": "Zeile {row}, Spalte {column}: Mitte",
   "editor.squareDraft": "Zeile {row}, Spalte {column}: vorläufig {letter}",
@@ -837,6 +867,8 @@ const de: Record<CopyKey, string> = {
   "history.score": "{name} {delta} ({score})",
   "draft.changed": "Das Spiel hat sich geändert. Beginne einen neuen Entwurf.",
   "draft.waiting": "Warte, bis du am Zug bist.",
+  "draft.premove":
+    "Privater Vorab-Zug auf diesem Gerät gespeichert. Prüfe und bestätige ihn, wenn du am Zug bist.",
   "draft.empty": "Wähle einen Stein und ein Feld.",
   "draft.too-many": "Verwende höchstens die Steine deiner Ablage.",
   "draft.not-owned": "Dieser Stein ist nicht mehr in deiner Ablage.",
@@ -1085,6 +1117,19 @@ const es: Record<CopyKey, string> = {
   "hex.bingo": "Bingo: {points}",
   "hex.total": "Total: {points}",
   "hex.preview": "Desglose de la jugada propuesta",
+  "estimate.title": "Puntuación estimada: {points}.",
+  "estimate.unchecked":
+    "No garantiza que las palabras sean válidas: el diccionario se comprueba al confirmar.",
+  "estimate.hintsValid":
+    "Pistas del diccionario: todas las palabras están en el diccionario de la partida.",
+  "estimate.premove":
+    "Calculada en este dispositivo mientras esperas; las pistas del diccionario no están disponibles para jugadas preparadas.",
+  "estimate.horizontal": "Horizontal",
+  "estimate.vertical": "Vertical",
+  "estimate.diagonal": "Diagonal",
+  "create.dictionaryHints": "Pistas del diccionario",
+  "create.dictionaryHintsHelp":
+    "Permite comprobar en privado las palabras con el diccionario de la partida antes de confirmar. Desactivado por defecto; fijo para toda la partida.",
   "hex.board": "Tablero hexagonal, tamaño {size}",
   "profiles.wordList": "Lista de palabras",
   "profiles.tiles": "Perfil de fichas",
@@ -1338,6 +1383,8 @@ const es: Record<CopyKey, string> = {
   "push.failed": "No se pudieron configurar los avisos de turno. Inténtalo de nuevo.",
   "editor.dragCancelled": "Arrastre cancelado. Tus fichas no han cambiado.",
   "editor.rackMoved": "Ficha movida a la posición {position} de {count} del atril.",
+  "editor.premoveOverlap":
+    "Una jugada aceptada ocupó una de tus casillas; se borró toda tu jugada preparada.",
   "editor.squareEmpty": "Fila {row}, columna {column}: vacía",
   "editor.squareCenter": "Fila {row}, columna {column}: centro",
   "editor.squareDraft": "Fila {row}, columna {column}: provisional {letter}",
@@ -1354,6 +1401,8 @@ const es: Record<CopyKey, string> = {
   "history.score": "{name} {delta} ({score})",
   "draft.changed": "La partida cambió. Empieza un borrador nuevo.",
   "draft.waiting": "Espera tu turno.",
+  "draft.premove":
+    "Jugada preparada guardada en este dispositivo. Revísala y confírmala cuando sea tu turno.",
   "draft.empty": "Selecciona una ficha y una casilla.",
   "draft.too-many": "No uses más fichas de las que tiene tu atril.",
   "draft.not-owned": "Esta ficha ya no está en tu atril.",

@@ -172,6 +172,10 @@ pub struct Ruleset {
     pub main_word_length: WordLengthMetric,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub time_control: Option<TimeControl>,
+    /// Decision 1.53: private dictionary-membership hints for unsubmitted placements.
+    /// Off (and omitted) by default, so existing matches keep their exact interpretation.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub dictionary_hints: bool,
 }
 impl ContentIdentity {
     pub fn validate(&self) -> Result<(), ContractError> {
@@ -482,6 +486,7 @@ pub fn english_fixture() -> Ruleset {
         premium_policy: PremiumPolicy::AllWord,
         main_word_length: WordLengthMetric::Tiles,
         time_control: None,
+        dictionary_hints: false,
     }
 }
 

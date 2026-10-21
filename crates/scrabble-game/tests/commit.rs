@@ -19,9 +19,13 @@ fn envelope(sequence: u32, command: Command) -> CommandEnvelope {
     }
 }
 fn game(revision: &str) -> (GameSession, Vec<Placement>) {
+    game_with(revision, false)
+}
+fn game_with(revision: &str, dictionary_hints: bool) -> (GameSession, Vec<Placement>) {
     for seed in 0..=255 {
         let mut rules = english_fixture();
         rules.dictionary.revision = revision.into();
+        rules.dictionary_hints = dictionary_hints;
         let mut session =
             GameSession::new(GameState::new(GameId::new(1), rules, [seed; 32]).unwrap());
         session.add_player(PlayerId::new(1), "Ada".into()).unwrap();
@@ -386,4 +390,72 @@ fn non_active_owned_commit_cannot_change_the_playable_turn() {
         Err(CommandError::NotActive)
     );
     assert_eq!(session.state().canonical_bytes().unwrap(), before);
+}
+
+/// Decision 1.53/1.55 (#165): every board gets a private score estimate; only a match with
+/// hints enabled reveals dictionary membership before commit, which always checks it.
+#[test]
+fn dictionary_hints_gate_membership_in_private_estimates_but_never_commit_checks() {
+    use scrabble_game::protocol::{EvaluationProblem, PlacementEvaluation};
+    for hints in [false, true] {
+        let (mut session, placements) = game_with("1", hints);
+        // "TA" is not in the authored dictionary.
+        let mut invalid = placements.clone();
+        invalid[0].coordinate = placements[1].coordinate;
+        invalid[1].coordinate = placements[0].coordinate;
+        session
+            .apply(
+                PlayerId::new(1),
+                2,
+                &envelope(
+                    2,
+                    Command::Preview {
+                        placements: invalid.clone(),
+                    },
+                ),
+            )
+            .unwrap();
+        let evaluation = session
+            .player_snapshot(PlayerId::new(1))
+            .unwrap()
+            .own_preview
+            .unwrap()
+            .evaluation
+            .unwrap();
+        if hints {
+            assert_eq!(
+                evaluation,
+                PlacementEvaluation::Invalid {
+                    problem: EvaluationProblem::InvalidWords,
+                    words: vec!["TA".into()],
+                }
+            );
+        } else {
+            let PlacementEvaluation::Valid { analysis } = evaluation else {
+                panic!("hints off must estimate without revealing membership");
+            };
+            assert_eq!(analysis.words[0].text, "TA");
+            assert!(analysis.total > 0);
+        }
+        assert_eq!(
+            session.apply(
+                PlayerId::new(1),
+                3,
+                &envelope(
+                    3,
+                    Command::Commit {
+                        placements: invalid
+                    }
+                )
+            ),
+            Err(CommandError::Commit(CommitError::Dictionary(
+                DictionaryError::InvalidWords {
+                    words: vec!["TA".into()]
+                }
+            )))
+        );
+    }
+    // Off is the default and is omitted, keeping existing configurations byte-identical.
+    let encoded = serde_json::to_value(english_fixture()).unwrap();
+    assert!(encoded.get("dictionary_hints").is_none());
 }

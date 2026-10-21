@@ -26,7 +26,7 @@ test("blank editing and authoritative updates reconcile without changing a priva
   expect(letter).toBeDefined();
   const blankButton = editor.locator(`[data-tile-id="${blank?.id}"]`).getByRole("button");
   await blankButton.click();
-  await editor.getByRole("button", { name: "Row 8, column 8: center", exact: true }).click();
+  await editor.getByRole("button", { name: /^Row 8, column 8: center,/ }).click();
   const choices = editor.getByRole("group", { name: "Choose blank letter", exact: true });
   await expect(choices).toBeVisible();
   await expect(editor.getByRole("textbox")).toHaveCount(0);
@@ -35,11 +35,11 @@ test("blank editing and authoritative updates reconcile without changing a priva
   await expect(choices).toHaveCount(0);
   await expect(blankButton).toBeFocused();
   await page.keyboard.press("Enter");
-  await editor.getByRole("button", { name: "Row 8, column 8: center", exact: true }).press("Enter");
+  await editor.getByRole("button", { name: /^Row 8, column 8: center,/ }).press("Enter");
   await expect(choices.getByRole("button", { name: "A", exact: true })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(
-    editor.getByRole("button", { name: "Row 8, column 8: tentative A", exact: true }),
+    editor.getByRole("button", { name: /^Row 8, column 8: tentative A,/ }),
   ).toBeFocused();
   const pass = editor.getByRole("button", { name: "Pass turn", exact: true });
   await pass.press("Enter");
@@ -48,11 +48,11 @@ test("blank editing and authoritative updates reconcile without changing a priva
   await expect(editor.getByRole("group", { name: "Confirm pass", exact: true })).toHaveCount(0);
   await expect(pass).toBeFocused();
   await expect(
-    editor.getByRole("button", { name: "Row 8, column 8: tentative A", exact: true }),
+    editor.getByRole("button", { name: /^Row 8, column 8: tentative A,/ }),
   ).toBeVisible();
   await expect(blankButton).toHaveAttribute("data-placed", "true");
   await editor.locator(`[data-tile-id="${letter?.id}"]`).getByRole("button").click();
-  await editor.getByRole("button", { name: "Row 8, column 9: empty", exact: true }).click();
+  await editor.getByRole("button", { name: /^Row 8, column 9: empty,/ }).click();
   await expect(editor.getByRole("status")).toContainText("Ready to commit");
   await blankButton.click();
   await editor.getByRole("button", { name: "Return selected tile", exact: true }).click();
