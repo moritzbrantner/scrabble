@@ -8,10 +8,19 @@ import { join } from "node:path";
 
 import { z } from "zod";
 const pages = Bun.argv.includes("--pages");
-const testArgs = Bun.argv.slice(2).filter((argument) => argument !== "--pages");
+// Opt-in review scenarios (#185): `--review` selects apps/web/review, and
+// `--interactive` keeps the headed browsers open for manual takeover.
+const review = Bun.argv.includes("--review");
+const interactive = review && Bun.argv.includes("--interactive");
+const testArgs = [
+  ...Bun.argv
+    .slice(2)
+    .filter((argument) => !["--pages", "--review", "--interactive"].includes(argument)),
+  ...(interactive ? ["--headed"] : []),
+];
 // Completed matches retire after five minutes. Verify replay journeys in
 // bounded fixture lifetimes instead of waiting for unrelated tests.
-if (testArgs.length === 0 && process.env.SCRABBLE_BROWSER_SUITE === undefined) {
+if (!review && testArgs.length === 0 && process.env.SCRABBLE_BROWSER_SUITE === undefined) {
   for (const suite of ["other", "hex", "custom-layout-replay"]) {
     const task = Bun.spawn([process.execPath, ...Bun.argv.slice(1)], {
       env: { ...process.env, SCRABBLE_BROWSER_SUITE: suite },
@@ -104,6 +113,7 @@ const taskEnv: NodeJS.ProcessEnv = {
   SCRABBLE_BROWSER_PORT: String(port),
   SCRABBLE_TRANSPORT_FIXTURE: metadataPath,
   SCRABBLE_GAME_FIXTURE: gameMetadataPath,
+  ...(interactive ? { SCRABBLE_REVIEW_INTERACTIVE: "1" } : {}),
 };
 delete taskEnv.NO_COLOR;
 let child: Bun.Subprocess | undefined;
@@ -160,7 +170,7 @@ const run = async () => {
       "playwright",
       "test",
       "--config",
-      pages ? "apps/web/playwright.pages.config.ts" : "apps/web/playwright.config.ts",
+      `apps/web/playwright${review ? ".review" : ""}${pages ? ".pages" : ""}.config.ts`,
       ...testArgs,
     ],
     { env: taskEnv, stdout: "inherit", stderr: "inherit" },

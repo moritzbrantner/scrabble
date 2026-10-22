@@ -33,6 +33,8 @@ For a playable local game, prepare the English dictionary once, then run `bun ru
 
 The full browser gate runs hex journeys in a separate fixture lifetime capped at four minutes, so graceful shutdown verifies their canonical replay before completed matches retire. Focused arguments to `scripts/test-browser.ts` retain their normal Playwright selection. Failed runs retain private fixture inputs at the path printed in the error output; keep those files private because they include recovery capabilities.
 
+Review scenarios are opt-in and never part of `bun run check`. `bun run review two-player-turn --interactive` starts the same native fixture server, a disposable match, the shared board and separate Ada and Lin browsers. Real UI actions bring it to Ada's turn with a legitimate proposed `AT` placement. The headed browsers then pause in the Playwright Inspector so you can take over: move tiles, commit, or prepare Lin's private pre-move. Resume or close the Inspector to finish and clean up. Rerunning the command replays the same scenario and configuration in a fresh fixture server and match. Without `--interactive`, `bun run review` runs the same setup headless with a smoke assertion. Screenshots of each view go to `test-results/review/`. Add `--trace on` for a Playwright trace.
+
 Match setup starts untimed. Enable clocks explicitly to choose cumulative per-player
 or fresh per-turn time, exact durations, and automatic pass or forfeit on expiry.
 Cumulative automatic pass requires a positive turn-start increment. The server
