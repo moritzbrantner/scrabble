@@ -13,7 +13,7 @@
     "lint": "bun run lint:web && cargo clippy --workspace --all-targets --locked -- -D warnings",
     "lint:web": "oxlint --type-aware --tsconfig tsconfig.json apps/web scripts",
     "typecheck": "tsc --noEmit",
-    "test": "cargo test --workspace --all-targets --locked && bun test apps/web/src scripts",
+    "test": "cargo test --workspace --all-targets --locked && bun test apps/web/src apps/web/review scripts",
     "build": "vite build --config apps/web/vite.config.ts",
     "check": "bun run format:check && bun run typecheck && bun run lint && bun run test && bun run build && bun run test:browser",
     "test:browser": "bun scripts/test-browser.ts && bun scripts/test-browser.ts --pages",
