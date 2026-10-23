@@ -264,6 +264,30 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         "SCRABBLE_PROFILE_CATALOG_FILE".into(),
         catalog.to_str().ok_or("invalid catalog path")?.into(),
     );
+    // Explicit corpus acceptance reuses the actual operator-prepared catalog and
+    // SCOWL baseline. Ordinary browser suites keep their authored data unchanged.
+    if let Some(root) = std::env::var_os("SCRABBLE_PRESET_ACCEPTANCE_ROOT") {
+        let root = std::fs::canonicalize(root)?;
+        values.insert(
+            "SCRABBLE_PROFILE_CATALOG_FILE".into(),
+            root.join("presets/catalog.json")
+                .to_str()
+                .ok_or("invalid preset path")?
+                .into(),
+        );
+        values.insert(
+            "SCRABBLE_DICTIONARY_FILE".into(),
+            root.join("baseline/words.txt")
+                .to_str()
+                .ok_or("invalid baseline path")?
+                .into(),
+        );
+        values.insert("SCRABBLE_DICTIONARY_NAME".into(), "scowl-en-us-60".into());
+        values.insert(
+            "SCRABBLE_DICTIONARY_REVISION".into(),
+            "2026.02.25-recipe1".into(),
+        );
+    }
     values.insert(
         "SCRABBLE_MATCH_CONFIGURATION_DIR".into(),
         directory

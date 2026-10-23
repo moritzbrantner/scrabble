@@ -1,37 +1,40 @@
-// Prepares the English (UK), German and Spanish word-list presets and their tile profiles
+// Prepares expanded English, English (UK), German and Spanish word-list presets and their tile profiles
 // (#153) as a profile catalog that extends the server's built-in profiles. Run by the
 // operator at deploy time; the generated lists are never committed. Every list comes from
 // a pinned free source, is checked against its reviewed count and hash, and keeps its
 // licence and source notices next to it.
 //
-// bun scripts/prepare-word-lists.ts SCOWL_CHECKOUT LIBREOFFICE_DICTIONARIES_CHECKOUT NEW_DIRECTORY
-import { copyFile, mkdir, realpath } from "node:fs/promises";
+// bun scripts/prepare-word-lists.ts SCOWL_CHECKOUT LIBREOFFICE_DICTIONARIES_CHECKOUT ENABLE2K_CHECKOUT NEW_DIRECTORY
+import { copyFile, mkdir, readFile, realpath } from "node:fs/promises";
 import { resolve } from "node:path";
 
+import { enable2kSource, verifiedEnable2kWords, wordListDifference } from "./enable2k";
 import { affixEncoding, decode, entries, expand, parseAffixes } from "./hunspell";
 
 const scowlRevision = "7e99edab8e32f9f9ea2b15f249ca8d4d67237410";
 const dictionariesRevision = "67032ee957631908098a72edf48dc81cac27e369";
 const generalSpelling = "General spelling — not official tournament lexicon";
-const [scowlArgument, dictionariesArgument, destinationArgument] = Bun.argv.slice(2);
-if (!scowlArgument || !dictionariesArgument || !destinationArgument) {
+const [scowlArgument, dictionariesArgument, enable2kArgument, destinationArgument] =
+  Bun.argv.slice(2);
+if (!scowlArgument || !dictionariesArgument || !enable2kArgument || !destinationArgument) {
   throw new Error(
-    "Provide pinned SCOWL and LibreOffice dictionaries checkouts and a new output directory",
+    "Provide pinned SCOWL, LibreOffice dictionaries and ENABLE2K checkouts and a new output directory",
   );
 }
 const scowl = await realpath(scowlArgument);
 const dictionaries = await realpath(dictionariesArgument);
+const enable2k = await realpath(enable2kArgument);
 const destination = resolve(destinationArgument);
 
 async function run(cwd: string, command: string[]): Promise<string> {
   const child = Bun.spawn(command, { cwd, stdout: "pipe", stderr: "pipe" });
-  const [output, , code] = await Promise.all([
+  const [output, errors, code] = await Promise.all([
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),
     child.exited,
   ]);
   if (code !== 0) {
-    throw new Error(`Word-list preparation failed: ${command.join(" ")}`);
+    throw new Error(`Word-list preparation failed (${code}): ${command.join(" ")}\n${errors}`);
   }
   return output;
 }
@@ -43,6 +46,7 @@ async function pinned(cwd: string, revision: string, paths: string[] = []) {
 }
 await pinned(scowl, scowlRevision);
 await pinned(dictionaries, dictionariesRevision, ["de", "es"]);
+await pinned(enable2k, enable2kSource.revision);
 
 const sha256 = (text: string | Uint8Array) =>
   new Bun.CryptoHasher("sha256").update(text).digest("hex");
@@ -52,14 +56,13 @@ const playable = (word: string, letters: RegExp) => {
 };
 const sorted = (words: Iterable<string>) => [...new Set(words)].sort();
 
-/** English (UK): the same SCOWL recipe as the en-US default, with British -ise spelling. */
-async function english(): Promise<string[]> {
-  await run(scowl, ["make", "-B"]);
+/** SCOWL recipe: A for the built-in US baseline, B for British -ise spelling. */
+async function english(variant: "A" | "B"): Promise<string[]> {
   const raw = await run(scowl, [
     "./scowl",
     "word-list",
     "60",
-    "B",
+    variant,
     "1",
     "--wo-poses=abbr",
     "--categories=",
@@ -70,6 +73,10 @@ async function english(): Promise<string[]> {
       .filter((word) => /^[a-z]{2,15}$/u.test(word))
       .map((word) => word.toUpperCase()),
   );
+}
+async function expandedEnglish(): Promise<string[]> {
+  const archive = new Uint8Array(await readFile(resolve(enable2k, enable2kSource.file)));
+  return verifiedEnable2kWords(archive);
 }
 async function hunspellForms(name: string): Promise<string[]> {
   const affBytes = new Uint8Array(
@@ -128,13 +135,40 @@ async function spanish(): Promise<string[]> {
 const tileProfiles: unknown = await Bun.file(
   resolve(import.meta.dir, "preset-tile-profiles.json"),
 ).json();
+await run(scowl, ["make", "-B"]);
+const scowlUs = await english("A");
+const scowlUk = await english("B");
+const enable2kEnglish = await expandedEnglish();
+const coverage = wordListDifference(scowlUs, enable2kEnglish);
+console.log(
+  `ENABLE2K vs SCOWL en-US: ${coverage.added.length} additional, ${coverage.missing.length} absent; ` +
+    `${enable2kEnglish.filter((word) => word.length === 2).length} two-letter words`,
+);
+if (!enable2kEnglish.includes("OD") || !enable2kEnglish.includes("JOB")) {
+  throw new Error("ENABLE2K lacks the reviewed OD/JOB cross-word regression");
+}
 
 const lists = [
+  {
+    file: "words-enable2k-en.txt",
+    identity: { name: "enable2k-en", revision: "2000-recipe1" },
+    label: "English (expanded) — ENABLE2K 2000, public domain (not official tournament lexicon)",
+    words: enable2kEnglish,
+    source: "https://github.com/BartMassey/wordlists",
+    sourceRevision: enable2kSource.revision,
+    sourceFile: enable2kSource.file,
+    sourceSha256: enable2kSource.sha256,
+    originators: "Alan Beale and M. Cooper",
+    usage:
+      "Broad English word-game list, millennial edition (2000); not an official tournament lexicon",
+    recipe: "enable2k.txt.gz; lowercase ASCII 2..15; uppercase; deduplicate; sort",
+    notices: [[resolve(enable2k, "README-enable2k.txt"), "ENABLE2K-README.txt"]],
+  },
   {
     file: "words-en-gb.txt",
     identity: { name: "scowl-en-gb-60", revision: "2026.02.25-recipe1" },
     label: `English (UK) — SCOWL size 60, 2026.02.25 (${generalSpelling})`,
-    words: await english(),
+    words: scowlUk,
     source: "https://github.com/en-wl/wordlist",
     sourceRevision: scowlRevision,
     recipe:
@@ -175,6 +209,10 @@ const lists = [
   },
 ];
 const reviewed: Record<string, { count: number; sha256: string }> = {
+  "enable2k-en": {
+    count: 169266,
+    sha256: "452528054b24cce68199a01534e4639d451ac0da3bdac70113546ad6e13fda0e",
+  },
   "scowl-en-gb-60": {
     count: 78021,
     sha256: "1acea2a1b62a834818754d4352e675c5b0d3bf73f2d673812c225eb62fdd34fd",
@@ -240,11 +278,14 @@ await Bun.write(
         file: list.file,
         source: list.source,
         sourceRevision: list.sourceRevision,
+        sourceFile: list.sourceFile,
+        sourceSha256: list.sourceSha256,
+        originators: list.originators,
         recipe: list.recipe,
         wordCount: list.count,
         sha256: list.sha256,
         notices: list.notices.map(([, to]) => to),
-        usage: generalSpelling,
+        usage: list.usage ?? generalSpelling,
       })),
       tileSources:
         "Standard published German and Spanish Scrabble letter distributions (counts and values)",
