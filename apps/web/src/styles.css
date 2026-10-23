@@ -1035,4 +1035,14 @@ body {
 }
 .tile-editor-table input {
   width: 4.5rem;
+  min-height: 2.25rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  background: var(--card, var(--background));
+  color: var(--foreground);
+}
+.tile-editor-table input:focus-visible {
+  outline: 2px solid var(--ring, var(--primary));
+  outline-offset: 1px;
 }
