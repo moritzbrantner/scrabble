@@ -11,6 +11,9 @@ export default defineConfig({
     ? { testMatch: "**/custom-board-layout-replay.spec.ts", globalTimeout: 240_000 }
     : {}),
   outputDir: suite ? `../../test-results/browser-${suite}` : "../../test-results",
+  ...(process.env.SCRABBLE_PRESET_ACCEPTANCE_ROOT
+    ? { outputDir: "../../test-results/prepared-presets" }
+    : {}),
   testIgnore: [
     ...(suite === "other"
       ? ["**/hexagonal-board.spec.ts", "**/custom-board-layout-replay.spec.ts"]
