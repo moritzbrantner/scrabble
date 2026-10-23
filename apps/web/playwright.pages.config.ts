@@ -18,6 +18,7 @@ function selectedTests() {
     "**/performance-budgets.spec.ts",
     "**/rematch.spec.ts",
     "**/profile-creation.spec.ts",
+    "**/word-list-presets.spec.ts",
     "**/custom-board-layout-responsive.spec.ts",
     "**/custom-word-lists.spec.ts",
     "**/custom-tile-profiles.spec.ts",
@@ -37,6 +38,9 @@ export default defineConfig({
   outputDir: suite
     ? `../../test-results/pages-browser-${suite}`
     : "../../test-results/pages-browser",
+  ...(process.env.SCRABBLE_PRESET_ACCEPTANCE_ROOT
+    ? { outputDir: "../../test-results/pages-prepared-presets" }
+    : {}),
   webServer: {
     cwd: fileURLToPath(new URL("../..", import.meta.url)),
     command: `bunx vite preview --config apps/web/vite.config.ts --outDir ../../test-results/pages-build --host 127.0.0.1 --port ${port} --strictPort`,
