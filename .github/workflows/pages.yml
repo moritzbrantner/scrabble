@@ -15,7 +15,6 @@ jobs:
       packages: read
     uses: moritzbrantner/reusable-workflows/.github/workflows/deploy-pages.yml@9a6439bc7f27a8f9b02ce0b5f9387ddf7e9ff1e3 # main
     with:
-      bun_version: 1.4.2
       build_command: bun scripts/build-pages.ts
       artifact_path: dist
       concurrency_group: pages
