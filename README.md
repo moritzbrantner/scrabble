@@ -4,7 +4,7 @@ A shared-board and private-phone multiplayer Scrabble application, under constru
 
 ## Development
 
-Install Bun 1.4.3 and Rust (the toolchain file selects 1.99.1 with Clippy and rustfmt). From a fresh checkout:
+Install the latest stable Bun and Rust (the toolchain file selects the stable channel with Clippy and rustfmt). From a fresh checkout:
 
 ```sh
 bun install --frozen-lockfile
@@ -13,7 +13,7 @@ bunx playwright install --with-deps chromium
 bun run check
 ```
 
-An optional locked Nix shell (`nix develop`, from `flake.nix`/`flake.lock`) provides Bun 1.4.3, Git and rustup. rustup still takes the exact Rust toolchain from `rust-toolchain.toml`, and Playwright's Chromium is still installed with the command above. A second optional environment, `.devcontainer/Dockerfile`, is a digest-pinned Playwright 1.63.0 image (Chromium included). It reads Bun from `package.json` and Rust from `rust-toolchain.toml`, so it adds no second version authority.
+An optional locked Nix shell (`nix develop`, from `flake.nix`/`flake.lock`) provides Bun 1.4.3, Git and rustup. rustup still takes the Rust toolchain channel from `rust-toolchain.toml`, and Playwright's Chromium is still installed with the command above. A second optional environment, `.devcontainer/Dockerfile`, is a digest-pinned Playwright 1.63.0 image (Chromium included). It reads Bun from `package.json` and Rust from `rust-toolchain.toml`, so it adds no second version authority.
 
 Required CI uses neither. The manual `Scrabble Provisioning Comparison` workflow (#81) runs the identical `bun run check` under conventional, Nix and container provisioning, with `cache_state` set to `cold` or `warm`. On 2026-10-17, five samples per variant (ubuntu-24.04, source `5084d2f`) gave these mean job times:
 
