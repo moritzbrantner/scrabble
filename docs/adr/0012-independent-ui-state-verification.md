@@ -1,6 +1,6 @@
 # Independent UI-state verification and browser exploration
 
-Status: accepted technical direction from owner `/steer` on 2026-10-21 (Q1–Q10); **not yet implemented**. Product outcome: [Decision Atlas 6.1–6.3](../DECISION-ATLAS.md#6-developer-review-and-model-based-state-exploration).
+Status: accepted technical direction from owner `/steer` on 2026-10-21 (Q1–Q10). The contract, generated traversal and coverage report are implemented in `apps/web/review/state-graph/` (`bun run review state-graph`); the interactive graph, live observation and control discovery are not yet implemented. Product outcome: [Decision Atlas 6.1–6.3](../DECISION-ATLAS.md#6-developer-review-and-model-based-state-exploration).
 
 ## Ownership
 

@@ -121,3 +121,19 @@ export async function observeSnapshots(
   }, holdRestoredSnapshot);
   return () => latest;
 }
+
+/** Close a real QUIC connection below BrowserMatch without supplying application state. */
+export async function interruptible(page: Page) {
+  await page.addInitScript(() => {
+    const NativeTransport = WebTransport;
+    let count = 0;
+    window.WebTransport = class extends NativeTransport {
+      constructor(url: string | URL, options?: WebTransportOptions) {
+        super(url, options);
+        count += 1;
+        document.documentElement.dataset.connections = String(count);
+        window.addEventListener("test-interrupt-transport", () => this.close(), { once: true });
+      }
+    };
+  });
+}
