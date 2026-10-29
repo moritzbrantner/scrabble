@@ -13,7 +13,7 @@ jobs:
       pages: write
       id-token: write
       packages: read
-    uses: moritzbrantner/reusable-workflows/.github/workflows/deploy-pages.yml@556f65c16362a73dc8a0a36849749fef0e3e64d9 # main
+    uses: moritzbrantner/reusable-workflows/.github/workflows/deploy-pages.yml@c50095269318d374df42a86de08c3bf236f2e01f # main
     with:
       build_command: bun scripts/build-pages.ts
       artifact_path: dist
