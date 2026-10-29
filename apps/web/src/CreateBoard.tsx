@@ -11,6 +11,7 @@ import {
   type JoinInformation,
 } from "./create-game";
 import { ClockSetup } from "./ClockSetup";
+import { useForegroundRetry } from "./foreground-retry";
 import { initialClockDraft, readTimeControl } from "./time-control";
 import { BoardLayoutPreview } from "./BoardLayoutPreview";
 import { ConnectedBoard } from "./ConnectedBoard";
@@ -233,6 +234,11 @@ export function CreateBoard({
       controller.abort();
     }
   }
+  // The retained intent makes a retry idempotent: it can only return the same game.
+  useForegroundRetry(
+    state.kind === "failed" && state.retryable && request.current !== undefined,
+    () => void create(false),
+  );
   if (state.kind === "created") {
     return (
       <>

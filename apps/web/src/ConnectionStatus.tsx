@@ -21,6 +21,8 @@ export function ConnectionStatus({ state, failure }: { state: ConnectionState; f
       );
     case "disconnected":
       return <p role="status">{t("connection.disconnected")}</p>;
+    case "paused":
+      return <p role="status">{t("connection.paused")}</p>;
     case "closed":
       return <p role="status">{t("connection.closed")}</p>;
     case "failed":
