@@ -17,6 +17,7 @@ import {
 import { matchRules, requireMatchRules } from "./match-rules";
 import { MatchClocks, type ClockObservation } from "./MatchClocks";
 import { TurnHistory } from "./TurnHistory";
+import { useForegroundRetry } from "./foreground-retry";
 import { MoveEditor } from "./MoveEditor";
 import { premoveKey } from "./move-draft";
 import { TurnNotifications } from "./TurnNotifications";
@@ -45,7 +46,7 @@ type State =
   | { kind: "entry"; message?: Copy }
   | { kind: "joining" }
   | { kind: "joined"; message?: Copy }
-  | { kind: "failed"; message: Copy };
+  | { kind: "failed"; message: Copy; foregroundRetry?: boolean };
 function validName(name: string): boolean {
   const characters = Array.from(name.trim());
   return (
@@ -127,8 +128,6 @@ export function PlayerPhone({
         setState({ kind: "failed", message });
       }
     };
-    const pagehide = () => client?.disconnect();
-    window.addEventListener("pagehide", pagehide);
     const connect = async () => {
       if (!active) {
         return;
@@ -298,8 +297,16 @@ export function PlayerPhone({
           fail(intent.mode === "resume" ? copy("phone.resumeFailed") : copy("phone.connectFailed"));
         }
       } catch (error) {
-        if (active) {
-          fail(error instanceof JoinError ? error.copy : copy("phone.connectFailed"));
+        if (active && error instanceof JoinError) {
+          fail(error.copy);
+        } else if (active) {
+          // The public lookup (or an admission that never produced a seat) was interrupted,
+          // e.g. by a backgrounded page: repeating it cannot duplicate this player.
+          setState({
+            kind: "failed",
+            message: copy("phone.connectFailed"),
+            foregroundRetry: client === undefined && !(error instanceof ProtocolError),
+          });
         }
       }
     };
@@ -310,7 +317,6 @@ export function PlayerPhone({
       active = false;
       controller.abort();
       clearTimeout(nameTimeout);
-      window.removeEventListener("pagehide", pagehide);
       client?.close();
       if (activeClient.current === client) {
         activeClient.current = undefined;
@@ -340,6 +346,7 @@ export function PlayerPhone({
     }
     setIntent({ mode: "resume", resume: saved, ...(validName(name) ? { name: name.trim() } : {}) });
   }
+  useForegroundRetry(state.kind === "failed" && state.foregroundRetry === true, retry);
   function reset() {
     try {
       activeClient.current?.close();

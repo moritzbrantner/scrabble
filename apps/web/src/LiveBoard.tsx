@@ -50,7 +50,6 @@ export function LiveBoard({
   const [clockObservation, setClockObservation] = useState<ClockObservation>();
   const [rules, setRules] = useState<Ruleset>(fixtures.ruleset);
   const client = useRef<BrowserMatch>(undefined);
-  const running = useRef<Promise<void>>(undefined);
   const claimTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
   const timeout = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [start, setStart] = useState<
@@ -184,8 +183,7 @@ export function LiveBoard({
       void Promise.resolve()
         .then(() => {
           if (mounted) {
-            running.current = match?.run();
-            return running.current;
+            return match?.run();
           }
         })
         .catch(() => {
@@ -259,12 +257,7 @@ export function LiveBoard({
       return;
     }
     setState({ kind: "connecting" });
-    current.disconnect();
-    await running.current;
-    if (client.current === current) {
-      running.current = current.run();
-      await running.current;
-    }
+    await current.reconnect();
   }
   const host = snapshot?.host === undefined ? snapshot?.players[0]?.id : snapshot.host.id;
   const canStart =

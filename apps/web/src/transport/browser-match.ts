@@ -20,7 +20,8 @@ export type Admission = {
   reconnectGraceTicks: bigint;
 };
 export type ConnectionState =
-  | { kind: "idle" | "connecting" | "disconnected" | "closed" }
+  /** `paused`: the page is hidden or offline; reconnect resumes when it returns (#209). */
+  | { kind: "idle" | "connecting" | "disconnected" | "closed" | "paused" }
   | { kind: "reconnecting"; attempt: number }
   | { kind: "synchronizing"; admission: Admission }
   | { kind: "connected"; admission: Admission }
@@ -31,7 +32,11 @@ export type MatchOptions = {
   onState: (state: ConnectionState) => void;
   onSnapshot: (snapshot: Snapshot) => void;
   onCommandRejected?: (rejection: { sequence: number; payload: Uint8Array }) => void;
-  /** Retry only an existing capability; never allocate a replacement identity. */
+  /**
+   * Retry only an existing capability; never allocate a replacement identity. Also follows the
+   * page lifecycle: retries wait while the page is hidden or offline, and returning to the
+   * foreground (visible, online, `resume`, bfcache `pageshow`) restarts a stopped session.
+   */
   autoReconnect?: boolean;
   /** Private resume capability: pass only to the storage owner, never to a public view. */
   resume?: ResumeCapability;
@@ -54,6 +59,16 @@ export function matchUrl(endpoint: string, matchId: string): URL {
   }
   url.pathname += `/matches/${matchId}`;
   return url;
+}
+
+const staleAfterForegroundMs = 3000;
+
+/** Whether a reconnect attempt can reach the network now. Hidden pages may be frozen or offline. */
+function foreground(): boolean {
+  return (
+    (typeof document === "undefined" || document.visibilityState !== "hidden") &&
+    (typeof navigator === "undefined" || navigator.onLine !== false)
+  );
 }
 
 function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
@@ -130,6 +145,11 @@ export class BrowserMatch {
   #synchronized = false;
   #interrupted = false;
   #retryLifetime: AbortController | undefined;
+  #current: Promise<void> | undefined;
+  /** Ends a retry delay or foreground wait early when the page returns to the foreground. */
+  #wake: (() => void) | undefined;
+  #pageLifecycle: AbortController | undefined;
+  #lastSnapshotAt = 0;
 
   constructor(options: MatchOptions) {
     this.#options = options;
@@ -145,13 +165,105 @@ export class BrowserMatch {
       this.#sequence = saved.sequence;
       this.#expectedPlayer = saved.playerId;
     }
+    if (options.autoReconnect && typeof window !== "undefined") {
+      this.#followPageLifecycle();
+    }
+  }
+
+  /**
+   * Background tabs and switched-away phone apps are hidden, frozen, offline or put in bfcache,
+   * which drops WebTransport and starves the bounded retry budget (#209).
+   */
+  #followPageLifecycle(): void {
+    const lifecycle = new AbortController();
+    this.#pageLifecycle = lifecycle;
+    const listen = { signal: lifecycle.signal };
+    const resume = () => this.#resumeInForeground();
+    document.addEventListener("visibilitychange", resume, listen);
+    document.addEventListener("resume", resume, listen);
+    window.addEventListener("online", resume, listen);
+    window.addEventListener("pageshow", resume, listen);
+    // A live session keeps the page out of bfcache; `pageshow` restarts it after restore.
+    window.addEventListener("pagehide", () => this.disconnect(), listen);
+  }
+
+  #resumeInForeground(): void {
+    if (this.#stopped || this.#token === undefined || !foreground()) {
+      return;
+    }
+    if (this.#running) {
+      if (this.#wake !== undefined) {
+        this.#wake();
+        return;
+      }
+      // A frozen page can return to a session the network already dropped, before QUIC notices.
+      // Snapshots arrive every tick, so a silent session is recycled with the same capability.
+      const lifetime = this.#lifetime;
+      const returnedAt = performance.now();
+      if (!this.#synchronized) {
+        return; // Handshake and first-snapshot deadlines already bound a fresh connection.
+      }
+      setTimeout(() => {
+        if (
+          this.#lifetime === lifetime &&
+          lifetime !== undefined &&
+          !lifetime.signal.aborted &&
+          this.#lastSnapshotAt < returnedAt
+        ) {
+          lifetime.abort(new Error("Session went silent while in the background"));
+        }
+      }, staleAfterForegroundMs);
+      return;
+    }
+    if (["disconnected", "paused", "resume-failed"].includes(this.#lastState.kind)) {
+      this.run().catch(() => {
+        /* A restarted run reports its own terminal state. */
+      });
+    }
   }
 
   /** Resolves when this connection ends. Calling again explicitly reconnects the same player. */
-  async run(): Promise<void> {
+  run(): Promise<void> {
     if (this.#running || this.#stopped) {
-      throw new Error("Connection already running or closed");
+      return Promise.reject(new Error("Connection already running or closed"));
     }
+    this.#current = this.#run();
+    return this.#current;
+  }
+
+  /** Explicit reconnect of the same player, also while a lifecycle restart is in progress. */
+  async reconnect(): Promise<void> {
+    this.disconnect();
+    await this.#current;
+    if (!this.#running && !this.#stopped) {
+      await this.run();
+    }
+  }
+
+  /** Waits for `delay` (or, without one, for the foreground); a foreground return ends it early. */
+  async #pause(signal: AbortSignal, delay?: number): Promise<boolean> {
+    let woken = false;
+    await new Promise<void>((resolve) => {
+      const finish = () => {
+        clearTimeout(timer);
+        signal.removeEventListener("abort", finish);
+        this.#wake = undefined;
+        resolve();
+      };
+      const timer = delay === undefined ? undefined : setTimeout(finish, delay);
+      this.#wake = () => {
+        woken = true;
+        finish();
+      };
+      signal.addEventListener("abort", finish, { once: true });
+      if (signal.aborted) {
+        finish();
+      }
+    });
+    return woken;
+  }
+
+  async #run(): Promise<void> {
     this.#running = true;
     this.#interrupted = false;
     const retries = new AbortController();
@@ -174,6 +286,16 @@ export class BrowserMatch {
         if (this.#synchronized) {
           attempt = 0;
         }
+        if (!foreground()) {
+          // Failures while hidden or offline say nothing about the capability: do not spend
+          // the retry budget, wait for the page to come back with a fresh one.
+          this.#report({ kind: "paused" });
+          while (!foreground() && !retries.signal.aborted) {
+            await this.#pause(retries.signal);
+          }
+          attempt = 0;
+          continue;
+        }
         const delay = [500, 1500, 3000][attempt];
         if (delay === undefined) {
           this.#report({
@@ -185,18 +307,10 @@ export class BrowserMatch {
         }
         attempt += 1;
         this.#report({ kind: "reconnecting", attempt });
-        await new Promise<void>((resolve) => {
-          const finish = () => {
-            clearTimeout(timer);
-            retries.signal.removeEventListener("abort", finish);
-            resolve();
-          };
-          const timer = setTimeout(finish, delay);
-          retries.signal.addEventListener("abort", finish, { once: true });
-          if (retries.signal.aborted) {
-            finish();
-          }
-        });
+        if (await this.#pause(retries.signal, delay)) {
+          // Returning to the foreground (or online) retries at once with a fresh budget.
+          attempt = 0;
+        }
       }
     } finally {
       this.#running = false;
@@ -285,6 +399,7 @@ export class BrowserMatch {
           }
           const snapshot = reassembler.accept(next.value);
           if (snapshot !== undefined) {
+            this.#lastSnapshotAt = performance.now();
             this.#options.onSnapshot(snapshot);
             if (!this.#synchronized) {
               clearTimeout(synchronizeTimeout);
@@ -463,6 +578,7 @@ export class BrowserMatch {
   close(): void {
     this.#stopped = true;
     this.#token = undefined;
+    this.#pageLifecycle?.abort();
     this.disconnect();
     if (!this.#running) {
       this.#report({ kind: "closed" });

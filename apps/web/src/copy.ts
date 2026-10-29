@@ -133,6 +133,7 @@ export const en = {
   "connection.restoring": "Restoring game…",
   "connection.connected": "Connected · Player {player}",
   "connection.disconnected": "Disconnected.",
+  "connection.paused": "Connection paused. Reconnecting when this page is back online.",
   "connection.closed": "Connection closed.",
   "connection.failed": "Unable to connect. Check your network and retry.",
   "connection.incompatible": "Cannot join: incompatible game protocol.",
@@ -677,6 +678,8 @@ const de: Record<CopyKey, string> = {
   "connection.restoring": "Spiel wird wiederhergestellt…",
   "connection.connected": "Verbunden · Spieler {player}",
   "connection.disconnected": "Verbindung getrennt.",
+  "connection.paused":
+    "Verbindung pausiert. Sie wird wiederhergestellt, sobald diese Seite wieder online ist.",
   "connection.closed": "Verbindung beendet.",
   "connection.failed": "Verbindung nicht möglich. Prüfe dein Netzwerk und versuche es erneut.",
   "connection.incompatible": "Beitritt nicht möglich: inkompatibles Spielprotokoll.",
@@ -1240,6 +1243,8 @@ const es: Record<CopyKey, string> = {
   "connection.restoring": "Restaurando la partida…",
   "connection.connected": "Conectado · Jugador {player}",
   "connection.disconnected": "Desconectado.",
+  "connection.paused":
+    "Conexión en pausa. Se reconectará cuando esta página vuelva a estar en línea.",
   "connection.closed": "Conexión cerrada.",
   "connection.failed": "No se pudo conectar. Comprueba la red e inténtalo de nuevo.",
   "connection.incompatible": "No se puede entrar: protocolo de juego incompatible.",
