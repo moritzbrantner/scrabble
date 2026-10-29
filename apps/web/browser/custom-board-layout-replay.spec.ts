@@ -15,8 +15,10 @@ import {
 } from "./game-fixture";
 import { observeSnapshots } from "./pages-observer";
 
-// Completed matches are compared through native replay after this worker's fixture stops.
+// Both completed matches are compared through native replay after this worker's fixture
+// stops, so the file keeps one worker.
 test.use({ nativeReplay: "custom-layout" });
+test.describe.configure({ mode: "default" });
 
 const opening = z.strictObject({ requestId: z.string(), requestedAt: z.number() });
 const editor = (page: Page) =>

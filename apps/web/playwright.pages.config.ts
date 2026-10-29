@@ -15,6 +15,7 @@ export default defineConfig({
     "**/rematch.spec.ts",
   ],
   // The bundle compiles in one shared fixture, and performance timing stays serial.
+  fullyParallel: false,
   workers: 1,
   outputDir: "../../test-results/pages-browser",
   webServer: {
