@@ -217,21 +217,61 @@ fn join_response(result: Result<crate::games::JoinInformation, GameOperationErro
         Err(error) => operation_error(error),
     }
 }
+/// Browser origins the API answers (#206). The board origin may use every route; guest
+/// origins (e.g. the GitHub Pages demo) may not use the cookie-authenticated account routes.
+#[derive(Clone, Debug)]
+pub struct BoardOrigins {
+    pub board: String,
+    pub guests: Vec<String>,
+}
+impl From<String> for BoardOrigins {
+    fn from(board: String) -> Self {
+        Self {
+            board,
+            guests: Vec::new(),
+        }
+    }
+}
+impl From<&str> for BoardOrigins {
+    fn from(board: &str) -> Self {
+        board.to_owned().into()
+    }
+}
+#[derive(Clone, Copy, PartialEq)]
+enum Caller {
+    /// No `Origin` header: not a browser page.
+    Direct,
+    Board,
+    Guest,
+}
+impl BoardOrigins {
+    fn caller(&self, origin: Option<&str>) -> Option<Caller> {
+        match origin {
+            None => Some(Caller::Direct),
+            Some(origin) if origin == self.board => Some(Caller::Board),
+            Some(origin) if self.guests.iter().any(|guest| guest == origin) => Some(Caller::Guest),
+            Some(_) => None,
+        }
+    }
+    /// The CORS origin to answer with: the caller's own when accepted, else the board's.
+    fn cors(&self, origin: Option<&str>) -> &str {
+        self.guests
+            .iter()
+            .find(|guest| Some(guest.as_str()) == origin)
+            .unwrap_or(&self.board)
+    }
+}
 async fn route(
     request: Request,
     games: &Games,
-    board_origin: &str,
+    origins: &BoardOrigins,
     accounts: Option<&Arc<Accounts>>,
 ) -> Response {
-    if request
-        .origin
-        .as_deref()
-        .is_some_and(|origin| origin != board_origin)
-    {
+    let Some(caller) = origins.caller(request.origin.as_deref()) else {
         return Response::error(403, "origin-rejected");
-    }
+    };
     if request.path.starts_with("/account/") {
-        return account_route(&request, games, accounts).await;
+        return account_route(&request, games, caller, accounts).await;
     }
     if is_layout_path(&request.path) {
         return layout_route(&request, games).await;
@@ -975,6 +1015,7 @@ fn linked_body(linked: Vec<LinkedLibrary>) -> serde_json::Value {
 async fn account_route(
     request: &Request,
     games: &Games,
+    caller: Caller,
     accounts: Option<&Arc<Accounts>>,
 ) -> Response {
     if request.method == "OPTIONS" {
@@ -993,9 +1034,13 @@ async fn account_route(
         ) {
             return Err(Response::error(404, "not-found"));
         }
-        // Cookie-authenticated mutations come only from the board's own origin.
-        if request.origin.is_none() {
-            return Err(Response::error(403, "origin-rejected"));
+        // Cookie-authenticated mutations come only from the board's own origin. Guest
+        // origins pass the preflight above so the board can read this answer and stay
+        // guest-only instead of reporting a failure.
+        match caller {
+            Caller::Board => {}
+            Caller::Direct => return Err(Response::error(403, "origin-rejected")),
+            Caller::Guest => return Err(Response::error(403, "guest-origin")),
         }
         let accounts = accounts.ok_or_else(|| Response::error(503, "accounts-unavailable"))?;
         let link = if request.path == "/account/link" {
@@ -1177,9 +1222,10 @@ async fn write_response(
 pub async fn serve(
     listener: TcpListener,
     games: Arc<Games>,
-    board_origin: String,
+    origins: BoardOrigins,
     accounts: Option<Arc<Accounts>>,
 ) -> io::Result<()> {
+    let origins = Arc::new(origins);
     let capacity = Arc::new(Semaphore::new(MAX_CONNECTIONS));
     let word_list_body = word_list_body_bytes(&games.word_list_limits());
     let mut requests = JoinSet::new();
@@ -1193,19 +1239,22 @@ pub async fn serve(
                 let (mut stream, _) = accepted?;
                 let Ok(permit) = Arc::clone(&capacity).try_acquire_owned() else { continue; };
                 let games = Arc::clone(&games);
-                let origin = board_origin.clone();
+                let origins = Arc::clone(&origins);
                 let accounts = accounts.clone();
                 requests.spawn(async move {
                     let _permit = permit;
                     let operation = async {
                         match read_request(&mut stream, word_list_body).await {
-                            Ok(request) => route(request, &games, &origin, accounts.as_ref()).await,
-                            Err(error) => error,
+                            Ok(request) => {
+                                let cors = origins.cors(request.origin.as_deref()).to_owned();
+                                (route(request, &games, &origins, accounts.as_ref()).await, cors)
+                            }
+                            Err(error) => (error, origins.board.clone()),
                         }
                     };
-                    let response = tokio::time::timeout(REQUEST_TIMEOUT, operation).await
-                        .unwrap_or_else(|_| Response::error(408, "request-timeout"));
-                    let _ = tokio::time::timeout(REQUEST_TIMEOUT, write_response(&mut stream, response, &origin)).await;
+                    let (response, cors) = tokio::time::timeout(REQUEST_TIMEOUT, operation).await
+                        .unwrap_or_else(|_| (Response::error(408, "request-timeout"), origins.board.clone()));
+                    let _ = tokio::time::timeout(REQUEST_TIMEOUT, write_response(&mut stream, response, &cors)).await;
                 });
             }
         }

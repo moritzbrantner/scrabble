@@ -82,6 +82,34 @@ fn production_requires_private_persistent_initialization_and_explicit_tls() {
     assert!(allowed.allows(Some("https://board.example")));
     assert!(!allowed.allows(None));
     assert!(!allowed.allows(Some("https://other.example")));
+    assert!(production.guest_board_origins.is_empty());
+    // Guest-only board origins (#206) join the WebTransport allowlist.
+    config.insert(
+        "SCRABBLE_GUEST_BOARD_ORIGINS".into(),
+        "https://guest.example,https://demo.example".into(),
+    );
+    let production = ServerConfig::from_values(&config).unwrap();
+    assert_eq!(
+        production.guest_board_origins,
+        ["https://guest.example", "https://demo.example"]
+    );
+    let allowed = production.allowed_origins.unwrap();
+    assert!(allowed.allows(Some("https://board.example")));
+    assert!(allowed.allows(Some("https://guest.example")));
+    assert!(!allowed.allows(Some("https://other.example")));
+    for invalid in [
+        "http://guest.example",
+        "https://guest.example/scrabble/",
+        "https://board.example",
+        "https://guest.example,https://guest.example",
+        "https://guest.example,",
+        "*",
+        "https://a.example,https://b.example,https://c.example,https://d.example,https://e.example",
+    ] {
+        config.insert("SCRABBLE_GUEST_BOARD_ORIGINS".into(), invalid.into());
+        assert!(ServerConfig::from_values(&config).is_err(), "{invalid}");
+    }
+    config.remove("SCRABBLE_GUEST_BOARD_ORIGINS");
     config.insert("SCRABBLE_TEST_SEED".into(), "07".repeat(32));
     assert!(ServerConfig::from_values(&config).is_err());
     config.remove("SCRABBLE_TEST_SEED");

@@ -9,7 +9,7 @@ export default defineConfig({
   retries: 0,
   outputDir: "../test-results/launcher-integrated",
   use: {
-    baseURL: "https://moritzbrantner.github.io/scrabble/",
+    baseURL: "https://scrabble.moenarch.com/scrabble/",
     trace: "off",
     screenshot: "off",
   },

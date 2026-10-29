@@ -62,24 +62,25 @@ The installed English fixture ruleset is still the authored test configuration. 
 
 [.env.example](../../.env.example) is the complete supported key catalog. Unknown `SCRABBLE_*` variables fail to prevent silently ignored typos. Values are validated once before constructing simulations or listeners.
 
-| Variable                                                   | Default / constraint                                                                                        |
-| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `SCRABBLE_MODE`                                            | `local` or `production`                                                                                     |
-| `SCRABBLE_PORT`                                            | `4433`; 1–65535, UDP/WebTransport                                                                           |
-| `SCRABBLE_API_PORT`                                        | `8081`; 1–65535, TCP/game creation; different from status port                                              |
-| `SCRABBLE_BOARD_ORIGIN`                                    | `http://localhost:5173`; one canonical HTTP(S) origin; explicit HTTPS in production                         |
-| `SCRABBLE_STATUS_PORT`                                     | `8080`; 1–65535, TCP/read-only status                                                                       |
-| `SCRABBLE_CERT_PEM`, `SCRABBLE_KEY_PEM`                    | `.local/server/cert.pem`, `.local/server/key.pem`; distinct files                                           |
-| `SCRABBLE_SEED_FILE`                                       | `.local/server/seed`; private 32-byte binary initialization key                                             |
-| `SCRABBLE_RECOVERY_DIR`                                    | `.local/server/recovery`; upstream-owned consumable recovery bundle                                         |
-| `SCRABBLE_ROUTE_PREFIX`                                    | `/game`; canonical absolute ASCII base path                                                                 |
-| `SCRABBLE_MATCH_IDS`                                       | `table-1,table-2`; unique canonical IDs, comma-separated without whitespace; empty starts with zero matches |
-| `SCRABBLE_MAX_MATCHES`                                     | `16`; 1–64, at least the configured match count                                                             |
-| `SCRABBLE_RECONNECT_GRACE_TICKS`                           | `1200`; 1–72000 deterministic ticks, at 20 Hz                                                               |
-| `SCRABBLE_DRAIN_GRACE_MS`                                  | `500`; 0–30000 milliseconds                                                                                 |
-| `SCRABBLE_DICTIONARY_FILE`                                 | unset; UTF-8 word list, at most 64 MiB; absolute path in production                                         |
-| `SCRABBLE_DICTIONARY_NAME`, `SCRABBLE_DICTIONARY_REVISION` | unset; set with FILE; 1–64 ASCII letters, digits, hyphens, underscores or dots                              |
-| `SCRABBLE_TEST_SEED`                                       | unset; optional 64 hex characters for local deterministic fixtures only                                     |
+| Variable                                                   | Default / constraint                                                                                                                                                    |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SCRABBLE_MODE`                                            | `local` or `production`                                                                                                                                                 |
+| `SCRABBLE_PORT`                                            | `4433`; 1–65535, UDP/WebTransport                                                                                                                                       |
+| `SCRABBLE_API_PORT`                                        | `8081`; 1–65535, TCP/game creation; different from status port                                                                                                          |
+| `SCRABBLE_BOARD_ORIGIN`                                    | `http://localhost:5173`; one canonical HTTP(S) origin; explicit HTTPS in production                                                                                     |
+| `SCRABBLE_GUEST_BOARD_ORIGINS`                             | empty; up to 4 comma-separated canonical origins, distinct from the board origin, HTTPS in production; game, library and WebTransport routes only, never account routes |
+| `SCRABBLE_STATUS_PORT`                                     | `8080`; 1–65535, TCP/read-only status                                                                                                                                   |
+| `SCRABBLE_CERT_PEM`, `SCRABBLE_KEY_PEM`                    | `.local/server/cert.pem`, `.local/server/key.pem`; distinct files                                                                                                       |
+| `SCRABBLE_SEED_FILE`                                       | `.local/server/seed`; private 32-byte binary initialization key                                                                                                         |
+| `SCRABBLE_RECOVERY_DIR`                                    | `.local/server/recovery`; upstream-owned consumable recovery bundle                                                                                                     |
+| `SCRABBLE_ROUTE_PREFIX`                                    | `/game`; canonical absolute ASCII base path                                                                                                                             |
+| `SCRABBLE_MATCH_IDS`                                       | `table-1,table-2`; unique canonical IDs, comma-separated without whitespace; empty starts with zero matches                                                             |
+| `SCRABBLE_MAX_MATCHES`                                     | `16`; 1–64, at least the configured match count                                                                                                                         |
+| `SCRABBLE_RECONNECT_GRACE_TICKS`                           | `1200`; 1–72000 deterministic ticks, at 20 Hz                                                                                                                           |
+| `SCRABBLE_DRAIN_GRACE_MS`                                  | `500`; 0–30000 milliseconds                                                                                                                                             |
+| `SCRABBLE_DICTIONARY_FILE`                                 | unset; UTF-8 word list, at most 64 MiB; absolute path in production                                                                                                     |
+| `SCRABBLE_DICTIONARY_NAME`, `SCRABBLE_DICTIONARY_REVISION` | unset; set with FILE; 1–64 ASCII letters, digits, hyphens, underscores or dots                                                                                          |
+| `SCRABBLE_TEST_SEED`                                       | unset; optional 64 hex characters for local deterministic fixtures only                                                                                                 |
 
 Production requires explicit absolute certificate, key, seed and recovery paths, plus explicit match IDs (which may be empty) and an HTTPS board origin. It forbids test seeds. Mount seed and recovery storage persistently; keep the seed outside the recovery directory and separate from TLS files. On Unix the seed must be a regular owner-only file; symlinks and group/other access fail. A corrupt seed or recovery directory without its seed causes startup failure without reinitialization. A failed interrupted initial key publication can leave `<seed>.tmp`; investigate the files and remove only that disposable temporary file explicitly before retrying.
 
