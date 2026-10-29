@@ -4,35 +4,56 @@ import { dirname, resolve } from "node:path";
 
 import { type Page } from "@playwright/test";
 import { z } from "zod";
-const path = process.env.SCRABBLE_GAME_FIXTURE;
-if (path === undefined) {
-  throw new Error("Use bun run test:browser to provision Scrabble");
-}
 const openingSchema = z.strictObject({
   requestId: z.string().regex(/^[0-9a-f]{32}$/),
   requestedAt: z.int().min(0),
 });
-export const gameFixture = z
-  .strictObject({
-    endpoint: z.string(),
-    api: z.string(),
-    status: z.string(),
-    certificateHash: z.array(z.int().min(0).max(255)).length(32),
-    opening: openingSchema,
-    reconnectOpening: openingSchema,
-  })
-  .parse(JSON.parse(readFileSync(path, "utf8")));
+const gameFixtureSchema = z.strictObject({
+  endpoint: z.string(),
+  api: z.string(),
+  status: z.string(),
+  certificateHash: z.array(z.int().min(0).max(255)).length(32),
+  opening: openingSchema,
+  reconnectOpening: openingSchema,
+});
+export const fixtureExecutable = resolve(
+  process.env.CARGO_TARGET_DIR ?? "target",
+  "debug/examples/browser_game_fixture",
+);
 
-const directory = dirname(path);
+/**
+ * The native game fixture serving this Playwright worker. `./fixtures` starts one per
+ * worker and binds it before any test runs; externally provisioned runs (pages, review,
+ * launcher acceptance) bind the shared fixture named by `SCRABBLE_GAME_FIXTURE`.
+ */
+export let gameFixture = undefined as unknown as z.infer<typeof gameFixtureSchema>;
+/** Private directory of the native game fixture serving this worker. */
+export let gameFixtureDirectory = "";
+export function bindGameFixture(path: string) {
+  gameFixture = gameFixtureSchema.parse(JSON.parse(readFileSync(path, "utf8")));
+  gameFixtureDirectory = dirname(path);
+}
+if (process.env.SCRABBLE_GAME_FIXTURE !== undefined) {
+  bindGameFixture(process.env.SCRABBLE_GAME_FIXTURE);
+}
+
+/** Development connection parameters naming this worker's fixture. */
+export function fixtureQuery() {
+  return new URLSearchParams({
+    server: gameFixture.endpoint,
+    api: gameFixture.api,
+    certificate: Buffer.from(gameFixture.certificateHash).toString("hex"),
+  });
+}
+
 /** A newly derived native A/T opening deal that differs from `excluded`. */
 export function freshOpening(excluded: string) {
   return openingSchema.parse(
     JSON.parse(
-      execFileSync(
-        resolve(process.env.CARGO_TARGET_DIR ?? "target", "debug/examples/browser_game_fixture"),
-        ["--fresh-opening", directory, excluded],
-        { encoding: "utf8", timeout: 10_000 },
-      ),
+      execFileSync(fixtureExecutable, ["--fresh-opening", gameFixtureDirectory, excluded], {
+        encoding: "utf8",
+        timeout: 10_000,
+      }),
     ),
   );
 }

@@ -2,7 +2,7 @@ import { createDecipheriv, createECDH, hkdfSync, randomBytes } from "node:crypto
 import { createServer } from "node:http";
 import { type AddressInfo } from "node:net";
 
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 import { freshOpening, gameFixture, selectOpening } from "./game-fixture";
 import { observeSnapshots } from "./pages-observer";

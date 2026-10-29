@@ -1,14 +1,9 @@
 // Independent acceptance for #137, authored on 196d8cd before the layout fix.
 // Real browser + native fixture; only presentation/navigation is exercised here.
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "./fixtures";
 
-import { gameFixture } from "./game-fixture";
+import { fixtureQuery } from "./game-fixture";
 
-const query = new URLSearchParams({
-  server: gameFixture.endpoint,
-  api: gameFixture.api,
-  certificate: Buffer.from(gameFixture.certificateHash).toString("hex"),
-});
 const editor = (page: Page) =>
   page.getByRole("region", { name: "Board layout editor", exact: true });
 const grid = (page: Page) => editor(page).getByRole("grid", { name: "Layout cells", exact: true });
@@ -62,7 +57,7 @@ for (const viewport of [
     const context = await browser.newContext({ viewport, hasTouch: true, reducedMotion: "reduce" });
     const page = await context.newPage();
     try {
-      await page.goto(`./?${query}`);
+      await page.goto(`./?${fixtureQuery()}`);
       await page.getByRole("button", { name: "New custom board", exact: true }).click();
       await editor(page)
         .getByRole("textbox", { name: "Layout name", exact: true })

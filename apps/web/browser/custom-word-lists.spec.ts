@@ -45,18 +45,13 @@ import {
   type Locator,
   type Page,
   type TestInfo,
-} from "@playwright/test";
+} from "./fixtures";
 import { z } from "zod";
 
 import { type PlayerSnapshot } from "../src/public-state";
-import { gameFixture } from "./game-fixture";
+import { gameFixture, fixtureQuery } from "./game-fixture";
 import { observeSnapshots } from "./pages-observer";
 
-const query = new URLSearchParams({
-  server: gameFixture.endpoint,
-  api: gameFixture.api,
-  certificate: Buffer.from(gameFixture.certificateHash).toString("hex"),
-});
 const ownerKey = /^scrabble:word-list-owner:v1:(w_[0-9a-f]{32})$/;
 const ownerEntry = z.looseObject({
   version: z.literal(1),
@@ -152,7 +147,7 @@ const textFile = (name: string, content: string | Buffer) => ({
 });
 
 async function openLibrary(page: Page) {
-  await page.goto(`./?${query}`);
+  await page.goto(`./?${fixtureQuery()}`);
   await expect(libraryRegion(page), "#97 custom word-list library on the create page").toBeVisible({
     timeout: 10_000,
   });
@@ -489,7 +484,7 @@ test("a recipient in an independent browser uses, copies and edits a shared list
     expect(wordSet(original.body.words)).toEqual(wordSet(pairs));
 
     // Owner starts a real match with the original and a separately chosen tile profile.
-    await page.goto(`./?${query}`);
+    await page.goto(`./?${fixtureQuery()}`);
     await wordSelect(page).selectOption(await optionValue(page, name));
     await tileSelect(page).selectOption({ label: "Classic test tiles" });
     await expect(wordSelect(page).locator("option:checked")).toContainText(name);

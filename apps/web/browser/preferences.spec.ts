@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 test("language and explicit themes persist; system theme follows the browser", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "light" });

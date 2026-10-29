@@ -1,21 +1,8 @@
-import { readFileSync } from "node:fs";
-
-import { expect, test } from "@playwright/test";
-import { z } from "zod";
-const path = process.env.SCRABBLE_TRANSPORT_FIXTURE;
-if (path === undefined) {
-  throw new Error("Use bun run test:browser to provision WebTransport");
-}
-const fixture = z
-  .strictObject({
-    endpoint: z.string(),
-    matchId: z.string(),
-    certificateHash: z.array(z.int().min(0).max(255)).length(32),
-  })
-  .parse(JSON.parse(readFileSync(path, "utf8")));
+import { expect, test } from "./fixtures";
 
 test("Chromium connects to the real runtime, sends commands/control, reassembles and reconnects privately", async ({
   page,
+  transportFixture: fixture,
 }) => {
   await page.goto("./");
   const result = await page.evaluate(async (fixture) => {

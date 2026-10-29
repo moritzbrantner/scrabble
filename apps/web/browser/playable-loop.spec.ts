@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page, type Locator } from "@playwright/test";
+import { expect, test, type Page, type Locator } from "./fixtures";
 
 import fixtures from "../src/fixtures/public.json" with { type: "json" };
 import { selectOpening } from "./game-fixture";

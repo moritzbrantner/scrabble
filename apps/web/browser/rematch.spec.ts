@@ -1,6 +1,6 @@
 // Acceptance for #33 (docs/specs/rematch.md): completed-game summary and one-tap rematch on the
 // built Pages client against the real Rust server. Only public UI and HTTP are driven.
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./fixtures";
 
 import fixtures from "../src/fixtures/public.json" with { type: "json" };
 import { gameFixture } from "./game-fixture";

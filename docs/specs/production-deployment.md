@@ -83,7 +83,6 @@ To verify the actual prepared corpora, place the outputs of `prepare-dictionary.
 export SCRABBLE_PRESET_ACCEPTANCE_ROOT=/ABSOLUTE/ACCEPTANCE_DIRECTORY
 cargo test -p scrabble-server --test word_list_presets prepared_enable2k --locked -- --ignored
 bun scripts/test-browser.ts word-list-presets.spec.ts
-bun scripts/test-browser.ts --pages word-list-presets.spec.ts
 ```
 
 The native acceptance checks real catalog creation/retry, unknown-revision rejection, valid and invalid words, restart, immutable configuration, recovery and canonical replay after removing ENABLE2K from future catalog choices. Chromium acceptance checks unchanged SCOWL US defaults, retained UK selection, independent ENABLE2K selection, desktop/mobile setup and match reload against the real server. Screenshots are written to `test-results/`. These corpus checks are opt-in because third-party generated lists are not committed or downloaded by the hermetic gate; the ordinary gate still checks normalization, source substitution rejection and catalog behavior. Unset `SCRABBLE_PRESET_ACCEPTANCE_ROOT` before running the ordinary browser suites, which use authored dictionaries.

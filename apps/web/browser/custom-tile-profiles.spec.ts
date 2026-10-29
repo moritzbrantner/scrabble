@@ -3,16 +3,11 @@
 // "New tile profile" (a copy of the selected tile profile), a saved list with
 // "Edit <name>" / "Delete <name>" (confirmed by "Delete <name>?"), and the editor region
 // "Tile profile editor" with a "Tiles" table of Face/Count/Points rows plus "Blank tiles".
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./fixtures";
 
-import { gameFixture } from "./game-fixture";
+import { fixtureQuery } from "./game-fixture";
 import { observeSnapshots } from "./pages-observer";
 
-const query = new URLSearchParams({
-  server: gameFixture.endpoint,
-  api: gameFixture.api,
-  certificate: Buffer.from(gameFixture.certificateHash).toString("hex"),
-});
 const library = (page: Page) =>
   page.getByRole("region", { name: "Custom tile profiles", exact: true });
 const editor = (page: Page) =>
@@ -24,7 +19,7 @@ test("a guest copies, edits, saves, plays and deletes a private tile profile", a
   test.setTimeout(120_000);
   const name = `Tens ${testInfo.workerIndex}-${Date.now()}`;
   const board = await observeSnapshots(page, "1", true);
-  await page.goto(`./?${query}`);
+  await page.goto(`./?${fixtureQuery()}`);
   await expect(library(page)).toBeVisible({ timeout: 10_000 });
   await library(page).getByRole("button", { name: "New tile profile", exact: true }).click();
   const form = editor(page);
@@ -77,7 +72,7 @@ test("a guest copies, edits, saves, plays and deletes a private tile profile", a
   expect(used.find((tile) => tile.face.kind === "blank")?.count).toBe(1);
 
   // It survives a new session and is deleted only after confirmation.
-  await page.goto(`./?${query}`);
+  await page.goto(`./?${fixtureQuery()}`);
   const saved = library(page).getByRole("listitem").filter({ hasText: name });
   await expect(saved).toHaveCount(1);
   const asked: string[] = [];

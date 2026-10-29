@@ -1,7 +1,7 @@
 // Independent #99 acceptance, authored on d701266 before production clock UI/forfeit edits.
 // Uses the actual React application and native hosted WebTransport service, without clock overrides.
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./fixtures";
 import { z } from "zod";
 
 import { gameFixture } from "./game-fixture";
