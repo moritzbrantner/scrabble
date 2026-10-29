@@ -34,6 +34,9 @@ pub struct ServerConfig {
     pub push_insecure_test: bool,
     /// Operator-configurable guest word-list bounds (#97, Decision 1.50).
     pub word_list_limits: crate::word_list_library::WordListLimits,
+    /// Shared Moenarch account service origin (#132); account linking is off when unset.
+    /// Plain HTTP is accepted only in local mode.
+    pub accounts_origin: Option<url::Url>,
     pub port: u16,
     pub status_port: u16,
     pub api_port: u16,
@@ -83,6 +86,7 @@ const KEYS: &[&str] = &[
     "SCRABBLE_STATUS_PORT",
     "SCRABBLE_API_PORT",
     "SCRABBLE_BOARD_ORIGIN",
+    "SCRABBLE_ACCOUNTS_ORIGIN",
     "SCRABBLE_CERT_PEM",
     "SCRABBLE_KEY_PEM",
     "SCRABBLE_SEED_FILE",
@@ -195,6 +199,24 @@ impl ServerConfig {
                 "production requires an explicit HTTPS SCRABBLE_BOARD_ORIGIN",
             ));
         }
+        let accounts_origin = match values.get("SCRABBLE_ACCOUNTS_ORIGIN") {
+            None => None,
+            Some(text) => {
+                let parsed = url::Url::parse(text).ok().filter(|url| {
+                    url.origin().ascii_serialization() == *text
+                        && match url.scheme() {
+                            "https" => true,
+                            "http" => matches!(mode, Mode::Local),
+                            _ => false,
+                        }
+                });
+                Some(parsed.ok_or_else(|| {
+                    fail(
+                        "SCRABBLE_ACCOUNTS_ORIGIN must be a canonical origin without a path (HTTPS in production)",
+                    )
+                })?)
+            }
+        };
         let max_matches = number(values, "SCRABBLE_MAX_MATCHES", "16", 1, 64)? as usize;
         let allowed_origins = if matches!(mode, Mode::Production) {
             Some(BrowserOriginAllowlist::new([board_origin]).map_err(|_| {
@@ -385,6 +407,7 @@ impl ServerConfig {
             push_directory,
             push_insecure_test,
             word_list_limits,
+            accounts_origin,
             profile_catalog_file,
             match_configuration_directory,
             mode,

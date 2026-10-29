@@ -147,6 +147,11 @@ async function keep(api: string, created: z.infer<typeof createdLayout>) {
     throw new LayoutError("storage");
   }
 }
+/** Keeps a device capability issued to the linked account (#132). */
+export function rememberLayout(api: string, layoutId: string, ownerCapability: string) {
+  const parsed = ownerEntry.parse({ version: 1, layoutId, ownerCapability });
+  remember({ ...parsed, api: canonicalApi(api) });
+}
 /** Removes this browser's entry after its issuing API deleted or no longer knows it. */
 export function forget(entry: OwnerEntry) {
   try {

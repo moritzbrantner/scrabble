@@ -14,8 +14,9 @@
 //! manifest and content-addressed word store (ADR 0009) pin the selected word set.
 use crate::{
     ErrorResult,
+    account_link::{self, AccountIndex, Linked, LinkedLibrary},
     dictionary::hexadecimal,
-    layout_library::{decode_hex, is_hex_id, random_hex, sync_directory},
+    layout_library::{is_hex_id, random_hex, sync_directory},
     profiles::WordListProfile,
 };
 use ring::{digest, hmac};
@@ -78,6 +79,10 @@ pub enum WordListLibraryError {
     },
     TooLarge(String),
     OwnerRejected,
+    /// The original is linked to a different account (#132).
+    LinkedElsewhere,
+    /// The verified account is not this original's linked owner (#132).
+    NotAccountOwner,
     Unknown,
     Full,
     Internal,
@@ -114,6 +119,12 @@ struct StoredWordList {
     name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     share_id: Option<String>,
+    /// Linked Moenarch account (#132); `None` while guest-owned only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    account_id: Option<String>,
+    /// Verifiers of device capabilities issued to the linked account by `reconnect`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    device_verifiers: Vec<String>,
     versions: Vec<StoredVersion>,
 }
 impl StoredWordList {
@@ -157,6 +168,7 @@ struct Index {
     /// Source (and public identity) name of a retained version -> its original.
     versions: HashMap<String, String>,
     shares: HashMap<String, String>,
+    accounts: AccountIndex,
     lists: usize,
     bytes: u64,
 }
@@ -395,6 +407,9 @@ impl WordListLibrary {
                 .shares
                 .insert(share.clone(), stored.word_list_id.clone());
         }
+        index
+            .accounts
+            .add(stored.account_id.as_deref(), &stored.word_list_id);
         index.lists += 1;
     }
     fn content_name(id: &str, revision: u64) -> String {
@@ -427,6 +442,10 @@ impl WordListLibrary {
             || stored.versions.len() as u64 > CEILING_VERSIONS
             || stored.versions.iter().any(|v| !is_hash(&v.content_hash))
             || stored.share_id.as_deref().is_some_and(|s| !is_share_id(s))
+            || !account_link::valid_persisted(
+                stored.account_id.as_deref(),
+                &stored.device_verifiers,
+            )
         {
             return Err("invalid persisted word list entry".into());
         }
@@ -480,10 +499,16 @@ impl WordListLibrary {
             .load(id)
             .map_err(|_| WordListLibraryError::Internal)?
             .ok_or(WordListLibraryError::Unknown)?;
-        let expected = decode_hex(&stored.verifier).ok_or(WordListLibraryError::Internal)?;
-        // `hmac::verify` recomputes the tag and compares it in constant time.
-        hmac::verify(&self.key, &Self::owner_message(id, capability), &expected)
-            .map_err(|_| WordListLibraryError::OwnerRejected)?;
+        let matched = account_link::owner_matches(
+            &self.key,
+            &Self::owner_message(id, capability),
+            &stored.verifier,
+            &stored.device_verifiers,
+        )
+        .ok_or(WordListLibraryError::Internal)?;
+        if !matched {
+            return Err(WordListLibraryError::OwnerRejected);
+        }
         Ok(stored)
     }
     fn view(stored: &StoredWordList) -> WordListView {
@@ -538,6 +563,8 @@ impl WordListLibrary {
             word_list_id: id.clone(),
             name: name.to_owned(),
             share_id: None,
+            account_id: None,
+            device_verifiers: Vec::new(),
             versions: vec![Self::version(1, &prepared)],
         };
         self.write_content(&id, 1, &prepared)?;
@@ -628,8 +655,69 @@ impl WordListLibrary {
         if let Some(share) = &stored.share_id {
             index.shares.remove(share);
         }
+        index
+            .accounts
+            .remove(stored.account_id.as_deref(), &stored.word_list_id);
         index.lists = index.lists.saturating_sub(1);
         Ok(())
+    }
+    /// Links an owned original to a verified account (#132). Linking again to the same
+    /// account is idempotent; another account's link is never replaced.
+    pub fn link(&self, id: &str, capability: &str, account_id: &str) -> Result<Linked> {
+        let mut index = self
+            .index
+            .lock()
+            .map_err(|_| WordListLibraryError::Internal)?;
+        let mut stored = self.owned(id, capability)?;
+        let linked = account_link::link(&mut stored.account_id, account_id)
+            .map_err(|()| WordListLibraryError::LinkedElsewhere)?;
+        if linked == Linked::New {
+            self.store(&stored)?;
+            index.accounts.add(Some(account_id), id);
+        }
+        Ok(linked)
+    }
+    /// Originals linked to `account_id`.
+    pub fn linked(&self, account_id: &str) -> Result<Vec<LinkedLibrary>> {
+        let index = self
+            .index
+            .lock()
+            .map_err(|_| WordListLibraryError::Internal)?;
+        let mut linked = Vec::new();
+        for id in index.accounts.ids(account_id) {
+            if let Some(stored) = self.load(&id).map_err(|_| WordListLibraryError::Internal)? {
+                linked.push(LinkedLibrary {
+                    id,
+                    name: stored.name,
+                });
+            }
+        }
+        Ok(linked)
+    }
+    /// Issues a new device capability for an original linked to `account_id`; the
+    /// original guest capability and earlier devices keep working.
+    pub fn reconnect(&self, id: &str, account_id: &str) -> Result<String> {
+        let _index = self
+            .index
+            .lock()
+            .map_err(|_| WordListLibraryError::Internal)?;
+        if !is_word_list_id(id) {
+            return Err(WordListLibraryError::Unknown);
+        }
+        let mut stored = self
+            .load(id)
+            .map_err(|_| WordListLibraryError::Internal)?
+            .ok_or(WordListLibraryError::Unknown)?;
+        if stored.account_id.as_deref() != Some(account_id) {
+            return Err(WordListLibraryError::NotAccountOwner);
+        }
+        let capability = random_hex(32)?;
+        account_link::add_device(
+            &mut stored.device_verifiers,
+            hexadecimal(hmac::sign(&self.key, &Self::owner_message(id, &capability)).as_ref()),
+        );
+        self.store(&stored)?;
+        Ok(capability)
     }
     /// Enables (idempotently) the original's share link. After `unshare`, sharing again
     /// issues a fresh share id; a withdrawn id is never revived.

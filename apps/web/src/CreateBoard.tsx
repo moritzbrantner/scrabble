@@ -1,6 +1,7 @@
 import { Button, NativeSelect, NativeSelectOption } from "@moritzbrantner/ui/client";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 
+import { AccountLink } from "./AccountLink";
 import { type Copy } from "./copy";
 import {
   createGame,
@@ -68,6 +69,8 @@ export function CreateBoard({
   const [catalog, setCatalog] = useState<ProfileCatalog>();
   const [catalogFailed, setCatalogFailed] = useState(false);
   const [catalogAttempt, setCatalogAttempt] = useState(0);
+  /** Bumped after account reconnect adds device capabilities, so the libraries reload. */
+  const [libraryGeneration, setLibraryGeneration] = useState(0);
   const [choices, setChoices] = useState({ wordList: "", tile: "", board: "" });
   const [edits, setEdits] = useState<DraftRules>();
   const [touched, setTouched] = useState(false);
@@ -426,9 +429,15 @@ export function CreateBoard({
       >
         {state.kind === "failed" && state.retryable ? t("create.retry") : t("create.action")}
       </Button>
-      <CustomWordLists api={api} onChoices={setCustomWords} />
-      <CustomTileProfiles api={api} template={selectedTiles} onChoices={setCustomTiles} />
-      <CustomLayouts api={api} onChoices={setCustomBoards} />
+      <AccountLink api={api} onReconnected={() => setLibraryGeneration((value) => value + 1)} />
+      <CustomWordLists key={`words-${libraryGeneration}`} api={api} onChoices={setCustomWords} />
+      <CustomTileProfiles
+        key={`tiles-${libraryGeneration}`}
+        api={api}
+        template={selectedTiles}
+        onChoices={setCustomTiles}
+      />
+      <CustomLayouts key={`boards-${libraryGeneration}`} api={api} onChoices={setCustomBoards} />
     </main>
   );
 }

@@ -77,7 +77,13 @@ pub async fn serve(
         transport_receiver,
     );
     tokio::pin!(transport);
-    let api = game_api::serve(listener, games, config.board_origin);
+    let accounts = config.accounts_origin.map(|origin| {
+        Arc::new(crate::accounts::Accounts::new(
+            origin,
+            matches!(config.mode, crate::config::Mode::Local),
+        ))
+    });
+    let api = game_api::serve(listener, games, config.board_origin, accounts);
     tokio::pin!(api);
     tokio::select! {
         result = &mut transport => result?,

@@ -115,7 +115,7 @@ impl Stack {
         let api_port = listener.local_addr().unwrap().port();
         let api_games = Arc::clone(&games);
         let api = tokio::spawn(async move {
-            let _ = game_api::serve(listener, api_games, ORIGIN.into()).await;
+            let _ = game_api::serve(listener, api_games, ORIGIN.into(), None).await;
         });
         let client = Endpoint::client(
             ClientConfig::builder()

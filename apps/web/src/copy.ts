@@ -359,7 +359,7 @@ export const en = {
   "layouts.empty": "No saved board layouts yet.",
   "tileProfiles.region": "Custom tile profiles",
   "tileProfiles.notice":
-    "Your custom tile profiles are private and owned by this browser only. If this browser's data is cleared or lost, you lose the ability to edit or delete them, and no recovery is offered yet.",
+    "Your custom tile profiles are private and owned by this browser only. If this browser's data is cleared or lost, you lose the ability to edit or delete them unless you linked them to your Moenarch account, which recovers them on any device.",
   "tileProfiles.new": "New tile profile",
   "tileProfiles.newNote": "A new profile starts as a copy of the selected tile profile.",
   "tileProfiles.copyName": "Copy of {name}",
@@ -406,7 +406,7 @@ export const en = {
   "tileEditor.saved": "Profile saved.",
   "tileEditor.close": "Close editor",
   "layouts.notice":
-    "Your custom boards are owned by this browser only. If this browser's data is cleared or lost, you lose the ability to edit or delete them, and no recovery is offered yet.",
+    "Your custom boards are owned by this browser only. If this browser's data is cleared or lost, you lose the ability to edit or delete them unless you linked them to your Moenarch account, which recovers them on any device.",
   "layouts.edit": "Edit {name}",
   "layouts.share": "Share {name}",
   "layouts.delete": "Delete {name}",
@@ -465,7 +465,7 @@ export const en = {
   "wordLists.list": "Saved word lists",
   "wordLists.empty": "No saved word lists yet.",
   "wordLists.notice":
-    "Your word lists are owned by this browser only. If this browser's data is cleared or lost, you lose the ability to edit, share or delete them, and no recovery is offered yet. Games already started keep the words they began with.",
+    "Your word lists are owned by this browser only. If this browser's data is cleared or lost, you lose the ability to edit, share or delete them unless you linked them to your Moenarch account, which recovers them on any device. Games already started keep the words they began with.",
   "wordLists.count": "{count} words",
   "wordLists.countOne": "1 word",
   "wordLists.edit": "Edit {name}",
@@ -517,6 +517,26 @@ export const en = {
     "This shared word list is no longer available. Its owner may have stopped sharing or deleted it.",
   "sharedWords.note":
     "You can use this word list for a new game or save your own editable copy. Only its owner can edit the original.",
+  "account.region": "Moenarch account",
+  "account.checking": "Checking your Moenarch account…",
+  "account.signedOut":
+    "Sign in with your Moenarch account to keep your word lists, tile profiles and boards if this browser's data is lost, and to manage them on other devices. Without an account they keep working in this browser.",
+  "account.signIn": "Sign in or create an account",
+  "account.recheck": "I have signed in",
+  "account.signedIn": "Signed in as {name}.",
+  "account.link": "Link this browser's libraries",
+  "account.linkNote":
+    "Linking keeps them working here. People you shared them with still get only their own copies.",
+  "account.linked": "Linked: {linked} new, {existing} already linked.",
+  "account.conflict":
+    "{count} could not be linked because they are already linked to another account.",
+  "account.nothingToLink": "This browser has no saved libraries to link.",
+  "account.reconnect": "Reconnect linked libraries on this device",
+  "account.reconnected": "{count} linked libraries are now available on this device.",
+  "account.upToDate": "Every linked library is already available on this device.",
+  "account.unavailable":
+    "The account service is unavailable right now. Your libraries keep working in this browser.",
+  "account.failed": "The account request failed. Try again.",
 } as const;
 export type CopyKey = keyof typeof en;
 const de: Record<CopyKey, string> = {
@@ -899,7 +919,7 @@ const de: Record<CopyKey, string> = {
   "layouts.empty": "Noch keine gespeicherten Brettlayouts.",
   "tileProfiles.region": "Eigene Steinprofile",
   "tileProfiles.notice":
-    "Deine eigenen Steinprofile sind privat und gehören nur diesem Browser. Werden die Daten dieses Browsers gelöscht oder gehen verloren, kannst du sie nicht mehr bearbeiten oder löschen; eine Wiederherstellung wird noch nicht angeboten.",
+    "Deine eigenen Steinprofile sind privat und gehören nur diesem Browser. Werden die Daten dieses Browsers gelöscht oder gehen verloren, kannst du sie nicht mehr bearbeiten oder löschen, außer du hast sie mit deinem Moenarch-Konto verknüpft, das sie auf jedem Gerät wiederherstellt.",
   "tileProfiles.new": "Neues Steinprofil",
   "tileProfiles.newNote": "Ein neues Profil beginnt als Kopie des ausgewählten Steinprofils.",
   "tileProfiles.copyName": "Kopie von {name}",
@@ -947,7 +967,7 @@ const de: Record<CopyKey, string> = {
   "tileEditor.saved": "Profil gespeichert.",
   "tileEditor.close": "Editor schließen",
   "layouts.notice":
-    "Deine eigenen Bretter gehören nur diesem Browser. Werden die Daten dieses Browsers gelöscht oder gehen verloren, kannst du sie nicht mehr bearbeiten oder löschen; eine Wiederherstellung wird noch nicht angeboten.",
+    "Deine eigenen Bretter gehören nur diesem Browser. Werden die Daten dieses Browsers gelöscht oder gehen verloren, kannst du sie nicht mehr bearbeiten oder löschen, außer du hast sie mit deinem Moenarch-Konto verknüpft, das sie auf jedem Gerät wiederherstellt.",
   "layouts.edit": "{name} bearbeiten",
   "layouts.share": "{name} teilen",
   "layouts.delete": "{name} löschen",
@@ -1008,7 +1028,7 @@ const de: Record<CopyKey, string> = {
   "wordLists.list": "Gespeicherte Wortlisten",
   "wordLists.empty": "Noch keine gespeicherten Wortlisten.",
   "wordLists.notice":
-    "Deine Wortlisten gehören nur diesem Browser. Werden die Daten dieses Browsers gelöscht oder gehen verloren, kannst du sie nicht mehr bearbeiten, teilen oder löschen; eine Wiederherstellung wird noch nicht angeboten. Bereits begonnene Spiele behalten ihre ursprünglichen Wörter.",
+    "Deine Wortlisten gehören nur diesem Browser. Werden die Daten dieses Browsers gelöscht oder gehen verloren, kannst du sie nicht mehr bearbeiten, teilen oder löschen, außer du hast sie mit deinem Moenarch-Konto verknüpft, das sie auf jedem Gerät wiederherstellt. Bereits begonnene Spiele behalten ihre ursprünglichen Wörter.",
   "wordLists.count": "{count} Wörter",
   "wordLists.countOne": "1 Wort",
   "wordLists.edit": "{name} bearbeiten",
@@ -1062,6 +1082,26 @@ const de: Record<CopyKey, string> = {
     "Diese geteilte Wortliste ist nicht mehr verfügbar. Der Besitzer hat das Teilen möglicherweise beendet oder sie gelöscht.",
   "sharedWords.note":
     "Du kannst diese Wortliste für ein neues Spiel verwenden oder eine eigene bearbeitbare Kopie speichern. Nur der Besitzer kann das Original bearbeiten.",
+  "account.region": "Moenarch-Konto",
+  "account.checking": "Dein Moenarch-Konto wird geprüft…",
+  "account.signedOut":
+    "Melde dich mit deinem Moenarch-Konto an, damit deine Wortlisten, Steinprofile und Bretter erhalten bleiben, wenn die Daten dieses Browsers verloren gehen, und du sie auf anderen Geräten verwalten kannst. Ohne Konto funktionieren sie weiter in diesem Browser.",
+  "account.signIn": "Anmelden oder Konto erstellen",
+  "account.recheck": "Ich habe mich angemeldet",
+  "account.signedIn": "Angemeldet als {name}.",
+  "account.link": "Bibliotheken dieses Browsers verknüpfen",
+  "account.linkNote":
+    "Nach dem Verknüpfen funktionieren sie hier weiter. Wer sie geteilt bekommen hat, erhält weiterhin nur eigene Kopien.",
+  "account.linked": "Verknüpft: {linked} neu, {existing} bereits verknüpft.",
+  "account.conflict":
+    "{count} konnten nicht verknüpft werden, weil sie bereits mit einem anderen Konto verknüpft sind.",
+  "account.nothingToLink": "Dieser Browser hat keine gespeicherten Bibliotheken zum Verknüpfen.",
+  "account.reconnect": "Verknüpfte Bibliotheken auf diesem Gerät wiederherstellen",
+  "account.reconnected": "{count} verknüpfte Bibliotheken sind jetzt auf diesem Gerät verfügbar.",
+  "account.upToDate": "Alle verknüpften Bibliotheken sind auf diesem Gerät bereits verfügbar.",
+  "account.unavailable":
+    "Der Kontodienst ist gerade nicht erreichbar. Deine Bibliotheken funktionieren weiter in diesem Browser.",
+  "account.failed": "Die Kontoanfrage ist fehlgeschlagen. Versuche es erneut.",
 };
 const es: Record<CopyKey, string> = {
   "clock.setup": "Controles de tiempo",
@@ -1430,7 +1470,7 @@ const es: Record<CopyKey, string> = {
   "layouts.empty": "Todavía no hay diseños de tablero guardados.",
   "tileProfiles.region": "Perfiles de fichas propios",
   "tileProfiles.notice":
-    "Tus perfiles de fichas propios son privados y pertenecen solo a este navegador. Si se borran o pierden los datos de este navegador, ya no podrás editarlos ni eliminarlos; todavía no se ofrece ninguna recuperación.",
+    "Tus perfiles de fichas propios son privados y pertenecen solo a este navegador. Si se borran o pierden los datos de este navegador, ya no podrás editarlos ni eliminarlos, salvo que los hayas vinculado a tu cuenta de Moenarch, que los recupera en cualquier dispositivo.",
   "tileProfiles.new": "Nuevo perfil de fichas",
   "tileProfiles.newNote": "Un perfil nuevo empieza como copia del perfil de fichas seleccionado.",
   "tileProfiles.copyName": "Copia de {name}",
@@ -1478,7 +1518,7 @@ const es: Record<CopyKey, string> = {
   "tileEditor.saved": "Perfil guardado.",
   "tileEditor.close": "Cerrar editor",
   "layouts.notice":
-    "Tus tableros propios pertenecen solo a este navegador. Si se borran o pierden los datos de este navegador, ya no podrás editarlos ni eliminarlos; todavía no se ofrece ninguna recuperación.",
+    "Tus tableros propios pertenecen solo a este navegador. Si se borran o pierden los datos de este navegador, ya no podrás editarlos ni eliminarlos, salvo que los hayas vinculado a tu cuenta de Moenarch, que los recupera en cualquier dispositivo.",
   "layouts.edit": "Editar {name}",
   "layouts.share": "Compartir {name}",
   "layouts.delete": "Eliminar {name}",
@@ -1539,7 +1579,7 @@ const es: Record<CopyKey, string> = {
   "wordLists.list": "Listas de palabras guardadas",
   "wordLists.empty": "Todavía no hay listas de palabras guardadas.",
   "wordLists.notice":
-    "Tus listas de palabras pertenecen solo a este navegador. Si se borran o pierden los datos de este navegador, ya no podrás editarlas, compartirlas ni eliminarlas; todavía no se ofrece ninguna recuperación. Las partidas ya iniciadas conservan sus palabras originales.",
+    "Tus listas de palabras pertenecen solo a este navegador. Si se borran o pierden los datos de este navegador, ya no podrás editarlas, compartirlas ni eliminarlas, salvo que las hayas vinculado a tu cuenta de Moenarch, que las recupera en cualquier dispositivo. Las partidas ya iniciadas conservan sus palabras originales.",
   "wordLists.count": "{count} palabras",
   "wordLists.countOne": "1 palabra",
   "wordLists.edit": "Editar {name}",
@@ -1593,6 +1633,25 @@ const es: Record<CopyKey, string> = {
     "Esta lista de palabras compartida ya no está disponible. Su propietario puede haber dejado de compartirla o haberla eliminado.",
   "sharedWords.note":
     "Puedes usar esta lista de palabras en una partida nueva o guardar tu propia copia editable. Solo su propietario puede editar el original.",
+  "account.region": "Cuenta de Moenarch",
+  "account.checking": "Comprobando tu cuenta de Moenarch…",
+  "account.signedOut":
+    "Inicia sesión con tu cuenta de Moenarch para conservar tus listas de palabras, perfiles de fichas y tableros si se pierden los datos de este navegador, y para gestionarlos en otros dispositivos. Sin cuenta siguen funcionando en este navegador.",
+  "account.signIn": "Iniciar sesión o crear una cuenta",
+  "account.recheck": "Ya he iniciado sesión",
+  "account.signedIn": "Sesión iniciada como {name}.",
+  "account.link": "Vincular las bibliotecas de este navegador",
+  "account.linkNote":
+    "Al vincularlas siguen funcionando aquí. Quienes las recibieron compartidas siguen obteniendo solo sus propias copias.",
+  "account.linked": "Vinculadas: {linked} nuevas, {existing} ya vinculadas.",
+  "account.conflict": "{count} no se pudieron vincular porque ya están vinculadas a otra cuenta.",
+  "account.nothingToLink": "Este navegador no tiene bibliotecas guardadas para vincular.",
+  "account.reconnect": "Recuperar las bibliotecas vinculadas en este dispositivo",
+  "account.reconnected": "{count} bibliotecas vinculadas ya están disponibles en este dispositivo.",
+  "account.upToDate": "Todas las bibliotecas vinculadas ya están disponibles en este dispositivo.",
+  "account.unavailable":
+    "El servicio de cuentas no está disponible ahora. Tus bibliotecas siguen funcionando en este navegador.",
+  "account.failed": "La solicitud de la cuenta falló. Inténtalo de nuevo.",
 };
 export const catalogs = { en, de, es };
 export type Locale = keyof typeof catalogs;

@@ -1,4 +1,6 @@
 //! Composition boundary between Scrabble authority and the reusable serving runtime.
+pub mod account_link;
+pub mod accounts;
 pub mod config;
 pub mod dictionary;
 pub mod factory;
