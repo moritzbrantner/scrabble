@@ -127,7 +127,7 @@ impl Api {
         .unwrap();
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
-        let task = tokio::spawn(game_api::serve(listener, games, config.board_origin));
+        let task = tokio::spawn(game_api::serve(listener, games, config.board_origin, None));
         Self {
             _directory: directory,
             port,

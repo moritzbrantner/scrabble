@@ -27,8 +27,9 @@ fixture, in the dev and Pages suites).
   line) and are verified against their SHA-256 on every read.
 - The library cannot be used for owner management if the seed is replaced, so
   the server refuses to create a new seed while the directory is non-empty.
-  Losing the browser's capability loses management; no recovery is offered and
-  the interface says so (Decision 1.45).
+  Losing the browser's capability loses management unless the list was linked to a
+  Moenarch account ([account linking](account-linking.md), #132), and the interface
+  says so (Decision 1.45).
 
 ## Text format and bounds
 

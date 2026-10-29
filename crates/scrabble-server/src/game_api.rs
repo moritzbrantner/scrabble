@@ -1,4 +1,6 @@
 //! Small, bounded HTTP request boundary. The upstream runtime owns placement and session fencing.
+use crate::account_link::{Linked, LinkedLibrary};
+use crate::accounts::Accounts;
 use crate::games::{
     ConfiguredError, CreateConfiguredGame, CreateGame, CreateRematch, GameOperationError, Games,
     unix_seconds,
@@ -49,6 +51,8 @@ struct Request {
     path: String,
     origin: Option<String>,
     content_type: Option<String>,
+    /// The shared account session token from the `moenarch_session` cookie (#132).
+    session: Option<String>,
     body: Vec<u8>,
 }
 struct Response {
@@ -125,6 +129,7 @@ async fn read_request(stream: &mut TcpStream, word_list_body: usize) -> Result<R
     let mut length = None;
     let mut origin = None;
     let mut content_type = None;
+    let mut session = None;
     for line in lines.take_while(|line| !line.is_empty()) {
         let (name, value) = line
             .split_once(':')
@@ -157,6 +162,11 @@ async fn read_request(stream: &mut TcpStream, word_list_body: usize) -> Result<R
             }
             "origin" => set_once(&mut origin, value, "duplicate-origin")?,
             "content-type" => set_once(&mut content_type, value, "duplicate-content-type")?,
+            "cookie" => {
+                if let Some(token) = crate::accounts::session_cookie(value) {
+                    set_once(&mut session, token, "duplicate-session")?;
+                }
+            }
             _ => {}
         }
     }
@@ -194,6 +204,7 @@ async fn read_request(stream: &mut TcpStream, word_list_body: usize) -> Result<R
         path,
         origin,
         content_type,
+        session,
         body,
     })
 }
@@ -206,13 +217,21 @@ fn join_response(result: Result<crate::games::JoinInformation, GameOperationErro
         Err(error) => operation_error(error),
     }
 }
-async fn route(request: Request, games: &Games, board_origin: &str) -> Response {
+async fn route(
+    request: Request,
+    games: &Games,
+    board_origin: &str,
+    accounts: Option<&Arc<Accounts>>,
+) -> Response {
     if request
         .origin
         .as_deref()
         .is_some_and(|origin| origin != board_origin)
     {
         return Response::error(403, "origin-rejected");
+    }
+    if request.path.starts_with("/account/") {
+        return account_route(&request, games, accounts).await;
     }
     if is_layout_path(&request.path) {
         return layout_route(&request, games).await;
@@ -389,6 +408,8 @@ fn layout_error(error: LayoutError) -> Response {
             &serde_json::json!({"error":"invalid-layout","reason":reason}),
         ),
         LayoutError::OwnerRejected => Response::error(403, "layout-owner-rejected"),
+        LayoutError::LinkedElsewhere => Response::error(409, "account-link-conflict"),
+        LayoutError::NotAccountOwner => Response::error(403, "account-not-owner"),
         LayoutError::Unknown => Response::error(404, "unknown-layout"),
         LayoutError::Full => Response::error(429, "layout-library-full"),
         LayoutError::Internal => operation_error(GameOperationError::Internal),
@@ -448,6 +469,8 @@ fn tile_profile_error(error: TileProfileError) -> Response {
             &serde_json::json!({"error":"invalid-tile-profile","reason":reason}),
         ),
         TileProfileError::OwnerRejected => Response::error(403, "tile-profile-owner-rejected"),
+        TileProfileError::LinkedElsewhere => Response::error(409, "account-link-conflict"),
+        TileProfileError::NotAccountOwner => Response::error(403, "account-not-owner"),
         TileProfileError::Unknown => Response::error(404, "unknown-tile-profile"),
         TileProfileError::Full => Response::error(429, "tile-profile-library-full"),
         TileProfileError::Internal => operation_error(GameOperationError::Internal),
@@ -724,6 +747,8 @@ fn word_list_error(error: WordListLibraryError) -> Response {
             &serde_json::json!({"error":"word-list-too-large","reason":reason}),
         ),
         WordListLibraryError::OwnerRejected => Response::error(403, "word-list-owner-rejected"),
+        WordListLibraryError::LinkedElsewhere => Response::error(409, "account-link-conflict"),
+        WordListLibraryError::NotAccountOwner => Response::error(403, "account-not-owner"),
         WordListLibraryError::Unknown => Response::error(404, "unknown-word-list"),
         WordListLibraryError::Full => Response::error(429, "word-list-library-full"),
         WordListLibraryError::Internal => operation_error(GameOperationError::Internal),
@@ -900,6 +925,218 @@ async fn word_list_route(request: &Request, games: &Games) -> Response {
     .await;
     result.unwrap_or_else(|response| response)
 }
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum LibraryKind {
+    WordList,
+    TileProfile,
+    Layout,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct AccountRequest {
+    version: u8,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct LinkRequest {
+    version: u8,
+    kind: LibraryKind,
+    id: String,
+    owner_capability: String,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ReconnectRequest {
+    version: u8,
+    kind: LibraryKind,
+    id: String,
+}
+fn linked_body(linked: Vec<LinkedLibrary>) -> serde_json::Value {
+    linked
+        .into_iter()
+        .map(|library| serde_json::json!({"id": library.id, "name": library.name}))
+        .collect()
+}
+/// Optional account linking of guest-owned libraries (#132; Decision 1.46). Every call
+/// verifies the `moenarch_session` cookie with the shared account service; the browser
+/// never names an account. Scrabble stays the authority for the libraries themselves.
+///
+/// - `POST /account/session` `{version}` -> `{version,accountId,displayName}`.
+/// - `POST /account/link` `{version,kind,id,ownerCapability}` -> `{version,kind,id,linked}`
+///   where `linked` is `"new"` or `"existing"` (idempotent for the same account).
+/// - `POST /account/libraries` `{version}` -> `{version,wordLists,tileProfiles,layouts}`,
+///   each a list of `{id,name}` linked to the signed-in account.
+/// - `POST /account/reconnect` `{version,kind,id}` -> `{version,kind,id,ownerCapability}`:
+///   a new device capability for a library linked to the signed-in account.
+///
+/// Errors: 401 `signed-out` with `signIn` (the account page); 403 `account-not-owner`;
+/// 409 `account-link-conflict` (linked to another account); 503 `accounts-unavailable`.
+async fn account_route(
+    request: &Request,
+    games: &Games,
+    accounts: Option<&Arc<Accounts>>,
+) -> Response {
+    if request.method == "OPTIONS" {
+        return Response {
+            status: 204,
+            body: String::new(),
+        };
+    }
+    let result = async {
+        if request.method != "POST" {
+            return Err(Response::error(405, "method-not-allowed"));
+        }
+        if !matches!(
+            request.path.as_str(),
+            "/account/session" | "/account/link" | "/account/libraries" | "/account/reconnect"
+        ) {
+            return Err(Response::error(404, "not-found"));
+        }
+        // Cookie-authenticated mutations come only from the board's own origin.
+        if request.origin.is_none() {
+            return Err(Response::error(403, "origin-rejected"));
+        }
+        let accounts = accounts.ok_or_else(|| Response::error(503, "accounts-unavailable"))?;
+        let link = if request.path == "/account/link" {
+            Some(parse_body(request, |b: &LinkRequest| b.version)?)
+        } else {
+            None
+        };
+        let reconnect = if request.path == "/account/reconnect" {
+            Some(parse_body(request, |b: &ReconnectRequest| b.version)?)
+        } else {
+            None
+        };
+        if link.is_none() && reconnect.is_none() {
+            parse_body(request, |b: &AccountRequest| b.version)?;
+        }
+        let signed_out = || {
+            json_response(
+                401,
+                &serde_json::json!({"error":"signed-out","signIn":accounts.sign_in_url()}),
+            )
+        };
+        let token = request.session.clone().ok_or_else(signed_out)?;
+        let verifier = Arc::clone(accounts);
+        let account = tokio::task::spawn_blocking(move || verifier.verify(&token))
+            .await
+            .map_err(|_| operation_error(GameOperationError::Internal))?
+            .map_err(|_| Response::error(503, "accounts-unavailable"))?
+            .ok_or_else(signed_out)?;
+        let account_id = account.account_id.clone();
+        if let Some(body) = link {
+            let LinkRequest {
+                kind,
+                id,
+                owner_capability,
+                ..
+            } = body;
+            let response_id = id.clone();
+            let linked = match kind {
+                LibraryKind::WordList => games
+                    .with_word_lists(move |l| l.link(&id, &owner_capability, &account_id))
+                    .await
+                    .map_err(operation_error)?
+                    .map_err(word_list_error)?,
+                LibraryKind::TileProfile => games
+                    .with_tile_profiles(move |l| l.link(&id, &owner_capability, &account_id))
+                    .await
+                    .map_err(operation_error)?
+                    .map_err(tile_profile_error)?,
+                LibraryKind::Layout => games
+                    .with_layouts(move |l| l.link(&id, &owner_capability, &account_id))
+                    .await
+                    .map_err(operation_error)?
+                    .map_err(layout_error)?,
+            };
+            return Ok(json_response(
+                200,
+                &serde_json::json!({
+                    "version": 1,
+                    "kind": kind_name(kind),
+                    "id": response_id,
+                    "linked": if linked == Linked::New { "new" } else { "existing" },
+                }),
+            ));
+        }
+        if let Some(body) = reconnect {
+            let ReconnectRequest { kind, id, .. } = body;
+            let response_id = id.clone();
+            let capability = match kind {
+                LibraryKind::WordList => games
+                    .with_word_lists(move |l| l.reconnect(&id, &account_id))
+                    .await
+                    .map_err(operation_error)?
+                    .map_err(word_list_error)?,
+                LibraryKind::TileProfile => games
+                    .with_tile_profiles(move |l| l.reconnect(&id, &account_id))
+                    .await
+                    .map_err(operation_error)?
+                    .map_err(tile_profile_error)?,
+                LibraryKind::Layout => games
+                    .with_layouts(move |l| l.reconnect(&id, &account_id))
+                    .await
+                    .map_err(operation_error)?
+                    .map_err(layout_error)?,
+            };
+            return Ok(json_response(
+                200,
+                &serde_json::json!({
+                    "version": 1,
+                    "kind": kind_name(kind),
+                    "id": response_id,
+                    "ownerCapability": capability,
+                }),
+            ));
+        }
+        if request.path == "/account/libraries" {
+            let words = account_id.clone();
+            let tiles = account_id.clone();
+            let word_lists = games
+                .with_word_lists(move |l| l.linked(&words))
+                .await
+                .map_err(operation_error)?
+                .map_err(word_list_error)?;
+            let tile_profiles = games
+                .with_tile_profiles(move |l| l.linked(&tiles))
+                .await
+                .map_err(operation_error)?
+                .map_err(tile_profile_error)?;
+            let layouts = games
+                .with_layouts(move |l| l.linked(&account_id))
+                .await
+                .map_err(operation_error)?
+                .map_err(layout_error)?;
+            return Ok(json_response(
+                200,
+                &serde_json::json!({
+                    "version": 1,
+                    "wordLists": linked_body(word_lists),
+                    "tileProfiles": linked_body(tile_profiles),
+                    "layouts": linked_body(layouts),
+                }),
+            ));
+        }
+        Ok(json_response(
+            200,
+            &serde_json::json!({
+                "version": 1,
+                "accountId": account.account_id,
+                "displayName": account.display_name,
+            }),
+        ))
+    }
+    .await;
+    result.unwrap_or_else(|response| response)
+}
+fn kind_name(kind: LibraryKind) -> &'static str {
+    match kind {
+        LibraryKind::WordList => "wordList",
+        LibraryKind::TileProfile => "tileProfile",
+        LibraryKind::Layout => "layout",
+    }
+}
 fn share_id_of(view: &LayoutView) -> Option<&str> {
     view.share_id.as_deref()
 }
@@ -929,7 +1166,7 @@ async fn write_response(
         _ => "Internal Server Error",
     };
     let header = format!(
-        "HTTP/1.1 {} {reason}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\nAccess-Control-Allow-Origin: {origin}\r\nVary: Origin\r\nAccess-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\n\r\n",
+        "HTTP/1.1 {} {reason}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\nAccess-Control-Allow-Origin: {origin}\r\nAccess-Control-Allow-Credentials: true\r\nVary: Origin\r\nAccess-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\n\r\n",
         response.status,
         response.body.len()
     );
@@ -941,6 +1178,7 @@ pub async fn serve(
     listener: TcpListener,
     games: Arc<Games>,
     board_origin: String,
+    accounts: Option<Arc<Accounts>>,
 ) -> io::Result<()> {
     let capacity = Arc::new(Semaphore::new(MAX_CONNECTIONS));
     let word_list_body = word_list_body_bytes(&games.word_list_limits());
@@ -956,11 +1194,12 @@ pub async fn serve(
                 let Ok(permit) = Arc::clone(&capacity).try_acquire_owned() else { continue; };
                 let games = Arc::clone(&games);
                 let origin = board_origin.clone();
+                let accounts = accounts.clone();
                 requests.spawn(async move {
                     let _permit = permit;
                     let operation = async {
                         match read_request(&mut stream, word_list_body).await {
-                            Ok(request) => route(request, &games, &origin).await,
+                            Ok(request) => route(request, &games, &origin, accounts.as_ref()).await,
                             Err(error) => error,
                         }
                     };

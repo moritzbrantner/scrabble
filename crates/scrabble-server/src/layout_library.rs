@@ -8,6 +8,7 @@
 //! initialization manifest pins the composed rules.
 use crate::{
     ErrorResult,
+    account_link::{self, AccountIndex, Linked, LinkedLibrary},
     dictionary::hexadecimal,
     profiles::{BoardProfile, ProfileError},
 };
@@ -51,6 +52,10 @@ pub struct Layout {
 pub enum LayoutError {
     Invalid(String),
     OwnerRejected,
+    /// The original is linked to a different account (#132).
+    LinkedElsewhere,
+    /// The verified account is not this original's linked owner (#132).
+    NotAccountOwner,
     Unknown,
     Full,
     Internal,
@@ -78,6 +83,12 @@ struct StoredLayout {
     name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     share_id: Option<String>,
+    /// Linked Moenarch account (#132); `None` while guest-owned only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    account_id: Option<String>,
+    /// Verifiers of device capabilities issued to the linked account by `reconnect`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    device_verifiers: Vec<String>,
     versions: Vec<StoredVersion>,
 }
 impl StoredLayout {
@@ -105,6 +116,7 @@ struct Index {
     /// Board identity name of a retained version -> its original.
     boards: HashMap<String, String>,
     shares: HashMap<String, String>,
+    accounts: AccountIndex,
     layouts: usize,
 }
 
@@ -254,6 +266,9 @@ impl LayoutLibrary {
         if let Some(share) = &stored.share_id {
             index.shares.insert(share.clone(), stored.layout_id.clone());
         }
+        index
+            .accounts
+            .add(stored.account_id.as_deref(), &stored.layout_id);
         index.layouts += 1;
         Ok(())
     }
@@ -282,6 +297,10 @@ impl LayoutLibrary {
             || stored.layout_id != id
             || stored.versions.is_empty()
             || stored.share_id.as_deref().is_some_and(|s| !is_share_id(s))
+            || !account_link::valid_persisted(
+                stored.account_id.as_deref(),
+                &stored.device_verifiers,
+            )
         {
             return Err("invalid persisted layout entry".into());
         }
@@ -330,14 +349,16 @@ impl LayoutLibrary {
             .load(layout_id)
             .map_err(|_| LayoutError::Internal)?
             .ok_or(LayoutError::Unknown)?;
-        let expected = decode_hex(&stored.verifier).ok_or(LayoutError::Internal)?;
-        // `hmac::verify` recomputes the tag and compares it in constant time.
-        hmac::verify(
+        let matched = account_link::owner_matches(
             &self.key,
             &Self::owner_message(layout_id, capability),
-            &expected,
+            &stored.verifier,
+            &stored.device_verifiers,
         )
-        .map_err(|_| LayoutError::OwnerRejected)?;
+        .ok_or(LayoutError::Internal)?;
+        if !matched {
+            return Err(LayoutError::OwnerRejected);
+        }
         Ok(stored)
     }
     fn view(&self, stored: &StoredLayout) -> Result<LayoutView, LayoutError> {
@@ -374,6 +395,8 @@ impl LayoutLibrary {
             layout_id,
             name: name.to_owned(),
             share_id: None,
+            account_id: None,
+            device_verifiers: Vec::new(),
             versions: vec![StoredVersion {
                 revision: 1,
                 source: Self::new_source(1)?,
@@ -438,8 +461,65 @@ impl LayoutLibrary {
         if let Some(share) = &stored.share_id {
             index.shares.remove(share);
         }
+        index
+            .accounts
+            .remove(stored.account_id.as_deref(), &stored.layout_id);
         index.layouts = index.layouts.saturating_sub(1);
         Ok(())
+    }
+    /// Links an owned original to a verified account (#132). Linking again to the same
+    /// account is idempotent; another account's link is never replaced.
+    pub fn link(
+        &self,
+        layout_id: &str,
+        capability: &str,
+        account_id: &str,
+    ) -> Result<Linked, LayoutError> {
+        let mut index = self.index.lock().map_err(|_| LayoutError::Internal)?;
+        let mut stored = self.owned(layout_id, capability)?;
+        let linked = account_link::link(&mut stored.account_id, account_id)
+            .map_err(|()| LayoutError::LinkedElsewhere)?;
+        if linked == Linked::New {
+            self.store(&stored)?;
+            index.accounts.add(Some(account_id), layout_id);
+        }
+        Ok(linked)
+    }
+    /// Originals linked to `account_id`.
+    pub fn linked(&self, account_id: &str) -> Result<Vec<LinkedLibrary>, LayoutError> {
+        let index = self.index.lock().map_err(|_| LayoutError::Internal)?;
+        let mut linked = Vec::new();
+        for id in index.accounts.ids(account_id) {
+            if let Some(stored) = self.load(&id).map_err(|_| LayoutError::Internal)? {
+                linked.push(LinkedLibrary {
+                    id,
+                    name: stored.name,
+                });
+            }
+        }
+        Ok(linked)
+    }
+    /// Issues a new device capability for an original linked to `account_id`; the
+    /// original guest capability and earlier devices keep working.
+    pub fn reconnect(&self, layout_id: &str, account_id: &str) -> Result<String, LayoutError> {
+        let _index = self.index.lock().map_err(|_| LayoutError::Internal)?;
+        if !is_layout_id(layout_id) {
+            return Err(LayoutError::Unknown);
+        }
+        let mut stored = self
+            .load(layout_id)
+            .map_err(|_| LayoutError::Internal)?
+            .ok_or(LayoutError::Unknown)?;
+        if stored.account_id.as_deref() != Some(account_id) {
+            return Err(LayoutError::NotAccountOwner);
+        }
+        let capability = random_hex(32)?;
+        account_link::add_device(
+            &mut stored.device_verifiers,
+            hexadecimal(self.verifier(layout_id, &capability).as_ref()),
+        );
+        self.store(&stored)?;
+        Ok(capability)
     }
     /// Enables (idempotently) the original's share link. After `unshare`, sharing again
     /// issues a fresh share id; a withdrawn id is never revived.

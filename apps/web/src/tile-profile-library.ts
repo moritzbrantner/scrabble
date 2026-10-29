@@ -73,6 +73,16 @@ function issuedBy(api: string, entry: TileProfileOwner) {
     throw new TileProfileError("owner");
   }
 }
+/** Keeps a device capability issued to the linked account (#132). */
+export function rememberTileProfile(api: string, profileId: string, ownerCapability: string) {
+  const entry = ownerEntry.parse({
+    version: 1,
+    profileId,
+    ownerCapability,
+    api: canonicalApi(api),
+  });
+  localStorage.setItem(ownerPrefix + entry.profileId, JSON.stringify(entry));
+}
 /** Removes this browser's entry after its issuing API deleted or no longer knows it. */
 export function forgetTileProfile(entry: TileProfileOwner) {
   try {

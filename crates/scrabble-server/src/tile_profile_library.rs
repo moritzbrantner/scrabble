@@ -8,8 +8,9 @@
 //! library again: their configured initialization manifest pins the composed rules.
 use crate::{
     ErrorResult,
+    account_link::{self, AccountIndex, Linked, LinkedLibrary},
     dictionary::hexadecimal,
-    layout_library::{decode_hex, is_hex_id, random_hex, sync_directory},
+    layout_library::{is_hex_id, random_hex, sync_directory},
     profiles::{ProfileError, TileProfile},
 };
 use ring::hmac;
@@ -34,6 +35,10 @@ const MAX_FILE_BYTES: u64 = 256 * 1024;
 pub enum TileProfileError {
     Invalid(String),
     OwnerRejected,
+    /// The original is linked to a different account (#132).
+    LinkedElsewhere,
+    /// The verified account is not this original's linked owner (#132).
+    NotAccountOwner,
     Unknown,
     Full,
     Internal,
@@ -59,6 +64,12 @@ struct StoredProfile {
     profile_id: String,
     verifier: String,
     name: String,
+    /// Linked Moenarch account (#132); `None` while guest-owned only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    account_id: Option<String>,
+    /// Verifiers of device capabilities issued to the linked account by `reconnect`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    device_verifiers: Vec<String>,
     versions: Vec<StoredVersion>,
 }
 impl StoredProfile {
@@ -86,6 +97,7 @@ pub struct Created {
 struct Index {
     /// Tile identity name of a retained version -> its original.
     tiles: HashMap<String, String>,
+    accounts: AccountIndex,
     profiles: usize,
 }
 
@@ -177,6 +189,9 @@ impl TileProfileLibrary {
                 .tiles
                 .insert(version.source.name.clone(), stored.profile_id.clone());
         }
+        index
+            .accounts
+            .add(stored.account_id.as_deref(), &stored.profile_id);
         index.profiles += 1;
     }
     fn path(&self, id: &str) -> PathBuf {
@@ -200,7 +215,14 @@ impl TileProfileLibrary {
             return Err("tile profile entry exceeds its supported size".into());
         }
         let stored: StoredProfile = serde_json::from_slice(&bytes)?;
-        if stored.version != 1 || stored.profile_id != id || stored.versions.is_empty() {
+        if stored.version != 1
+            || stored.profile_id != id
+            || stored.versions.is_empty()
+            || !account_link::valid_persisted(
+                stored.account_id.as_deref(),
+                &stored.device_verifiers,
+            )
+        {
             return Err("invalid persisted tile profile entry".into());
         }
         Ok(Some(stored))
@@ -246,13 +268,16 @@ impl TileProfileLibrary {
             .load(profile_id)
             .map_err(|_| TileProfileError::Internal)?
             .ok_or(TileProfileError::Unknown)?;
-        let expected = decode_hex(&stored.verifier).ok_or(TileProfileError::Internal)?;
-        hmac::verify(
+        let matched = account_link::owner_matches(
             &self.key,
             &Self::owner_message(profile_id, capability),
-            &expected,
+            &stored.verifier,
+            &stored.device_verifiers,
         )
-        .map_err(|_| TileProfileError::OwnerRejected)?;
+        .ok_or(TileProfileError::Internal)?;
+        if !matched {
+            return Err(TileProfileError::OwnerRejected);
+        }
         Ok(stored)
     }
     fn view(stored: &StoredProfile) -> Result<TileProfileView, TileProfileError> {
@@ -297,6 +322,8 @@ impl TileProfileLibrary {
             ),
             profile_id,
             name: name.to_owned(),
+            account_id: None,
+            device_verifiers: Vec::new(),
             versions: vec![StoredVersion {
                 revision: 1,
                 source: Self::new_source(1)?,
@@ -361,8 +388,71 @@ impl TileProfileLibrary {
         for version in &stored.versions {
             index.tiles.remove(&version.source.name);
         }
+        index
+            .accounts
+            .remove(stored.account_id.as_deref(), &stored.profile_id);
         index.profiles = index.profiles.saturating_sub(1);
         Ok(())
+    }
+    /// Links an owned original to a verified account (#132). Linking again to the same
+    /// account is idempotent; another account's link is never replaced.
+    pub fn link(
+        &self,
+        profile_id: &str,
+        capability: &str,
+        account_id: &str,
+    ) -> Result<Linked, TileProfileError> {
+        let mut index = self.index.lock().map_err(|_| TileProfileError::Internal)?;
+        let mut stored = self.owned(profile_id, capability)?;
+        let linked = account_link::link(&mut stored.account_id, account_id)
+            .map_err(|()| TileProfileError::LinkedElsewhere)?;
+        if linked == Linked::New {
+            self.store(&stored)?;
+            index.accounts.add(Some(account_id), profile_id);
+        }
+        Ok(linked)
+    }
+    /// Originals linked to `account_id`.
+    pub fn linked(&self, account_id: &str) -> Result<Vec<LinkedLibrary>, TileProfileError> {
+        let index = self.index.lock().map_err(|_| TileProfileError::Internal)?;
+        let mut linked = Vec::new();
+        for id in index.accounts.ids(account_id) {
+            if let Some(stored) = self.load(&id).map_err(|_| TileProfileError::Internal)? {
+                linked.push(LinkedLibrary {
+                    id,
+                    name: stored.name,
+                });
+            }
+        }
+        Ok(linked)
+    }
+    /// Issues a new device capability for an original linked to `account_id`; the
+    /// original guest capability and earlier devices keep working.
+    pub fn reconnect(
+        &self,
+        profile_id: &str,
+        account_id: &str,
+    ) -> Result<String, TileProfileError> {
+        let _index = self.index.lock().map_err(|_| TileProfileError::Internal)?;
+        if !is_tile_profile_id(profile_id) {
+            return Err(TileProfileError::Unknown);
+        }
+        let mut stored = self
+            .load(profile_id)
+            .map_err(|_| TileProfileError::Internal)?
+            .ok_or(TileProfileError::Unknown)?;
+        if stored.account_id.as_deref() != Some(account_id) {
+            return Err(TileProfileError::NotAccountOwner);
+        }
+        let capability = random_hex(32).map_err(|_| TileProfileError::Internal)?;
+        account_link::add_device(
+            &mut stored.device_verifiers,
+            hexadecimal(
+                hmac::sign(&self.key, &Self::owner_message(profile_id, &capability)).as_ref(),
+            ),
+        );
+        self.store(&stored)?;
+        Ok(capability)
     }
     /// Resolves a retained saved version for match setup. Unknown, forged, dropped or
     /// deleted identities are `None`.

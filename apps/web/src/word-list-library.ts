@@ -123,6 +123,16 @@ async function keep(api: string, created: z.infer<typeof createdWordList>) {
     throw new WordListError("storage");
   }
 }
+/** Keeps a device capability issued to the linked account (#132). */
+export function rememberWordList(api: string, wordListId: string, ownerCapability: string) {
+  const entry = ownerEntry.parse({
+    version: 1,
+    wordListId,
+    ownerCapability,
+    api: canonicalApi(api),
+  });
+  localStorage.setItem(ownerPrefix + entry.wordListId, JSON.stringify(entry));
+}
 /** Removes this browser's entry after its issuing API deleted or no longer knows it. */
 export function forgetWordList(entry: WordListOwner) {
   try {
