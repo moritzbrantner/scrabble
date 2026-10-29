@@ -82,7 +82,7 @@ Object.assign(env, {
   DEPLOY_VERSION: "deployment-check",
   DEPLOY_DICTIONARY_NAME: "scrabble-authored-fixture",
   DEPLOY_DICTIONARY_REVISION: "1",
-  DEPLOY_BOARD_ORIGIN: "https://scrabble.moenarch.com",
+  DEPLOY_BOARD_ORIGIN: "https://moenarch.com",
 });
 const compose = [
   "docker",
@@ -172,11 +172,7 @@ try {
   await request("/api/games", 403, [...creation, "--header", "Origin: https://wrong.example"]);
   const created = decodeJoinInformation(
     JSON.parse(
-      await request("/api/games", 200, [
-        ...creation,
-        "--header",
-        "Origin: https://scrabble.moenarch.com",
-      ]),
+      await request("/api/games", 200, [...creation, "--header", "Origin: https://moenarch.com"]),
     ),
     "https://localhost/game",
   );

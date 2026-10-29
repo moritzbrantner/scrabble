@@ -31,7 +31,11 @@ type Sessions = Arc<Mutex<HashMap<String, (String, String)>>>;
 /// Fake account service implementing only the product verification contract.
 async fn fake_accounts(sessions: Sessions) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let origin = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
+    // Served below a path prefix, as on moenarch.com/accounts/.
+    let origin = format!(
+        "http://127.0.0.1:{}/accounts",
+        listener.local_addr().unwrap().port()
+    );
     tokio::spawn(async move {
         loop {
             let Ok((mut stream, _)) = listener.accept().await else {
@@ -63,7 +67,7 @@ async fn fake_accounts(sessions: Sessions) -> String {
                     bytes.extend_from_slice(&chunk[..read]);
                 }
                 assert!(
-                    head.starts_with("POST /v1/sessions/verify HTTP/1.1"),
+                    head.starts_with("POST /accounts/v1/sessions/verify HTTP/1.1"),
                     "{head}"
                 );
                 let request: Value = serde_json::from_slice(&bytes).unwrap();
@@ -130,7 +134,7 @@ fn values(root: &Path, accounts: &str) -> BTreeMap<String, String> {
         ("SCRABBLE_WORD_LIST_DIR".into(), path("word-lists")),
         ("SCRABBLE_TILE_PROFILE_DIR".into(), path("tile-profiles")),
         ("SCRABBLE_MAX_MATCHES".into(), "8".into()),
-        ("SCRABBLE_ACCOUNTS_ORIGIN".into(), accounts.into()),
+        ("SCRABBLE_ACCOUNTS_URL".into(), accounts.into()),
         (
             "SCRABBLE_CERT_PEM".into(),
             certificate.to_str().unwrap().into(),
@@ -540,6 +544,8 @@ async fn account_routes_need_the_board_origin_and_a_reachable_account_service() 
         (status, &body["error"]),
         (503, &json!("accounts-unavailable"))
     );
+    // Guest use never waits on the account service.
+    create_all(&api).await;
 
     // Without an Origin header (not a browser from the board), cookies are not honoured.
     let mut stream = TcpStream::connect(("127.0.0.1", api.port)).await.unwrap();

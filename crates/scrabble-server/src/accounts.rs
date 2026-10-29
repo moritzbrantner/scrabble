@@ -43,7 +43,7 @@ struct Verified {
 }
 
 pub struct Accounts {
-    origin: url::Url,
+    base: url::Url,
     allow_insecure: bool,
     cache: Mutex<HashMap<Vec<u8>, (Account, u64)>>,
 }
@@ -56,18 +56,19 @@ fn now() -> u64 {
 }
 
 impl Accounts {
-    /// `origin` is the account service's public origin, e.g. `https://accounts.moenarch.com`.
+    /// `base` is the account service's public base URL ending in `/`, e.g.
+    /// `https://moenarch.com/accounts/`; its routes resolve below it.
     /// Plain `http` is accepted only with `allow_insecure` (local mode).
-    pub fn new(origin: url::Url, allow_insecure: bool) -> Self {
+    pub fn new(base: url::Url, allow_insecure: bool) -> Self {
         Self {
-            origin,
+            base,
             allow_insecure,
             cache: Mutex::new(HashMap::new()),
         }
     }
     /// Where a signed-out player signs in, recovers or manages devices.
     pub fn sign_in_url(&self) -> String {
-        self.origin.as_str().to_owned()
+        self.base.as_str().to_owned()
     }
     /// Resolves a session token; `Ok(None)` means signed out (unknown, expired or revoked).
     /// Blocking: call it off the async executor.
@@ -88,7 +89,7 @@ impl Accounts {
         let body =
             serde_json::to_vec(&serde_json::json!({ "token": token })).map_err(|_| Unavailable)?;
         let (status, response) = self
-            .post("/v1/sessions/verify", &body)
+            .post("v1/sessions/verify", &body)
             .map_err(|_| Unavailable)?;
         match status {
             200 => {
@@ -121,7 +122,7 @@ impl Accounts {
         path: &str,
         body: &[u8],
     ) -> Result<(u16, Vec<u8>), Box<dyn std::error::Error + Send + Sync>> {
-        let url = self.origin.join(path)?;
+        let url = self.base.join(path)?;
         let host = url.host_str().ok_or("account service has no host")?;
         let port = url
             .port_or_known_default()

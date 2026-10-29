@@ -73,11 +73,11 @@ function own(prefix: string, entry: Record<string, unknown>, id: string) {
 }
 
 test("a signed-out answer carries the account page and the cookie is sent", async () => {
-  answer = () => [401, { error: "signed-out", signIn: "https://accounts.moenarch.com/" }];
+  answer = () => [401, { error: "signed-out", signIn: "https://moenarch.com/accounts/" }];
   const error = await accountSession(api).catch((caught: unknown) => caught);
   expect(error).toBeInstanceOf(AccountError);
   expect((error as AccountError).code).toBe("signedOut");
-  expect((error as AccountError).signIn).toBe("https://accounts.moenarch.com/");
+  expect((error as AccountError).signIn).toBe("https://moenarch.com/accounts/");
   expect(calls[0]).toEqual({
     path: "/account/session",
     body: { version: 1 },

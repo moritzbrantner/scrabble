@@ -34,9 +34,10 @@ pub struct ServerConfig {
     pub push_insecure_test: bool,
     /// Operator-configurable guest word-list bounds (#97, Decision 1.50).
     pub word_list_limits: crate::word_list_library::WordListLimits,
-    /// Shared Moenarch account service origin (#132); account linking is off when unset.
+    /// Shared Moenarch account service base URL (#132), e.g. `https://moenarch.com/accounts/`;
+    /// account linking is off when unset.
     /// Plain HTTP is accepted only in local mode.
-    pub accounts_origin: Option<url::Url>,
+    pub accounts_url: Option<url::Url>,
     pub port: u16,
     pub status_port: u16,
     pub api_port: u16,
@@ -91,7 +92,7 @@ const KEYS: &[&str] = &[
     "SCRABBLE_API_PORT",
     "SCRABBLE_BOARD_ORIGIN",
     "SCRABBLE_GUEST_BOARD_ORIGINS",
-    "SCRABBLE_ACCOUNTS_ORIGIN",
+    "SCRABBLE_ACCOUNTS_URL",
     "SCRABBLE_CERT_PEM",
     "SCRABBLE_KEY_PEM",
     "SCRABBLE_SEED_FILE",
@@ -228,20 +229,34 @@ impl ServerConfig {
                 "SCRABBLE_GUEST_BOARD_ORIGINS lists at most {MAX_GUEST_BOARD_ORIGINS} origins"
             )));
         }
-        let accounts_origin = match values.get("SCRABBLE_ACCOUNTS_ORIGIN") {
+        let accounts_url = match values.get("SCRABBLE_ACCOUNTS_URL") {
             None => None,
             Some(text) => {
-                let parsed = url::Url::parse(text).ok().filter(|url| {
-                    url.origin().ascii_serialization() == *text
-                        && match url.scheme() {
-                            "https" => true,
-                            "http" => matches!(mode, Mode::Local),
-                            _ => false,
+                let parsed = url::Url::parse(text)
+                    .ok()
+                    .filter(|url| {
+                        url.has_host()
+                            && url.username().is_empty()
+                            && url.password().is_none()
+                            && url.query().is_none()
+                            && url.fragment().is_none()
+                            && match url.scheme() {
+                                "https" => true,
+                                "http" => matches!(mode, Mode::Local),
+                                _ => false,
+                            }
+                    })
+                    .map(|mut url| {
+                        // A base URL: routes resolve below it (`<url>v1/sessions/verify`).
+                        if !url.path().ends_with('/') {
+                            let path = format!("{}/", url.path());
+                            url.set_path(&path);
                         }
-                });
+                        url
+                    });
                 Some(parsed.ok_or_else(|| {
                     fail(
-                        "SCRABBLE_ACCOUNTS_ORIGIN must be a canonical origin without a path (HTTPS in production)",
+                        "SCRABBLE_ACCOUNTS_URL must be an absolute URL without credentials, query or fragment (HTTPS in production)",
                     )
                 })?)
             }
@@ -438,7 +453,7 @@ impl ServerConfig {
             push_directory,
             push_insecure_test,
             word_list_limits,
-            accounts_origin,
+            accounts_url,
             profile_catalog_file,
             match_configuration_directory,
             mode,

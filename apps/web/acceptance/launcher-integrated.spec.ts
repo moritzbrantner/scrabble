@@ -47,6 +47,8 @@ async function staticAsset(root: string, path: string) {
 // applications, and HTTP requests are forwarded to the actual Rust processes.
 // No match, game, join, snapshot, reconnect or signaling response is mocked.
 async function gateway(context: BrowserContext, onCreation: () => void) {
+  // moenarch.com serves the launcher at /, the setup API at /lobbies and /health,
+  // the board under /scrabble/ and the game API under /scrabble-api/.
   await context.route("https://moenarch.com/**", async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname.startsWith("/lobbies") || url.pathname === "/health") {
@@ -54,34 +56,29 @@ async function gateway(context: BrowserContext, onCreation: () => void) {
         url: configuration.SCRABBLE_ACCEPTANCE_SETUP_API + url.pathname + url.search,
       });
       await route.fulfill({ response });
-    } else {
-      const path = url.pathname === "/" ? "/index.html" : url.pathname;
-      const body = await staticAsset(configuration.SCRABBLE_ACCEPTANCE_SETUP_WEB, path);
-      await route.fulfill({ body, contentType: contentType(path) });
+      return;
     }
-  });
-  // scrabble.moenarch.com serves the board under /scrabble/ and the game API under /api/.
-  await context.route("https://scrabble.moenarch.com/**", async (route) => {
-    const url = new URL(route.request().url());
-    if (url.pathname.startsWith("/api/")) {
-      if (url.pathname === "/api/games" && route.request().method() === "POST") {
+    if (url.pathname.startsWith("/scrabble-api/")) {
+      if (url.pathname === "/scrabble-api/games" && route.request().method() === "POST") {
         onCreation();
       }
       const response = await route.fetch({
-        url: fixture.api + url.pathname.slice("/api".length) + url.search,
+        url: fixture.api + url.pathname.slice("/scrabble-api".length) + url.search,
       });
       await route.fulfill({ response });
       return;
     }
-    if (!url.pathname.startsWith("/scrabble/")) {
-      await route.fulfill({ status: 404 });
+    if (url.pathname.startsWith("/scrabble/")) {
+      const path = url.pathname.slice("/scrabble/".length) || "index.html";
+      await route.fulfill({
+        body: await staticAsset(configuration.SCRABBLE_ACCEPTANCE_PAGES, path),
+        contentType: contentType(path),
+      });
       return;
     }
-    const path = url.pathname.slice("/scrabble/".length) || "index.html";
-    await route.fulfill({
-      body: await staticAsset(configuration.SCRABBLE_ACCEPTANCE_PAGES, path),
-      contentType: contentType(path),
-    });
+    const path = url.pathname === "/" ? "/index.html" : url.pathname;
+    const body = await staticAsset(configuration.SCRABBLE_ACCEPTANCE_SETUP_WEB, path);
+    await route.fulfill({ body, contentType: contentType(path) });
   });
 }
 
@@ -109,7 +106,7 @@ test("actual moenarch launcher creates one authoritative board, two players comm
     // intentionally loopback. Grant this local-fixture permission only here;
     // normal TLS and pinned test-certificate verification remain active.
     await context.grantPermissions(["local-network-access"], {
-      origin: "https://scrabble.moenarch.com",
+      origin: "https://moenarch.com",
     });
     await gateway(context, () => {
       creations++;
@@ -257,7 +254,7 @@ for (const failure of ["unavailable transport", "unowned existing match"] as con
   test(`launcher binding remains absent for ${failure}`, async ({ browser, request }) => {
     const context = await browser.newContext();
     await context.grantPermissions(["local-network-access"], {
-      origin: "https://scrabble.moenarch.com",
+      origin: "https://moenarch.com",
     });
     await gateway(context, () => {});
     if (failure === "unavailable transport") {
@@ -274,7 +271,7 @@ for (const failure of ["unavailable transport", "unowned existing match"] as con
         document.documentElement.dataset.publicReports = "0";
         window.addEventListener("message", (event: MessageEvent<unknown>) => {
           if (
-            event.origin === "https://scrabble.moenarch.com" &&
+            event.origin === "https://moenarch.com" &&
             event.data !== null &&
             typeof event.data === "object" &&
             "type" in event.data &&
@@ -303,7 +300,7 @@ for (const failure of ["unavailable transport", "unowned existing match"] as con
       if (failure === "unavailable transport") {
         const creation = board.waitForResponse(
           (response) =>
-            response.url() === "https://scrabble.moenarch.com/api/games" &&
+            response.url() === "https://moenarch.com/scrabble-api/games" &&
             response.request().method() === "POST",
         );
         await board.getByRole("button", { name: "Create game", exact: true }).click();
@@ -370,7 +367,7 @@ test("owned board reconnect re-reports its confirmed public binding", async ({
 }) => {
   const context = await browser.newContext();
   await context.grantPermissions(["local-network-access"], {
-    origin: "https://scrabble.moenarch.com",
+    origin: "https://moenarch.com",
   });
   await gateway(context, () => {});
   const host = await context.newPage();
@@ -380,7 +377,7 @@ test("owned board reconnect re-reports its confirmed public binding", async ({
       document.documentElement.dataset.publicReports = "0";
       window.addEventListener("message", (event: MessageEvent<unknown>) => {
         if (
-          event.origin === "https://scrabble.moenarch.com" &&
+          event.origin === "https://moenarch.com" &&
           event.data !== null &&
           typeof event.data === "object" &&
           "type" in event.data &&
