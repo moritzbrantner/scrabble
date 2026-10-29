@@ -359,7 +359,7 @@ export const en = {
   "layouts.empty": "No saved board layouts yet.",
   "tileProfiles.region": "Custom tile profiles",
   "tileProfiles.notice":
-    "Your custom tile profiles are private and owned by this browser only. If this browser's data is cleared or lost, you lose the ability to edit or delete them unless you linked them to your Moenarch account.",
+    "Your custom tile profiles are private and owned by this browser only. If this browser's data is cleared or lost, you lose the ability to edit or delete them unless you linked them to your Moenarch account, which recovers them on any device.",
   "tileProfiles.new": "New tile profile",
   "tileProfiles.newNote": "A new profile starts as a copy of the selected tile profile.",
   "tileProfiles.copyName": "Copy of {name}",
@@ -406,7 +406,7 @@ export const en = {
   "tileEditor.saved": "Profile saved.",
   "tileEditor.close": "Close editor",
   "layouts.notice":
-    "Your custom boards are owned by this browser only. If this browser's data is cleared or lost, you lose the ability to edit or delete them unless you linked them to your Moenarch account.",
+    "Your custom boards are owned by this browser only. If this browser's data is cleared or lost, you lose the ability to edit or delete them unless you linked them to your Moenarch account, which recovers them on any device.",
   "layouts.edit": "Edit {name}",
   "layouts.share": "Share {name}",
   "layouts.delete": "Delete {name}",
@@ -465,7 +465,7 @@ export const en = {
   "wordLists.list": "Saved word lists",
   "wordLists.empty": "No saved word lists yet.",
   "wordLists.notice":
-    "Your word lists are owned by this browser only. If this browser's data is cleared or lost, you lose the ability to edit, share or delete them unless you linked them to your Moenarch account. Games already started keep the words they began with.",
+    "Your word lists are owned by this browser only. If this browser's data is cleared or lost, you lose the ability to edit, share or delete them unless you linked them to your Moenarch account, which recovers them on any device. Games already started keep the words they began with.",
   "wordLists.count": "{count} words",
   "wordLists.countOne": "1 word",
   "wordLists.edit": "Edit {name}",
@@ -919,7 +919,7 @@ const de: Record<CopyKey, string> = {
   "layouts.empty": "Noch keine gespeicherten Brettlayouts.",
   "tileProfiles.region": "Eigene Steinprofile",
   "tileProfiles.notice":
-    "Deine eigenen Steinprofile sind privat und gehören nur diesem Browser. Werden die Daten dieses Browsers gelöscht oder gehen verloren, kannst du sie nicht mehr bearbeiten oder löschen, außer du hast sie mit deinem Moenarch-Konto verknüpft.",
+    "Deine eigenen Steinprofile sind privat und gehören nur diesem Browser. Werden die Daten dieses Browsers gelöscht oder gehen verloren, kannst du sie nicht mehr bearbeiten oder löschen, außer du hast sie mit deinem Moenarch-Konto verknüpft, das sie auf jedem Gerät wiederherstellt.",
   "tileProfiles.new": "Neues Steinprofil",
   "tileProfiles.newNote": "Ein neues Profil beginnt als Kopie des ausgewählten Steinprofils.",
   "tileProfiles.copyName": "Kopie von {name}",
@@ -967,7 +967,7 @@ const de: Record<CopyKey, string> = {
   "tileEditor.saved": "Profil gespeichert.",
   "tileEditor.close": "Editor schließen",
   "layouts.notice":
-    "Deine eigenen Bretter gehören nur diesem Browser. Werden die Daten dieses Browsers gelöscht oder gehen verloren, kannst du sie nicht mehr bearbeiten oder löschen, außer du hast sie mit deinem Moenarch-Konto verknüpft.",
+    "Deine eigenen Bretter gehören nur diesem Browser. Werden die Daten dieses Browsers gelöscht oder gehen verloren, kannst du sie nicht mehr bearbeiten oder löschen, außer du hast sie mit deinem Moenarch-Konto verknüpft, das sie auf jedem Gerät wiederherstellt.",
   "layouts.edit": "{name} bearbeiten",
   "layouts.share": "{name} teilen",
   "layouts.delete": "{name} löschen",
@@ -1028,7 +1028,7 @@ const de: Record<CopyKey, string> = {
   "wordLists.list": "Gespeicherte Wortlisten",
   "wordLists.empty": "Noch keine gespeicherten Wortlisten.",
   "wordLists.notice":
-    "Deine Wortlisten gehören nur diesem Browser. Werden die Daten dieses Browsers gelöscht oder gehen verloren, kannst du sie nicht mehr bearbeiten, teilen oder löschen, außer du hast sie mit deinem Moenarch-Konto verknüpft. Bereits begonnene Spiele behalten ihre ursprünglichen Wörter.",
+    "Deine Wortlisten gehören nur diesem Browser. Werden die Daten dieses Browsers gelöscht oder gehen verloren, kannst du sie nicht mehr bearbeiten, teilen oder löschen, außer du hast sie mit deinem Moenarch-Konto verknüpft, das sie auf jedem Gerät wiederherstellt. Bereits begonnene Spiele behalten ihre ursprünglichen Wörter.",
   "wordLists.count": "{count} Wörter",
   "wordLists.countOne": "1 Wort",
   "wordLists.edit": "{name} bearbeiten",
@@ -1470,7 +1470,7 @@ const es: Record<CopyKey, string> = {
   "layouts.empty": "Todavía no hay diseños de tablero guardados.",
   "tileProfiles.region": "Perfiles de fichas propios",
   "tileProfiles.notice":
-    "Tus perfiles de fichas propios son privados y pertenecen solo a este navegador. Si se borran o pierden los datos de este navegador, ya no podrás editarlos ni eliminarlos, salvo que los hayas vinculado a tu cuenta de Moenarch.",
+    "Tus perfiles de fichas propios son privados y pertenecen solo a este navegador. Si se borran o pierden los datos de este navegador, ya no podrás editarlos ni eliminarlos, salvo que los hayas vinculado a tu cuenta de Moenarch, que los recupera en cualquier dispositivo.",
   "tileProfiles.new": "Nuevo perfil de fichas",
   "tileProfiles.newNote": "Un perfil nuevo empieza como copia del perfil de fichas seleccionado.",
   "tileProfiles.copyName": "Copia de {name}",
@@ -1518,7 +1518,7 @@ const es: Record<CopyKey, string> = {
   "tileEditor.saved": "Perfil guardado.",
   "tileEditor.close": "Cerrar editor",
   "layouts.notice":
-    "Tus tableros propios pertenecen solo a este navegador. Si se borran o pierden los datos de este navegador, ya no podrás editarlos ni eliminarlos, salvo que los hayas vinculado a tu cuenta de Moenarch.",
+    "Tus tableros propios pertenecen solo a este navegador. Si se borran o pierden los datos de este navegador, ya no podrás editarlos ni eliminarlos, salvo que los hayas vinculado a tu cuenta de Moenarch, que los recupera en cualquier dispositivo.",
   "layouts.edit": "Editar {name}",
   "layouts.share": "Compartir {name}",
   "layouts.delete": "Eliminar {name}",
@@ -1579,7 +1579,7 @@ const es: Record<CopyKey, string> = {
   "wordLists.list": "Listas de palabras guardadas",
   "wordLists.empty": "Todavía no hay listas de palabras guardadas.",
   "wordLists.notice":
-    "Tus listas de palabras pertenecen solo a este navegador. Si se borran o pierden los datos de este navegador, ya no podrás editarlas, compartirlas ni eliminarlas, salvo que las hayas vinculado a tu cuenta de Moenarch. Las partidas ya iniciadas conservan sus palabras originales.",
+    "Tus listas de palabras pertenecen solo a este navegador. Si se borran o pierden los datos de este navegador, ya no podrás editarlas, compartirlas ni eliminarlas, salvo que las hayas vinculado a tu cuenta de Moenarch, que las recupera en cualquier dispositivo. Las partidas ya iniciadas conservan sus palabras originales.",
   "wordLists.count": "{count} palabras",
   "wordLists.countOne": "1 palabra",
   "wordLists.edit": "Editar {name}",
