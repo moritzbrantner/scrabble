@@ -77,9 +77,9 @@ pub async fn serve(
         transport_receiver,
     );
     tokio::pin!(transport);
-    let accounts = config.accounts_origin.map(|origin| {
+    let accounts = config.accounts_url.map(|url| {
         Arc::new(crate::accounts::Accounts::new(
-            origin,
+            url,
             matches!(config.mode, crate::config::Mode::Local),
         ))
     });

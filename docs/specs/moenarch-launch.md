@@ -12,12 +12,12 @@ acceptance remain #80 until independently verified after deployment.
 The host creates a setup lobby, then opens a board popup at:
 
 ```text
-https://scrabble.moenarch.com/scrabble/?launch=moenarch&session=0123ABCDEFGH&view=board
+https://moenarch.com/scrabble/?launch=moenarch&session=0123ABCDEFGH&view=board
 ```
 
-The board origin is `https://scrabble.moenarch.com`, the same site as the Moenarch
-account service, so launched boards can link libraries (#206). The client is served
-under `/scrabble/` because that is its fixed Vite base; `/` redirects there. The
+The board origin is `https://moenarch.com`, the same origin as the launcher and the Moenarch
+account service (`/accounts/`), so launched boards can link libraries (#206). The client is served
+under `/scrabble/` because that is its fixed Vite base. The
 GitHub Pages build at `https://moritzbrantner.github.io/scrabble/` stays a guest-only
 demo and is not a launch target.
 
@@ -35,7 +35,7 @@ remove the original `launch` and `session` fields and never replace the original
 lobby's immutable reference.
 
 The launcher accepts reports only from the fixed board origin
-`https://scrabble.moenarch.com` (launcher side:
+`https://moenarch.com` (launcher side:
 [multiplayer-setup-service#71](https://github.com/moritzbrantner/multiplayer-setup-service/issues/71)), the exact board
 window it opened and its own session. It registers the reference with the
 existing host participant capability; that capability remains in the launcher
@@ -48,7 +48,7 @@ Guests open the public launcher invitation, resolve the reference and choose
 **Open Scrabble player**. The resulting destination is:
 
 ```text
-https://scrabble.moenarch.com/scrabble/?launch=moenarch&session=0123ABCDEFGH&match=b_<16 lowercase hex>_<32 lowercase hex>&view=player
+https://moenarch.com/scrabble/?launch=moenarch&session=0123ABCDEFGH&match=b_<16 lowercase hex>_<32 lowercase hex>&view=player
 ```
 
 The 12-character session uses the setup service's canonical alphabet. It is
@@ -82,7 +82,7 @@ acceptance. Upstream acceptance separately covers capability authorization,
 concurrent binding, conflicts and forged popup messages.
 
 The moritzbrantner/moenarch.com host deploys the setup service, the Scrabble server
-and the Scrabble web client at `scrabble.moenarch.com` (see
+and the Scrabble web client on `moenarch.com` by path (see
 [production deployment](production-deployment.md)).
 Verify the actual public launcher → board → two players → word → reconnect
 journey against both deployed revisions before closing #80. Preserve the

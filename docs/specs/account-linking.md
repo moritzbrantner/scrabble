@@ -7,7 +7,7 @@ service (repository `moenarch.com`, `services/accounts`) only through that
 service's HTTP session contract:
 
 - The browser carries an opaque session token in the `moenarch_session` cookie.
-- The Scrabble API verifies it with `POST <SCRABBLE_ACCOUNTS_ORIGIN>/v1/sessions/verify
+- The Scrabble API verifies it with `POST <SCRABBLE_ACCOUNTS_URL>v1/sessions/verify
   {token}` → `{account_id, display_name, session_id, expires_at}` or `401`.
 - Positive answers are cached for up to 60 seconds, so a sign-out or a revoked
   device takes effect within a minute. The browser never names an account id.
@@ -50,16 +50,16 @@ calls from anywhere else are refused) and answers `401 signed-out` with `signIn`
 
 ## Operation
 
-`SCRABBLE_ACCOUNTS_ORIGIN` is the account service's public origin, for example
-`https://accounts.moenarch.com`. Linking is off when it is unset. Production requires
+`SCRABBLE_ACCOUNTS_URL` is the account service's public base URL, for example
+`https://moenarch.com/accounts/`; its routes resolve below it. Linking is off when it is unset. Production requires
 HTTPS; local mode also accepts `http://` for test doubles. Linked owners and device
 verifiers live in the existing library files (`accountId`, `deviceVerifiers`). Files
 written before #132 load unchanged.
 
 The browser sends the account cookie only when the page and API are on the same
 site as the cookie domain (`moenarch.com`). The account-enabled client is therefore
-served at `https://scrabble.moenarch.com/scrabble/` with its API at
-`https://scrabble.moenarch.com/api` (#206). The GitHub Pages build is a guest-only
+served at `https://moenarch.com/scrabble/` with its API at
+`https://moenarch.com/scrabble-api`, next to the account service at `/accounts/` (#206). The GitHub Pages build is a guest-only
 demo: its origin is listed in `SCRABBLE_GUEST_BOARD_ORIGINS`, which admits the game
 and library routes but answers every account request with `403 guest-origin`. The
 client treats that like a server without accounts and hides the account section.

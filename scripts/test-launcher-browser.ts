@@ -63,11 +63,7 @@ try {
   await run([process.env.SCRABBLE_SETUP_BUN ?? "bun", "run", "build"], join(setupRoot, "web"));
   const gameDirectory = join(directory, "games");
   const game = Bun.spawn(
-    [
-      join(target, "debug/examples/browser_game_fixture"),
-      gameDirectory,
-      "https://scrabble.moenarch.com",
-    ],
+    [join(target, "debug/examples/browser_game_fixture"), gameDirectory, "https://moenarch.com"],
     { stdout: "inherit", stderr: "inherit" },
   );
   children.push(game);
@@ -125,7 +121,7 @@ try {
     {
       ...process.env,
       VITE_SCRABBLE_ENDPOINT: fixture.endpoint,
-      VITE_SCRABBLE_API: "https://scrabble.moenarch.com/api",
+      VITE_SCRABBLE_API: "https://moenarch.com/scrabble-api",
       VITE_SCRABBLE_TEST_CERTIFICATE_HASH: fixture.certificateHash
         .map((byte) => byte.toString(16).padStart(2, "0"))
         .join(""),
