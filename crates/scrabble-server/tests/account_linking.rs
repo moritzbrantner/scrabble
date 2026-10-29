@@ -450,6 +450,80 @@ async fn guest_libraries_link_to_one_account_and_reconnect_on_another_device() {
     api.stop().await;
 }
 
+/// Raw HTTP exchange returning the status line and headers, and the body.
+async fn exchange(port: u16, request: String) -> (String, String) {
+    let mut stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+    stream.write_all(request.as_bytes()).await.unwrap();
+    let mut bytes = Vec::new();
+    let _ = stream.read_to_end(&mut bytes).await;
+    let response = String::from_utf8(bytes).unwrap();
+    let (head, body) = response.split_once("\r\n\r\n").unwrap();
+    (head.to_owned(), body.to_owned())
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn guest_board_origins_play_as_guests_but_never_reach_account_routes() {
+    const GUEST: &str = "http://guest.localhost:4173";
+    let root = tempfile::tempdir().unwrap();
+    let sessions = Sessions::default();
+    sessions
+        .lock()
+        .unwrap()
+        .insert("mns_ada".into(), (ADA.into(), "Ada".into()));
+    let accounts = fake_accounts(sessions).await;
+    let mut config = values(root.path(), &accounts);
+    config.insert("SCRABBLE_GUEST_BOARD_ORIGINS".into(), GUEST.into());
+    let hosted = hosted::start(&config).await;
+    let api = Api {
+        port: hosted.api_port,
+        task: Some(hosted.task),
+        shutdown: hosted.shutdown,
+    };
+
+    // Guest routes answer the guest origin with its own CORS origin.
+    let (head, body) = exchange(
+        api.port,
+        format!("GET /profiles HTTP/1.1\r\nHost: localhost\r\nOrigin: {GUEST}\r\nConnection: close\r\n\r\n"),
+    )
+    .await;
+    assert!(head.starts_with("HTTP/1.1 200"), "{head}\n{body}");
+    assert!(head.contains(&format!("Access-Control-Allow-Origin: {GUEST}\r\n")));
+
+    // The account preflight succeeds so the board can read the guest-only answer...
+    let (head, _) = exchange(
+        api.port,
+        format!("OPTIONS /account/session HTTP/1.1\r\nHost: localhost\r\nOrigin: {GUEST}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"),
+    )
+    .await;
+    assert!(head.starts_with("HTTP/1.1 204"), "{head}");
+    // ...but a valid session cookie from the guest origin is never honoured.
+    let (head, body) = exchange(
+        api.port,
+        format!("POST /account/session HTTP/1.1\r\nHost: localhost\r\nOrigin: {GUEST}\r\nCookie: moenarch_session=mns_ada\r\nContent-Type: application/json\r\nContent-Length: 13\r\nConnection: close\r\n\r\n{{\"version\":1}}"),
+    )
+    .await;
+    assert!(head.starts_with("HTTP/1.1 403"), "{head}");
+    assert_eq!(
+        serde_json::from_str::<Value>(&body).unwrap()["error"],
+        "guest-origin"
+    );
+
+    // The board origin keeps account access, and unknown origins stay rejected.
+    let (status, body) = api
+        .post("/account/session", Some("mns_ada"), json!({"version":1}))
+        .await;
+    assert_eq!((status, &body["accountId"]), (200, &json!(ADA)));
+    let (head, body) = exchange(
+        api.port,
+        "GET /profiles HTTP/1.1\r\nHost: localhost\r\nOrigin: https://other.example\r\nConnection: close\r\n\r\n".into(),
+    )
+    .await;
+    assert!(head.starts_with("HTTP/1.1 403"), "{head}");
+    assert!(head.contains(&format!("Access-Control-Allow-Origin: {ORIGIN}\r\n")));
+    assert!(body.contains("origin-rejected"));
+    api.stop().await;
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn account_routes_need_the_board_origin_and_a_reachable_account_service() {
     let root = tempfile::tempdir().unwrap();

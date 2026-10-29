@@ -62,6 +62,8 @@ async function request(api: string, path: string, body: unknown): Promise<unknow
   const known: Record<string, AccountError["code"]> = {
     "signed-out": "signedOut",
     "accounts-unavailable": "unavailable",
+    // A guest-only board origin (the GitHub Pages demo, #206) offers no account linking.
+    "guest-origin": "unavailable",
     "account-link-conflict": "conflict",
     "account-not-owner": "notOwner",
   };

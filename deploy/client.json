@@ -1,4 +1,4 @@
 {
-  "endpoint": "https://moenarch.com/game",
-  "api": "https://moenarch.com/scrabble-api"
+  "endpoint": "https://scrabble.moenarch.com:4434/game",
+  "api": "https://scrabble.moenarch.com/api"
 }

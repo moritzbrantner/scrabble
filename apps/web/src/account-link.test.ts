@@ -85,6 +85,12 @@ test("a signed-out answer carries the account page and the cookie is sent", asyn
   });
 });
 
+test("a guest-only board origin answers like a server without accounts", async () => {
+  answer = () => [403, { error: "guest-origin" }];
+  const error = (await accountSession(api).catch((caught: unknown) => caught)) as AccountError;
+  expect(error.code).toBe("unavailable");
+});
+
 test("an unsafe sign-in link is not offered", async () => {
   answer = () => [401, { error: "signed-out", signIn: "javascript:alert(1)" }];
   const error = (await accountSession(api).catch((caught: unknown) => caught)) as AccountError;

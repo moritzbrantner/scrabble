@@ -14,7 +14,8 @@ services:
       SCRABBLE_PORT: "4433"
       SCRABBLE_STATUS_PORT: "8080"
       SCRABBLE_API_PORT: "8081"
-      SCRABBLE_BOARD_ORIGIN: ${DEPLOY_BOARD_ORIGIN:-https://moritzbrantner.github.io}
+      SCRABBLE_BOARD_ORIGIN: ${DEPLOY_BOARD_ORIGIN:-https://scrabble.moenarch.com}
+      SCRABBLE_GUEST_BOARD_ORIGINS: ${DEPLOY_GUEST_BOARD_ORIGINS:-https://moritzbrantner.github.io}
       SCRABBLE_CERT_PEM: /tls/cert.pem
       SCRABBLE_KEY_PEM: /tls/key.pem
       SCRABBLE_SEED_FILE: /state/seed

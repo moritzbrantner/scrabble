@@ -12,8 +12,14 @@ acceptance remain #80 until independently verified after deployment.
 The host creates a setup lobby, then opens a board popup at:
 
 ```text
-https://moritzbrantner.github.io/scrabble/?launch=moenarch&session=0123ABCDEFGH&view=board
+https://scrabble.moenarch.com/scrabble/?launch=moenarch&session=0123ABCDEFGH&view=board
 ```
+
+The board origin is `https://scrabble.moenarch.com`, the same site as the Moenarch
+account service, so launched boards can link libraries (#206). The client is served
+under `/scrabble/` because that is its fixed Vite base; `/` redirects there. The
+GitHub Pages build at `https://moritzbrantner.github.io/scrabble/` stays a guest-only
+demo and is not a launch target.
 
 This explicit board route offers **Create game**. The popup creates its match
 through Scrabble's existing idempotent creation API and keeps the private
@@ -28,7 +34,9 @@ An HTTP creation response or a public match URL alone never publishes a binding.
 remove the original `launch` and `session` fields and never replace the original
 lobby's immutable reference.
 
-The launcher accepts reports only from the fixed Pages origin, the exact board
+The launcher accepts reports only from the fixed board origin
+`https://scrabble.moenarch.com` (launcher side:
+[multiplayer-setup-service#71](https://github.com/moritzbrantner/multiplayer-setup-service/issues/71)), the exact board
 window it opened and its own session. It registers the reference with the
 existing host participant capability; that capability remains in the launcher
 page's memory. See upstream [issue #44](https://github.com/moritzbrantner/multiplayer-setup-service/issues/44)
@@ -40,7 +48,7 @@ Guests open the public launcher invitation, resolve the reference and choose
 **Open Scrabble player**. The resulting destination is:
 
 ```text
-https://moritzbrantner.github.io/scrabble/?launch=moenarch&session=0123ABCDEFGH&match=b_<16 lowercase hex>_<32 lowercase hex>&view=player
+https://scrabble.moenarch.com/scrabble/?launch=moenarch&session=0123ABCDEFGH&match=b_<16 lowercase hex>_<32 lowercase hex>&view=player
 ```
 
 The 12-character session uses the setup service's canonical alphabet. It is
@@ -54,8 +62,8 @@ The player invitation and QR retain only supported public routing fields,
 match identity and optional language. They never forward creation proofs,
 participant tokens, reconnect capabilities, arbitrary query fields or URL
 fragments. Following a rematch also removes the original lobby context from
-the phone route, because that context belongs only to the finished match. A canonical Pages match invitation continues to work after setup
-lobby expiry; Pages does not require another setup lookup to reconnect to its
+the phone route, because that context belongs only to the finished match. A canonical board match invitation continues to work after setup
+lobby expiry; the board does not require another setup lookup to reconnect to its
 independent, longer-lived Scrabble match. An expired launcher invitation itself
 cannot resolve a discarded binding and reports that failure. Reloading the
 launcher loses its in-memory host capability and resolves an existing binding
@@ -67,15 +75,15 @@ URL alone.
 The ordinary browser suite checks malformed links and independent players
 joining/reconnecting to a real Rust match. The separately authored
 [integrated acceptance](moenarch-integrated-acceptance.md) exercises the actual
-built launcher, setup service, built Pages client and real WebTransport game,
+built launcher, setup service, built web client (served at the board origin) and real WebTransport game,
 including a committed word, reconnect, rematch and setup expiry. Its controlled
 fixture establishes local behavior, not physical-device or public deployment
 acceptance. Upstream acceptance separately covers capability authorization,
 concurrent binding, conflicts and forged popup messages.
 
-Publish the reviewed setup binary and generated browser assets on Hetzner and
-release the reviewed Scrabble Pages artifact. Keep nginx routing and the UDP
-Scrabble listener as documented in [production deployment](production-deployment.md).
+The moritzbrantner/moenarch.com host deploys the setup service, the Scrabble server
+and the Scrabble web client at `scrabble.moenarch.com` (see
+[production deployment](production-deployment.md)).
 Verify the actual public launcher → board → two players → word → reconnect
 journey against both deployed revisions before closing #80. Preserve the
 operator-owned TLS keys, seed, recovery state and dictionary content; none

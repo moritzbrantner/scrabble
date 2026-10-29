@@ -41,6 +41,9 @@ pub struct ServerConfig {
     pub status_port: u16,
     pub api_port: u16,
     pub board_origin: String,
+    /// Extra guest-only board origins (#206), e.g. the GitHub Pages demo. They may use
+    /// the game, library and WebTransport routes, but never the account routes.
+    pub guest_board_origins: Vec<String>,
     pub allowed_origins: Option<BrowserOriginAllowlist>,
     pub certificate: PathBuf,
     pub private_key: PathBuf,
@@ -64,6 +67,7 @@ impl std::error::Error for ConfigError {}
 fn fail(message: impl Into<String>) -> ConfigError {
     ConfigError(message.into())
 }
+const MAX_GUEST_BOARD_ORIGINS: usize = 4;
 const KEYS: &[&str] = &[
     "SCRABBLE_PROFILE_CATALOG_FILE",
     "SCRABBLE_MATCH_CONFIGURATION_DIR",
@@ -86,6 +90,7 @@ const KEYS: &[&str] = &[
     "SCRABBLE_STATUS_PORT",
     "SCRABBLE_API_PORT",
     "SCRABBLE_BOARD_ORIGIN",
+    "SCRABBLE_GUEST_BOARD_ORIGINS",
     "SCRABBLE_ACCOUNTS_ORIGIN",
     "SCRABBLE_CERT_PEM",
     "SCRABBLE_KEY_PEM",
@@ -199,6 +204,30 @@ impl ServerConfig {
                 "production requires an explicit HTTPS SCRABBLE_BOARD_ORIGIN",
             ));
         }
+        let guests = value(values, "SCRABBLE_GUEST_BOARD_ORIGINS", "");
+        let mut guest_board_origins: Vec<String> = Vec::new();
+        for guest in guests.split(',').filter(|_| !guests.is_empty()) {
+            let canonical = url::Url::parse(guest).ok().is_some_and(|url| {
+                url.origin().ascii_serialization() == guest
+                    && match url.scheme() {
+                        "https" => true,
+                        "http" => !matches!(mode, Mode::Production),
+                        _ => false,
+                    }
+            });
+            if !canonical || guest == board_origin || guest_board_origins.iter().any(|g| g == guest)
+            {
+                return Err(fail(
+                    "SCRABBLE_GUEST_BOARD_ORIGINS must list distinct canonical origins other than SCRABBLE_BOARD_ORIGIN (HTTPS in production)",
+                ));
+            }
+            guest_board_origins.push(guest.to_owned());
+        }
+        if guest_board_origins.len() > MAX_GUEST_BOARD_ORIGINS {
+            return Err(fail(format!(
+                "SCRABBLE_GUEST_BOARD_ORIGINS lists at most {MAX_GUEST_BOARD_ORIGINS} origins"
+            )));
+        }
         let accounts_origin = match values.get("SCRABBLE_ACCOUNTS_ORIGIN") {
             None => None,
             Some(text) => {
@@ -219,8 +248,10 @@ impl ServerConfig {
         };
         let max_matches = number(values, "SCRABBLE_MAX_MATCHES", "16", 1, 64)? as usize;
         let allowed_origins = if matches!(mode, Mode::Production) {
-            Some(BrowserOriginAllowlist::new([board_origin]).map_err(|_| {
-                fail("production board origin exceeds the supported browser-origin bound")
+            let origins =
+                std::iter::once(board_origin).chain(guest_board_origins.iter().map(String::as_str));
+            Some(BrowserOriginAllowlist::new(origins).map_err(|_| {
+                fail("production board origins exceed the supported browser-origin bound")
             })?)
         } else {
             None
@@ -417,6 +448,7 @@ impl ServerConfig {
             status_port,
             api_port,
             board_origin: board_origin.to_owned(),
+            guest_board_origins,
             allowed_origins,
             match_ids,
             max_matches,

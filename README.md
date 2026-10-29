@@ -47,7 +47,7 @@ and the last remaining player wins. No manual pause is available. See the
 
 ## Hosting
 
-The GitHub Pages client connects to the authoritative Scrabble service on the Hetzner server at `moenarch.com`. `multiplayer-setup-service` is a signaling service and is not required by this transport. Local hosting remains available.
+The web client is served at `https://scrabble.moenarch.com/scrabble/`, the same site as the Moenarch account service, and connects to the authoritative Scrabble service on that host (hosting lives in moritzbrantner/moenarch.com). The GitHub Pages build is a guest-only demo against the same service: no account linking. `multiplayer-setup-service` is a signaling service and is not required by this transport. Local hosting remains available.
 
 The [moenarch.com launch link boundary](docs/specs/moenarch-launch.md) supports an explicit host-board popup and canonical player links. The setup service binds only public match references; private board/player capabilities remain in Scrabble. Publication and independent live launcher verification are tracked in #80.
 

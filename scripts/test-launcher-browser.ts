@@ -66,7 +66,7 @@ try {
     [
       join(target, "debug/examples/browser_game_fixture"),
       gameDirectory,
-      "https://moritzbrantner.github.io",
+      "https://scrabble.moenarch.com",
     ],
     { stdout: "inherit", stderr: "inherit" },
   );
@@ -125,7 +125,7 @@ try {
     {
       ...process.env,
       VITE_SCRABBLE_ENDPOINT: fixture.endpoint,
-      VITE_SCRABBLE_API: "https://moenarch.com/scrabble-api",
+      VITE_SCRABBLE_API: "https://scrabble.moenarch.com/api",
       VITE_SCRABBLE_TEST_CERTIFICATE_HASH: fixture.certificateHash
         .map((byte) => byte.toString(16).padStart(2, "0"))
         .join(""),

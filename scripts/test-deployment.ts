@@ -82,7 +82,7 @@ Object.assign(env, {
   DEPLOY_VERSION: "deployment-check",
   DEPLOY_DICTIONARY_NAME: "scrabble-authored-fixture",
   DEPLOY_DICTIONARY_REVISION: "1",
-  DEPLOY_BOARD_ORIGIN: "https://moritzbrantner.github.io",
+  DEPLOY_BOARD_ORIGIN: "https://scrabble.moenarch.com",
 });
 const compose = [
   "docker",
@@ -175,7 +175,7 @@ try {
       await request("/api/games", 200, [
         ...creation,
         "--header",
-        "Origin: https://moritzbrantner.github.io",
+        "Origin: https://scrabble.moenarch.com",
       ]),
     ),
     "https://localhost/game",

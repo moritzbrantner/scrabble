@@ -37,6 +37,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             return Err("production transport did not reject undeclared browser origin".into());
         }
     }
+    // The guest-only GitHub Pages demo origin (#206) is admitted like the board origin.
     let options = ConnectOptions::builder(&args[2])
         .add_header("origin", "https://moritzbrantner.github.io")
         .build();

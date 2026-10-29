@@ -57,9 +57,12 @@ verifiers live in the existing library files (`accountId`, `deviceVerifiers`). F
 written before #132 load unchanged.
 
 The browser sends the account cookie only when the page and API are on the same
-site as the cookie domain (`moenarch.com`). A board page served from another site
-(for example GitHub Pages) does not receive it, so it shows only the signed-out
-state.
+site as the cookie domain (`moenarch.com`). The account-enabled client is therefore
+served at `https://scrabble.moenarch.com/scrabble/` with its API at
+`https://scrabble.moenarch.com/api` (#206). The GitHub Pages build is a guest-only
+demo: its origin is listed in `SCRABBLE_GUEST_BOARD_ORIGINS`, which admits the game
+and library routes but answers every account request with `403 guest-origin`. The
+client treats that like a server without accounts and hides the account section.
 
 ## Tests
 
