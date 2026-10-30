@@ -7,6 +7,7 @@ pub mod dictionary;
 pub mod factory;
 pub mod games;
 pub mod hosting;
+pub mod http_client;
 pub mod layout_library;
 pub mod profiles;
 pub mod push;

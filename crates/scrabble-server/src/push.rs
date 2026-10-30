@@ -19,8 +19,7 @@ use ring::{
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
-    io::{Read, Write},
-    net::{TcpStream, ToSocketAddrs},
+    io::Write,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -32,6 +31,8 @@ pub const MAX_SUBSCRIPTIONS: usize = 4096;
 const MAX_ENDPOINT_BYTES: usize = 1024;
 const RECORD_SIZE: u32 = 4096;
 const TTL_SECONDS: u32 = 6 * 60 * 60;
+/// One push-service request, connection included.
+const DELIVERY_TIMEOUT: Duration = Duration::from_secs(15);
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -66,6 +67,7 @@ pub struct PushService {
     key: EcdsaKeyPair,
     subject: String,
     allow_insecure: bool,
+    client: reqwest::Client,
     state: Mutex<Stored>,
     rng: SystemRandom,
 }
@@ -87,6 +89,7 @@ impl PushService {
         directory: &Path,
         subject: String,
         allow_insecure: bool,
+        client: reqwest::Client,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         std::fs::create_dir_all(directory)?;
         let rng = SystemRandom::new();
@@ -119,6 +122,7 @@ impl PushService {
             key,
             subject,
             allow_insecure,
+            client,
             state: Mutex::new(state),
             rng,
         })
@@ -261,21 +265,35 @@ impl PushService {
     }
 
     /// Encrypts and sends one notification. Returns the push service's HTTP status.
-    pub fn deliver(
+    pub async fn deliver(
         &self,
         delivery: &Delivery,
         payload: &[u8],
     ) -> Result<u16, Box<dyn std::error::Error + Send + Sync>> {
         let body = encrypt(&self.rng, &delivery.subscription, payload)?;
         let url = url::Url::parse(&delivery.subscription.endpoint)?;
+        if !(url.scheme() == "https" || (self.allow_insecure && url.scheme() == "http")) {
+            return Err("push endpoint must be HTTPS".into());
+        }
         let audience = url.origin().ascii_serialization();
         let jwt = self.vapid_token(&audience)?;
-        let status = post(
-            &url,
-            &body,
-            &format!("vapid t={jwt}, k={}", self.public_key()),
-            self.allow_insecure,
-        )?;
+        let status = self
+            .client
+            .post(url.as_str())
+            .header("TTL", TTL_SECONDS.to_string())
+            .header("Urgency", "high")
+            .header(reqwest::header::CONTENT_ENCODING, "aes128gcm")
+            .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+            .header(
+                reqwest::header::AUTHORIZATION,
+                format!("vapid t={jwt}, k={}", self.public_key()),
+            )
+            .body(body)
+            .timeout(DELIVERY_TIMEOUT)
+            .send()
+            .await?
+            .status()
+            .as_u16();
         if matches!(status, 404 | 410) {
             // The device unsubscribed at its push service; forget it.
             let _ = self.unsubscribe(
@@ -455,81 +473,6 @@ pub fn seal(
     Ok(body)
 }
 
-fn post(
-    url: &url::Url,
-    body: &[u8],
-    authorization: &str,
-    allow_insecure: bool,
-) -> Result<u16, Box<dyn std::error::Error + Send + Sync>> {
-    let host = url.host_str().ok_or("push endpoint has no host")?;
-    let port = url
-        .port_or_known_default()
-        .ok_or("push endpoint has no port")?;
-    let address = (host, port)
-        .to_socket_addrs()?
-        .next()
-        .ok_or("push endpoint did not resolve")?;
-    let stream = TcpStream::connect_timeout(&address, Duration::from_secs(10))?;
-    stream.set_read_timeout(Some(Duration::from_secs(15)))?;
-    stream.set_write_timeout(Some(Duration::from_secs(15)))?;
-    let path = match url.query() {
-        Some(query) => format!("{}?{query}", url.path()),
-        None => url.path().to_owned(),
-    };
-    let mut request = format!(
-        "POST {path} HTTP/1.1\r\nHost: {host}\r\nTTL: {TTL_SECONDS}\r\nUrgency: high\r\nContent-Encoding: aes128gcm\r\nContent-Type: application/octet-stream\r\nAuthorization: {authorization}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        body.len()
-    )
-    .into_bytes();
-    request.extend_from_slice(body);
-    let mut response = Vec::new();
-    match url.scheme() {
-        "https" => {
-            let mut roots = rustls::RootCertStore::empty();
-            for certificate in rustls_native_certs::load_native_certs().certs {
-                let _ = roots.add(certificate);
-            }
-            let config = rustls::ClientConfig::builder_with_provider(Arc::new(
-                rustls::crypto::ring::default_provider(),
-            ))
-            .with_safe_default_protocol_versions()?
-            .with_root_certificates(roots)
-            .with_no_client_auth();
-            let name = rustls::pki_types::ServerName::try_from(host.to_owned())?;
-            let connection = rustls::ClientConnection::new(Arc::new(config), name)?;
-            let mut tls = rustls::StreamOwned::new(connection, stream);
-            tls.write_all(&request)?;
-            tls.flush()?;
-            read_head(&mut tls, &mut response)?;
-        }
-        "http" if allow_insecure => {
-            let mut stream = stream;
-            stream.write_all(&request)?;
-            read_head(&mut stream, &mut response)?;
-        }
-        _ => return Err("push endpoint must be HTTPS".into()),
-    }
-    let line = String::from_utf8_lossy(&response);
-    let status = line
-        .split_whitespace()
-        .nth(1)
-        .and_then(|code| code.parse().ok())
-        .ok_or("malformed push service response")?;
-    Ok(status)
-}
-
-fn read_head(stream: &mut impl Read, response: &mut Vec<u8>) -> std::io::Result<()> {
-    let mut buffer = [0; 512];
-    while !response.windows(2).any(|window| window == b"\r\n") && response.len() < 4096 {
-        let read = stream.read(&mut buffer)?;
-        if read == 0 {
-            break;
-        }
-        response.extend_from_slice(&buffer[..read]);
-    }
-    Ok(())
-}
-
 /// Reliable-control endpoint: the transport supplies the authenticated player.
 pub struct PushControl(pub Arc<PushService>);
 impl MatchControlService for PushControl {
@@ -586,8 +529,8 @@ pub async fn watch(host: LiveMatchHost<ScrabbleSimulation>, service: Arc<PushSer
             };
             for delivery in service.observe(&id, observation) {
                 let service = Arc::clone(&service);
-                tokio::task::spawn_blocking(move || {
-                    if let Err(error) = service.deliver(&delivery, &turn_payload()) {
+                tokio::spawn(async move {
+                    if let Err(error) = service.deliver(&delivery, &turn_payload()).await {
                         eprintln!("turn notification delivery failed: {error}");
                     }
                 });

@@ -99,10 +99,9 @@ pub(super) async fn account_route(
             )
         };
         let token = request.session.clone().ok_or_else(signed_out)?;
-        let verifier = Arc::clone(accounts);
-        let account = tokio::task::spawn_blocking(move || verifier.verify(&token))
+        let account = accounts
+            .verify(&token)
             .await
-            .map_err(|_| operation_error(GameOperationError::Internal))?
             .map_err(|_| Response::error(503, "accounts-unavailable"))?
             .ok_or_else(signed_out)?;
         let account_id = account.account_id.clone();

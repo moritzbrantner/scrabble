@@ -11,9 +11,7 @@ use ring::digest;
 use serde::Deserialize;
 use std::{
     collections::HashMap,
-    io::{Read, Write},
-    net::{TcpStream, ToSocketAddrs},
-    sync::{Arc, Mutex},
+    sync::Mutex,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -45,6 +43,7 @@ struct Verified {
 pub struct Accounts {
     base: url::Url,
     allow_insecure: bool,
+    client: reqwest::Client,
     cache: Mutex<HashMap<Vec<u8>, (Account, u64)>>,
 }
 
@@ -59,10 +58,11 @@ impl Accounts {
     /// `base` is the account service's public base URL ending in `/`, e.g.
     /// `https://moenarch.com/accounts/`; its routes resolve below it.
     /// Plain `http` is accepted only with `allow_insecure` (local mode).
-    pub fn new(base: url::Url, allow_insecure: bool) -> Self {
+    pub fn new(base: url::Url, allow_insecure: bool, client: reqwest::Client) -> Self {
         Self {
             base,
             allow_insecure,
+            client,
             cache: Mutex::new(HashMap::new()),
         }
     }
@@ -71,8 +71,7 @@ impl Accounts {
         self.base.as_str().to_owned()
     }
     /// Resolves a session token; `Ok(None)` means signed out (unknown, expired or revoked).
-    /// Blocking: call it off the async executor.
-    pub fn verify(&self, token: &str) -> Result<Option<Account>, Unavailable> {
+    pub async fn verify(&self, token: &str) -> Result<Option<Account>, Unavailable> {
         if token.is_empty() || token.len() > MAX_TOKEN_BYTES {
             return Ok(None);
         }
@@ -89,7 +88,8 @@ impl Accounts {
         let body =
             serde_json::to_vec(&serde_json::json!({ "token": token })).map_err(|_| Unavailable)?;
         let (status, response) = self
-            .post("v1/sessions/verify", &body)
+            .post("v1/sessions/verify", body)
+            .await
             .map_err(|_| Unavailable)?;
         match status {
             200 => {
@@ -117,114 +117,28 @@ impl Accounts {
         }
     }
 
-    fn post(
+    async fn post(
         &self,
         path: &str,
-        body: &[u8],
+        body: Vec<u8>,
     ) -> Result<(u16, Vec<u8>), Box<dyn std::error::Error + Send + Sync>> {
         let url = self.base.join(path)?;
-        let host = url.host_str().ok_or("account service has no host")?;
-        let port = url
-            .port_or_known_default()
-            .ok_or("account service has no port")?;
-        let address = (host, port)
-            .to_socket_addrs()?
-            .next()
-            .ok_or("account service did not resolve")?;
-        let stream = TcpStream::connect_timeout(&address, TIMEOUT)?;
-        stream.set_read_timeout(Some(TIMEOUT))?;
-        stream.set_write_timeout(Some(TIMEOUT))?;
-        let authority = match url.port() {
-            Some(port) => format!("{host}:{port}"),
-            None => host.to_owned(),
-        };
-        let mut request = format!(
-            "POST {} HTTP/1.1\r\nHost: {authority}\r\nContent-Type: application/json\r\nAccept: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-            url.path(),
-            body.len()
-        )
-        .into_bytes();
-        request.extend_from_slice(body);
-        let mut response = Vec::new();
-        match url.scheme() {
-            "https" => {
-                let mut roots = rustls::RootCertStore::empty();
-                for certificate in rustls_native_certs::load_native_certs().certs {
-                    let _ = roots.add(certificate);
-                }
-                let config = rustls::ClientConfig::builder_with_provider(Arc::new(
-                    rustls::crypto::ring::default_provider(),
-                ))
-                .with_safe_default_protocol_versions()?
-                .with_root_certificates(roots)
-                .with_no_client_auth();
-                let name = rustls::pki_types::ServerName::try_from(host.to_owned())?;
-                let connection = rustls::ClientConnection::new(Arc::new(config), name)?;
-                let mut tls = rustls::StreamOwned::new(connection, stream);
-                tls.write_all(&request)?;
-                tls.flush()?;
-                read_bounded(&mut tls, &mut response)?;
-            }
-            "http" if self.allow_insecure => {
-                let mut stream = stream;
-                stream.write_all(&request)?;
-                read_bounded(&mut stream, &mut response)?;
-            }
-            _ => return Err("account service must be HTTPS".into()),
+        if !(url.scheme() == "https" || (self.allow_insecure && url.scheme() == "http")) {
+            return Err("account service must be HTTPS".into());
         }
-        parse_response(&response)
+        let response = self
+            .client
+            .post(url.as_str())
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .header(reqwest::header::ACCEPT, "application/json")
+            .body(body)
+            .timeout(TIMEOUT)
+            .send()
+            .await?;
+        let status = response.status().as_u16();
+        let body = crate::http_client::bounded_body(response, MAX_RESPONSE_BYTES).await?;
+        Ok((status, body))
     }
-}
-
-fn read_bounded(stream: &mut impl Read, response: &mut Vec<u8>) -> std::io::Result<()> {
-    let mut buffer = [0; 1024];
-    loop {
-        match stream.read(&mut buffer) {
-            Ok(0) => return Ok(()),
-            Ok(read) => {
-                response.extend_from_slice(&buffer[..read]);
-                if response.len() > MAX_RESPONSE_BYTES {
-                    return Err(std::io::Error::other("account response too large"));
-                }
-            }
-            // A TLS peer that closes without close_notify still delivered its full body.
-            Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
-            Err(error) => return Err(error),
-        }
-    }
-}
-
-type Parsed = Result<(u16, Vec<u8>), Box<dyn std::error::Error + Send + Sync>>;
-fn parse_response(response: &[u8]) -> Parsed {
-    let end = response
-        .windows(4)
-        .position(|window| window == b"\r\n\r\n")
-        .ok_or("malformed account service response")?;
-    let head = std::str::from_utf8(&response[..end])?;
-    let mut lines = head.split("\r\n");
-    let status = lines
-        .next()
-        .and_then(|line| line.split_whitespace().nth(1))
-        .and_then(|code| code.parse().ok())
-        .ok_or("malformed account service status")?;
-    let mut body = response[end + 4..].to_vec();
-    for line in lines {
-        let Some((name, value)) = line.split_once(':') else {
-            continue;
-        };
-        match name.trim().to_ascii_lowercase().as_str() {
-            "transfer-encoding" => return Err("unsupported account service framing".into()),
-            "content-length" => {
-                let length: usize = value.trim().parse()?;
-                if body.len() < length {
-                    return Err("truncated account service response".into());
-                }
-                body.truncate(length);
-            }
-            _ => {}
-        }
-    }
-    Ok((status, body))
 }
 
 /// The `moenarch_session` value from a `Cookie` header, if present.
@@ -246,13 +160,5 @@ mod tests {
             Some("mns_abc")
         );
         assert_eq!(session_cookie("moenarch_session_x=1"), None);
-    }
-
-    #[test]
-    fn responses_are_split_at_their_declared_length() {
-        let (status, body) =
-            parse_response(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}junk").unwrap();
-        assert_eq!((status, body.as_slice()), (200, b"{}".as_slice()));
-        assert!(parse_response(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n").is_err());
     }
 }
