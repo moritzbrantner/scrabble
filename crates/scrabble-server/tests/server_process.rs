@@ -557,7 +557,7 @@ impl Server {
             socket.take(128 * 1024).read_to_end(&mut bytes).await.unwrap();
             let text = String::from_utf8(bytes).unwrap();
             let (headers, body) = text.split_once("\r\n\r\n").unwrap();
-            assert!(headers.contains("Access-Control-Allow-Origin: http://localhost:5173"));
+            assert!(headers.to_ascii_lowercase().contains("access-control-allow-origin: http://localhost:5173"));
             let status = headers.split_whitespace().nth(1).unwrap().parse().unwrap();
             (status, if body.is_empty() { serde_json::Value::Null } else { serde_json::from_str(body).unwrap() })
         }).await.unwrap()

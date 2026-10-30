@@ -491,7 +491,10 @@ async fn guest_board_origins_play_as_guests_but_never_reach_account_routes() {
     )
     .await;
     assert!(head.starts_with("HTTP/1.1 200"), "{head}\n{body}");
-    assert!(head.contains(&format!("Access-Control-Allow-Origin: {GUEST}\r\n")));
+    assert!(
+        head.to_ascii_lowercase()
+            .contains(&format!("access-control-allow-origin: {GUEST}\r\n"))
+    );
 
     // The account preflight succeeds so the board can read the guest-only answer...
     let (head, _) = exchange(
@@ -523,7 +526,10 @@ async fn guest_board_origins_play_as_guests_but_never_reach_account_routes() {
     )
     .await;
     assert!(head.starts_with("HTTP/1.1 403"), "{head}");
-    assert!(head.contains(&format!("Access-Control-Allow-Origin: {ORIGIN}\r\n")));
+    assert!(
+        head.to_ascii_lowercase()
+            .contains(&format!("access-control-allow-origin: {ORIGIN}\r\n"))
+    );
     assert!(body.contains("origin-rejected"));
     api.stop().await;
 }

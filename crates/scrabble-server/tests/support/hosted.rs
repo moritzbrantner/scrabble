@@ -72,7 +72,14 @@ async fn ready(status_port: u16) -> bool {
 /// `values` is the complete configuration except the three listener ports.
 pub async fn start(values: &BTreeMap<String, String>) -> Hosted {
     for attempt in 1..=ATTEMPTS {
-        let (port, api_port, status_port) = (free_udp_port(), free_tcp_port(), free_tcp_port());
+        let (port, api_port) = (free_udp_port(), free_tcp_port());
+        // Two probes can return the same released port; the configuration rejects duplicates.
+        let status_port = loop {
+            let candidate = free_tcp_port();
+            if candidate != api_port && candidate != port {
+                break candidate;
+            }
+        };
         let mut values = values.clone();
         values.insert("SCRABBLE_PORT".into(), port.to_string());
         values.insert("SCRABBLE_API_PORT".into(), api_port.to_string());
