@@ -18,13 +18,15 @@ export default defineConfig({
   timeout: 30_000,
   retries: 0,
   fullyParallel: true,
-  // Each worker owns a private native fixture (browser/fixtures.ts). CI stays serial:
-  // its 4 vCPUs are already saturated by one worker's Chromium pages (#211).
-  workers: process.env.CI ? 1 : "50%",
+  // Each worker owns a private native fixture (browser/fixtures.ts). Without trace recording
+  // one worker uses well under half of CI's 4 vCPUs, so CI runs two (#222).
+  workers: process.env.CI ? 2 : "50%",
   use: {
     baseURL: `http://127.0.0.1:${port}/scrabble/`,
     viewport: { width: 1280, height: 900 },
-    trace: "retain-on-failure",
+    // Recording a trace for every test roughly doubled the suite's Chromium CPU (#222). CI keeps
+    // failure screenshots; rerun a failing spec locally (or with --trace on) for its trace.
+    trace: process.env.CI ? "off" : "retain-on-failure",
     screenshot: "only-on-failure",
   },
   webServer: {
