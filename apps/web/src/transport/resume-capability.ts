@@ -41,6 +41,39 @@ export function forgetPlayerSession(route: string): void {
   sessionStorage.removeItem(`scrabble:player:v1:${route}`);
 }
 
+const storedBoardClaim = z.strictObject({
+  version: z.literal(1),
+  requestId: z.string().regex(/^[0-9a-f]{32}$/),
+  gameId: z.string().max(64),
+});
+export type BoardClaim = { requestId: string; gameId: string };
+
+/**
+ * The private creation nonce, kept tab-only from the create response until the board's
+ * ownership is confirmed, so a discarded tab can still claim its board (#218).
+ */
+export function saveBoardClaim(route: string, claim: BoardClaim): void {
+  sessionStorage.setItem(
+    `scrabble:board-claim:v1:${route}`,
+    JSON.stringify({ version: 1, requestId: claim.requestId, gameId: claim.gameId }),
+  );
+}
+export function readBoardClaim(route: string): BoardClaim | undefined {
+  const value = sessionStorage.getItem(`scrabble:board-claim:v1:${route}`);
+  if (value === null || value.length > 512) {
+    return undefined;
+  }
+  try {
+    const { requestId, gameId } = storedBoardClaim.parse(JSON.parse(value));
+    return { requestId, gameId };
+  } catch {
+    return undefined;
+  }
+}
+export function forgetBoardClaim(route: string): void {
+  sessionStorage.removeItem(`scrabble:board-claim:v1:${route}`);
+}
+
 /** A board capsule is kept separate from phone identity even at the same match route. */
 export function saveBoardSession(capability: ResumeCapability): void {
   sessionStorage.setItem(`scrabble:board:v1:${capability.route}`, JSON.stringify(capability));

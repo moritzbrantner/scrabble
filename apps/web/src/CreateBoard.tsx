@@ -25,6 +25,8 @@ import { fetchProfiles } from "./profile-catalog";
 import { matchSettings, type MatchSettings, type ProfileCatalog } from "./profile-model";
 import { faceText } from "./public-state";
 import { faceClass } from "./tile-face";
+import { matchUrl } from "./transport/browser-match";
+import { saveBoardClaim } from "./transport/resume-capability";
 
 const numericFields = [
   "rack_size",
@@ -218,6 +220,11 @@ export function CreateBoard({
         }
       }
       const join = await createGame(api, endpoint, request.current, controller.signal);
+      // Saved before anything else so a tab discarded now can still claim its board (#218).
+      saveBoardClaim(matchUrl(endpoint, join.matchId).href, {
+        requestId: request.current.requestId,
+        gameId: join.gameId,
+      });
       if (!controller.signal.aborted) {
         const location = new URL(window.location.href);
         location.searchParams.set("match", join.matchId);
@@ -248,6 +255,10 @@ export function CreateBoard({
           api={api}
           onRematch={(join, rematchRequest) => {
             request.current = rematchRequest;
+            saveBoardClaim(matchUrl(endpoint, join.matchId).href, {
+              requestId: rematchRequest.requestId,
+              gameId: join.gameId,
+            });
             const location = new URL(window.location.href);
             location.searchParams.delete("launch");
             location.searchParams.delete("session");

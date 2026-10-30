@@ -252,6 +252,40 @@ test("board recovers a lost creation response with one game, then joins its real
   expect(restoredStatus.capacity.hostedMatches).toBe(before + 1);
 });
 
+test("a board tab discarded between creation and its first connection keeps board ownership", async ({
+  page,
+}) => {
+  // Stand in for a tab discarded before the board's first connection (#218): on the create page
+  // WebTransport never connects; the reloaded board route uses the real transport.
+  await page.addInitScript(() => {
+    if (!new URLSearchParams(location.search).has("match")) {
+      class Pending {
+        ready = new Promise(() => {});
+        closed = new Promise(() => {});
+        close() {}
+      }
+      Object.defineProperty(window, "WebTransport", { value: Pending, configurable: true });
+    }
+  });
+  const certificate = fixture.certificateHash
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+  await page.goto(
+    `./?server=${encodeURIComponent(fixture.endpoint)}&api=${encodeURIComponent(fixture.api)}&certificate=${certificate}`,
+  );
+  await page.getByRole("button", { name: "Create game", exact: true }).click();
+  await expect.poll(() => new URL(page.url()).searchParams.get("match")).not.toBeNull();
+  const purposes = () =>
+    page.evaluate(() => Object.keys(sessionStorage).map((key) => key.split(":")[1]));
+  expect(await purposes()).toEqual(["board-claim"]);
+  await page.reload();
+  await expect(page.getByRole("link", { name: "Join this game", exact: true })).toBeVisible();
+  await expect(page.getByText(/^Connected · Player/)).toBeVisible();
+  // Once ownership is confirmed, the saved board session replaces the creation nonce.
+  await expect.poll(purposes).toEqual(["board"]);
+  expect(page.url()).not.toMatch(/requestId/);
+});
+
 test("an existing development board reconnects without a creation API address", async ({
   page,
 }) => {

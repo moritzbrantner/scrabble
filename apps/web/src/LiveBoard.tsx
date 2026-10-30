@@ -19,7 +19,12 @@ import { type PublicSnapshot, type Ruleset } from "./public-state";
 import { type ClockObservation } from "./MatchClocks";
 import { SharedBoard } from "./SharedBoard";
 import { BrowserMatch, matchUrl, type ConnectionState } from "./transport/browser-match";
-import { readBoardSession, saveBoardSession } from "./transport/resume-capability";
+import {
+  forgetBoardClaim,
+  readBoardClaim,
+  readBoardSession,
+  saveBoardSession,
+} from "./transport/resume-capability";
 import { ProtocolError } from "./transport/wire";
 
 /** Shared board projection and authenticated Start control. */
@@ -74,8 +79,11 @@ export function LiveBoard({
         );
         localTrust = [{ algorithm: "sha-256", value: bytes.buffer }];
       }
-      const resume = separateBoard ? readBoardSession(matchUrl(endpoint, matchId).href) : undefined;
-      if (separateBoard && resume === undefined && boardClaim === undefined) {
+      const route = matchUrl(endpoint, matchId).href;
+      const resume = separateBoard ? readBoardSession(route) : undefined;
+      // A reloaded (e.g. discarded) tab recovers the creation nonce it saved (#218).
+      const claim = boardClaim ?? (separateBoard ? readBoardClaim(route) : undefined);
+      if (separateBoard && resume === undefined && claim === undefined) {
         throw new Error("Board ownership is unavailable in this tab");
       }
       match = new BrowserMatch({
@@ -115,16 +123,16 @@ export function LiveBoard({
             if (current.host === undefined || projection.own_rack.tiles.length !== 0) {
               throw new ProtocolError("Invalid shared board projection");
             }
-            if (boardClaim !== undefined && current.game_id !== boardClaim.gameId) {
+            if (claim !== undefined && current.game_id !== claim.gameId) {
               throw new ProtocolError("Board claim belongs to a different game");
             }
             if (current.host.id !== null && current.host.id !== playerId) {
               throw new ProtocolError("This connection does not own the board");
             }
-            if (current.host.id === null && boardClaim === undefined) {
+            if (current.host.id === null && claim === undefined) {
               throw new ProtocolError("This board session has no confirmed ownership");
             }
-            if (current.host.id === null && boardClaim !== undefined && !claimSent) {
+            if (current.host.id === null && claim !== undefined && !claimSent) {
               claimSent = true;
               claimTimeout.current = setTimeout(() => {
                 if (mounted) {
@@ -143,7 +151,7 @@ export function LiveBoard({
                     player_id: authenticated,
                     sequence,
                     expected_turn: "0",
-                    command: { kind: "claim_board", request_id: boardClaim.requestId },
+                    command: { kind: "claim_board", request_id: claim.requestId },
                   }),
                 )
                 .catch(() => {
@@ -161,6 +169,8 @@ export function LiveBoard({
               clearTimeout(claimTimeout.current);
               if (!ownershipReported) {
                 ownershipReported = true;
+                // The saved board session now carries ownership; the nonce leaves storage.
+                forgetBoardClaim(route);
                 onBoardOwned?.(matchId);
               }
             }
