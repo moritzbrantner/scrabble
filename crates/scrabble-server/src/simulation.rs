@@ -31,7 +31,8 @@ struct BoardLobby {
 }
 
 pub const MATCH_LIFETIME_SECONDS: u64 = 6 * 60 * 60;
-pub const FINISHED_RETENTION_TICKS: u64 = 5 * 60 * SCRABBLE_TICK_HZ as u64;
+/// Grace after completion for the final score and rematch (#219).
+pub const FINISHED_RETENTION_TICKS: u64 = 10 * 60 * SCRABBLE_TICK_HZ as u64;
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -468,7 +469,7 @@ mod tests {
         };
         assert!(!lifecycle.can_retire(1001, 20 + FINISHED_RETENTION_TICKS - 1));
         assert!(!lifecycle.can_retire(1001, 20 + FINISHED_RETENTION_TICKS));
-        assert!(lifecycle.can_retire(1300, 20 + FINISHED_RETENTION_TICKS));
+        assert!(lifecycle.can_retire(1600, 20 + FINISHED_RETENTION_TICKS));
         let abandoned = MatchLifecycle {
             created_at: 1000,
             finished_at_tick: None,

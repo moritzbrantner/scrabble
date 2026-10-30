@@ -75,7 +75,14 @@ fn operation_error(error: GameOperationError) -> Response {
         GameOperationError::ExpiredRequest => Response::error(410, "expired-request"),
         GameOperationError::NotServing => Response::error(503, "not-serving"),
         GameOperationError::Draining => Response::error(503, "draining"),
-        GameOperationError::AtCapacity => Response::error(429, "at-capacity"),
+        GameOperationError::InactiveMatch => Response::error(410, "inactive-match"),
+        GameOperationError::AtCapacity => Response {
+            status: 429,
+            body: format!(
+                "{{\"error\":\"at-capacity\",\"retryAfterSeconds\":{}}}",
+                crate::games::CAPACITY_RETRY_SECONDS
+            ),
+        },
         GameOperationError::UnknownMatch => Response::error(404, "unknown-match"),
         GameOperationError::NotRetirable => Response::error(409, "not-retirable"),
         GameOperationError::BoardRejected => Response::error(403, "board-rejected"),

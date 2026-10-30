@@ -24,7 +24,9 @@ const createRequest = z.discriminatedUnion("version", [
   creationIntent,
   creationIntent.extend({
     version: z.literal(3),
-    selection: profileSelection.extend({ wordListAccess: wordListAccess.optional() }),
+    selection: profileSelection.extend({
+      wordListAccess: wordListAccess.optional(),
+    }),
     rules: matchSettings,
     timeControl: timeControl.optional(),
   }),
@@ -209,15 +211,17 @@ export async function lookupGame(
     signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
   });
   if (!response.ok) {
+    if (response.status === 410) {
+      const body: unknown = await readResponse(response).catch(() => undefined);
+      const failure = z.object({ error: z.literal("inactive-match") }).safeParse(body);
+      throw new JoinError(failure.success ? "join.inactive" : "join.expired");
+    }
     await response.body?.cancel();
     if (response.status === 429) {
       throw new JoinError("join.full");
     }
     if (response.status === 409) {
       throw new JoinError("join.started");
-    }
-    if (response.status === 410) {
-      throw new JoinError("join.expired");
     }
     if (response.status === 404) {
       throw new JoinError("join.unavailable");
