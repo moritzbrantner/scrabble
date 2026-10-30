@@ -92,7 +92,15 @@ process.once("SIGINT", () => games.kill("SIGINT"));
 process.once("SIGTERM", () => games.kill("SIGINT"));
 const gameMetadataPath = join(gameDirectory, "connection.json");
 const deadline = Date.now() + 10_000;
-while (!(await Bun.file(gameMetadataPath).exists())) {
+// The fixture writes its metadata in place, so wait until the whole document parses.
+while (
+  !(await Bun.file(gameMetadataPath)
+    .json()
+    .then(
+      () => true,
+      () => false,
+    ))
+) {
   if (games.exitCode !== null || Date.now() > deadline) {
     games.kill("SIGINT");
     await games.exited;

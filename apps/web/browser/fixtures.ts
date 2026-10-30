@@ -35,7 +35,16 @@ async function startNative(executable: string, args: string[], metadata: string)
     return exited;
   };
   const deadline = Date.now() + 10_000;
-  while (!existsSync(metadata)) {
+  // The fixture writes its metadata in place, so wait until the whole document parses.
+  const written = async () => {
+    try {
+      JSON.parse(await readFile(metadata, "utf8"));
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  while (!(await written())) {
     if (child.exitCode !== null || Date.now() > deadline) {
       await stop();
       throw new Error(`${executable} did not start; evidence retained at ${dirname(metadata)}`);

@@ -17,10 +17,10 @@ export default defineConfig({
   ],
   timeout: 30_000,
   retries: 0,
-  // Each worker owns a private native fixture (browser/fixtures.ts). Every test drives
-  // several Chromium pages, so CI's 4 vCPUs fit 2 workers without starving timing.
   fullyParallel: true,
-  workers: process.env.CI ? 2 : "50%",
+  // Each worker owns a private native fixture (browser/fixtures.ts). CI stays serial:
+  // its 4 vCPUs are already saturated by one worker's Chromium pages (#211).
+  workers: process.env.CI ? 1 : "50%",
   use: {
     baseURL: `http://127.0.0.1:${port}/scrabble/`,
     viewport: { width: 1280, height: 900 },
