@@ -18,9 +18,10 @@ export default defineConfig({
   timeout: 30_000,
   retries: 0,
   fullyParallel: true,
-  // Each worker owns a private native fixture (browser/fixtures.ts). Without trace recording
-  // one worker uses well under half of CI's 4 vCPUs, so CI runs two (#222).
-  workers: process.env.CI ? 2 : "50%",
+  // Each worker owns a private native fixture (browser/fixtures.ts). CI stays serial per runner,
+  // because timing-sensitive specs flake when two workers share its 4 vCPUs. It shards the
+  // suite across runners instead (validate.yml, #222).
+  workers: process.env.CI ? 1 : "50%",
   use: {
     baseURL: `http://127.0.0.1:${port}/scrabble/`,
     viewport: { width: 1280, height: 900 },
