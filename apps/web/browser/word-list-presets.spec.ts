@@ -1,5 +1,5 @@
 // Explicit acceptance against operator-prepared real corpora, never a mock catalog.
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { z } from "zod";
 
 import { profileCatalog } from "../src/profile-model";

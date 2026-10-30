@@ -1,9 +1,9 @@
 // Independently authored acceptance for #95 (Decision Atlas 2.2, 2.3, 2.5) before implementation.
 // Contract: docs/specs/settings-dialog.md.
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Locator, type Page, type TestInfo } from "@playwright/test";
+import { expect, test, type Locator, type Page, type TestInfo } from "./fixtures";
 
-import { gameFixture } from "./game-fixture";
+import { fixtureQuery } from "./game-fixture";
 import { observeSnapshots } from "./pages-observer";
 
 type Names = { title: string; close: string; language: string; appearance: string };
@@ -27,12 +27,6 @@ const spanish: Names = {
 };
 const desktop = { width: 1280, height: 900 };
 const mobile = { width: 390, height: 844 };
-
-const creationQuery = new URLSearchParams({
-  server: gameFixture.endpoint,
-  api: gameFixture.api,
-  certificate: Buffer.from(gameFixture.certificateHash).toString("hex"),
-});
 
 const gear = (page: Page, names = english) =>
   page.getByRole("button", { name: names.title, exact: true });
@@ -163,7 +157,7 @@ for (const viewport of [desktop, mobile]) {
     try {
       for (const [name, route] of [
         ["shared-board", "./?fixture=playing"],
-        ["creation", `./?${creationQuery}`],
+        ["creation", `./?${fixtureQuery()}`],
         ["error", "./?view=player&match=invalid"],
       ] as const) {
         await page.goto(route);
@@ -413,7 +407,7 @@ test("native match keeps draft, connection, identity and rack through settings a
     await countConnections(client);
   }
   try {
-    await page.goto(`./?${creationQuery}`);
+    await page.goto(`./?${fixtureQuery()}`);
     await page.getByRole("button", { name: "Create game", exact: true }).click();
     const href = await page
       .getByRole("link", { name: "Join this game", exact: true })

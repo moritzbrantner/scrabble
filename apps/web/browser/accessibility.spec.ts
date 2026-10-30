@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./fixtures";
 
 import data from "../src/fixtures/private-rack.json" with { type: "json" };
 import { playerSnapshot, ruleset } from "../src/public-state";

@@ -1,23 +1,15 @@
 import { defineConfig } from "@playwright/test";
 const port = process.env.SCRABBLE_BROWSER_PORT;
-const suite = process.env.SCRABBLE_BROWSER_SUITE;
 if (port === undefined || !/^[0-9]+$/.test(port)) {
   throw new Error("Use bun run test:browser to provision the shared test port");
 }
 export default defineConfig({
   testDir: "./browser",
-  ...(suite === "hex" ? { testMatch: "**/hexagonal-board.spec.ts", globalTimeout: 240_000 } : {}),
-  ...(suite === "custom-layout-replay"
-    ? { testMatch: "**/custom-board-layout-replay.spec.ts", globalTimeout: 240_000 }
-    : {}),
-  outputDir: suite ? `../../test-results/browser-${suite}` : "../../test-results",
-  ...(process.env.SCRABBLE_PRESET_ACCEPTANCE_ROOT
-    ? { outputDir: "../../test-results/prepared-presets" }
-    : {}),
+  outputDir: process.env.SCRABBLE_PRESET_ACCEPTANCE_ROOT
+    ? "../../test-results/prepared-presets"
+    : "../../test-results/browser",
+  // Pages-only specs run against built bundles in playwright.pages.config.ts.
   testIgnore: [
-    ...(suite === "other"
-      ? ["**/hexagonal-board.spec.ts", "**/custom-board-layout-replay.spec.ts"]
-      : []),
     "**/playable-loop.spec.ts",
     "**/production-configuration.spec.ts",
     "**/performance-budgets.spec.ts",
@@ -25,7 +17,10 @@ export default defineConfig({
   ],
   timeout: 30_000,
   retries: 0,
-  workers: 1,
+  fullyParallel: true,
+  // Each worker owns a private native fixture (browser/fixtures.ts). CI stays serial:
+  // its 4 vCPUs are already saturated by one worker's Chromium pages (#211).
+  workers: process.env.CI ? 1 : "50%",
   use: {
     baseURL: `http://127.0.0.1:${port}/scrabble/`,
     viewport: { width: 1280, height: 900 },

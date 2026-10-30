@@ -1,6 +1,6 @@
 // Independently authored #94 acceptance against 72cf2cd + the approved wire specification.
 // Every HTTP request and browser snapshot reaches the real native server; no fake game/catalog.
-import { expect, test, type Page, type Browser, type APIRequestContext } from "@playwright/test";
+import { expect, test, type Page, type Browser, type APIRequestContext } from "./fixtures";
 import { z } from "zod";
 
 import { ruleset } from "../src/public-state";

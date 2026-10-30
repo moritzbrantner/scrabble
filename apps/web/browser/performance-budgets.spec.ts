@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { arch, cpus, platform, release, totalmem } from "node:os";
 
-import { expect, test, type Browser, type Page, type TestInfo } from "@playwright/test";
+import { expect, test, type Browser, type Page, type TestInfo } from "./fixtures";
 
 import authoredRack from "../src/fixtures/private-rack.json" with { type: "json" };
 import { playerSnapshot } from "../src/public-state";

@@ -3,19 +3,23 @@
 // graceful fixture shutdown. A browser pass alone does not prove native replay.
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { join } from "node:path";
+import { expect, test, type Page } from "./fixtures";
 import { z } from "zod";
 
-import { gameFixture, selectOpening } from "./game-fixture";
+import {
+  selectOpening,
+  fixtureQuery,
+  gameFixtureDirectory,
+  fixtureExecutable,
+} from "./game-fixture";
 import { observeSnapshots } from "./pages-observer";
 
-const directory = dirname(process.env.SCRABBLE_GAME_FIXTURE!);
-const query = new URLSearchParams({
-  server: gameFixture.endpoint,
-  api: gameFixture.api,
-  certificate: Buffer.from(gameFixture.certificateHash).toString("hex"),
-});
+// Both completed matches are compared through native replay after this worker's fixture
+// stops, so the file keeps one worker.
+test.use({ nativeReplay: "custom-layout" });
+test.describe.configure({ mode: "default" });
+
 const opening = z.strictObject({ requestId: z.string(), requestedAt: z.number() });
 const editor = (page: Page) =>
   page.getByRole("region", { name: "Board layout editor", exact: true });
@@ -46,7 +50,7 @@ for (const shape of ["square", "hex"] as const) {
     const linState = await observeSnapshots(lin, "3");
     const name = `Replay ${shape}`;
     try {
-      await board.goto(`./?${query}`);
+      await board.goto(`./?${fixtureQuery()}`);
       await board.getByRole("button", { name: "New custom board", exact: true }).click();
       await editor(board).getByRole("textbox", { name: "Layout name", exact: true }).fill(name);
       await editor(board)
@@ -71,14 +75,10 @@ for (const shape of ["square", "hex"] as const) {
       await picker.selectOption((await option.getAttribute("value"))!);
       const deal = opening.parse(
         JSON.parse(
-          execFileSync(
-            resolve(
-              process.env.CARGO_TARGET_DIR ?? "target",
-              "debug/examples/browser_game_fixture",
-            ),
-            ["--hex-opening", directory],
-            { encoding: "utf8", timeout: 60_000 },
-          ),
+          execFileSync(fixtureExecutable, ["--hex-opening", gameFixtureDirectory], {
+            encoding: "utf8",
+            timeout: 60_000,
+          }),
         ),
       );
       await selectOpening(board, deal);
@@ -123,7 +123,7 @@ for (const shape of ["square", "hex"] as const) {
         move_score: 27,
       });
       const library = await context.newPage();
-      await library.goto(`./?${query}`);
+      await library.goto(`./?${fixtureQuery()}`);
       await list(library)
         .getByRole("button", { name: `Edit ${name}`, exact: true })
         .click();
@@ -157,7 +157,7 @@ for (const shape of ["square", "hex"] as const) {
       const match = new URL(board.url()).searchParams.get("match");
       expect(match).toBeTruthy();
       const state = boardState()!.public;
-      const expectations = join(directory, "custom-layout-replay-expectations");
+      const expectations = join(gameFixtureDirectory, "custom-layout-replay-expectations");
       mkdirSync(expectations, { recursive: true, mode: 0o700 });
       writeFileSync(
         join(expectations, `custom-${shape}.json`),

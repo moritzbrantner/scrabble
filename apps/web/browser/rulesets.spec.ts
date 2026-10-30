@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { z } from "zod";
 
 import data from "../src/fixtures/ruleset-variant.json" with { type: "json" };

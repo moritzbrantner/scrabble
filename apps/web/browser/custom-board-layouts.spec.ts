@@ -41,24 +41,18 @@
 //   "This shared board layout is not available." while copies keep working.
 // Account linking (#132) is successor scope.
 import { execFileSync } from "node:child_process";
-import { dirname, resolve } from "node:path";
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "./fixtures";
 import { z } from "zod";
 
-import { gameFixture, selectOpening } from "./game-fixture";
+import {
+  selectOpening,
+  fixtureQuery,
+  gameFixtureDirectory,
+  fixtureExecutable,
+} from "./game-fixture";
 import { observeSnapshots } from "./pages-observer";
 
-const query = new URLSearchParams({
-  server: gameFixture.endpoint,
-  api: gameFixture.api,
-  certificate: Buffer.from(gameFixture.certificateHash).toString("hex"),
-});
-const directory = dirname(process.env.SCRABBLE_GAME_FIXTURE!);
-const executable = resolve(
-  process.env.CARGO_TARGET_DIR ?? "target",
-  "debug/examples/browser_game_fixture",
-);
 const opening = z.strictObject({ requestId: z.string(), requestedAt: z.number() });
 const ownerKey = /^scrabble:layout-owner:v1:(l_[0-9a-f]{32})$/;
 const ownerEntry = z.looseObject({
@@ -268,7 +262,7 @@ test("a guest designs, edits and plays an authoritative match on a custom hex la
   const adaState = await observeSnapshots(ada, "2");
   const linState = await observeSnapshots(lin, "3");
   try {
-    await page.goto(`./?${query}`);
+    await page.goto(`./?${fixtureQuery()}`);
     await expect(libraryRegion(page), "#101 custom board library on the create page").toBeVisible({
       timeout: 10_000,
     });
@@ -337,7 +331,7 @@ test("a guest designs, edits and plays an authoritative match on a custom hex la
     ).toHaveCount(1);
     const deal = opening.parse(
       JSON.parse(
-        execFileSync(executable, ["--hex-opening", directory], {
+        execFileSync(fixtureExecutable, ["--hex-opening", gameFixtureDirectory], {
           encoding: "utf8",
           timeout: 60_000,
         }),
@@ -401,7 +395,7 @@ test("a guest designs, edits and plays an authoritative match on a custom hex la
 
     // While the match runs, the owner edits and then deletes the library layout.
     const library = await page.context().newPage();
-    await library.goto(`./?${query}`);
+    await library.goto(`./?${fixtureQuery()}`);
     await savedList(library)
       .getByRole("button", { name: `Edit ${name}`, exact: true })
       .click();
@@ -467,7 +461,7 @@ test("a recipient in an independent browser uses and copies a shared square layo
   });
   try {
     // Owner: pointer-authored resized square board.
-    await page.goto(`./?${query}`);
+    await page.goto(`./?${fixtureQuery()}`);
     await expect(libraryRegion(page), "#101 custom board library on the create page").toBeVisible({
       timeout: 10_000,
     });
@@ -563,7 +557,7 @@ test("a recipient in an independent browser uses and copies a shared square layo
     expect(copies).toHaveLength(1);
     expect(copies[0]!.layoutId).not.toBe(owner!.layoutId);
     expect(copies[0]!.ownerCapability).not.toBe(owner!.ownerCapability);
-    await copyPage.goto(`./?${query}`);
+    await copyPage.goto(`./?${fixtureQuery()}`);
     const copyItem = savedList(copyPage).getByRole("listitem");
     await expect(copyItem).toHaveCount(1);
     await copyItem.getByRole("button", { name: /^Edit / }).click();
@@ -576,7 +570,7 @@ test("a recipient in an independent browser uses and copies a shared square layo
     await saveLayout(copyPage);
 
     // The owner's original is unchanged by the copy edit ...
-    await page.goto(`./?${query}`);
+    await page.goto(`./?${fixtureQuery()}`);
     await savedList(page)
       .getByRole("button", { name: `Edit ${name}`, exact: true })
       .click();
@@ -611,7 +605,7 @@ test("a recipient in an independent browser uses and copies a shared square layo
       recipient.getByRole("button", { name: /^Stop sharing\b/ }),
       "recipients cannot withdraw",
     ).toHaveCount(0);
-    await page.goto(`./?${query}`);
+    await page.goto(`./?${fixtureQuery()}`);
     const stopSharing = savedList(page).getByRole("button", {
       name: `Stop sharing ${name}`,
       exact: true,
@@ -651,7 +645,7 @@ test("a recipient in an independent browser uses and copies a shared square layo
         .getByRole("alert")
         .filter({ hasText: "This shared board layout is not available." }),
     ).toBeVisible();
-    await copyPage.goto(`./?${query}`);
+    await copyPage.goto(`./?${fixtureQuery()}`);
     await expect(savedList(copyPage).getByRole("listitem")).toHaveCount(1);
     for (const client of [page, recipient]) {
       expect((await new AxeBuilder({ page: client }).analyze()).violations).toEqual([]);
@@ -664,7 +658,7 @@ test("a recipient in an independent browser uses and copies a shared square layo
 // Retrospective independent acceptance for Decision 1.37's established bounds
 // and premium preservation while an unfinished size edit changes geometry.
 test("the editor respects shape-specific minimum sizes", async ({ page }) => {
-  await page.goto(`./?${query}`);
+  await page.goto(`./?${fixtureQuery()}`);
   await libraryRegion(page).getByRole("button", { name: "New custom board", exact: true }).click();
   const editor = editorRegion(page);
   await editor.getByRole("textbox", { name: "Layout name", exact: true }).fill("Small square");
@@ -686,7 +680,7 @@ test("the editor respects shape-specific minimum sizes", async ({ page }) => {
 test("changing shape during an invalid size edit preserves the centered premium", async ({
   page,
 }) => {
-  await page.goto(`./?${query}`);
+  await page.goto(`./?${fixtureQuery()}`);
   await libraryRegion(page).getByRole("button", { name: "New custom board", exact: true }).click();
   const editor = editorRegion(page);
   await editor.getByRole("textbox", { name: "Layout name", exact: true }).fill("Preserved center");

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./fixtures";
 
 import { freshOpening, gameFixture, selectOpening } from "./game-fixture";
 import { observeSnapshots } from "./pages-observer";

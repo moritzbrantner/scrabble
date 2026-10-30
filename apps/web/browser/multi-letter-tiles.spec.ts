@@ -2,7 +2,6 @@
 // browser implementation against a60d72e. Every request reaches the real native fixture server;
 // the multi-letter profile comes from its real catalog and the deal from its real factory key.
 import { execFileSync } from "node:child_process";
-import { dirname, resolve } from "node:path";
 
 import AxeBuilder from "@axe-core/playwright";
 import {
@@ -12,10 +11,15 @@ import {
   type Locator,
   type Page,
   type TestInfo,
-} from "@playwright/test";
+} from "./fixtures";
 import { z } from "zod";
 
-import { gameFixture, selectOpening } from "./game-fixture";
+import {
+  gameFixture,
+  selectOpening,
+  gameFixtureDirectory,
+  fixtureExecutable,
+} from "./game-fixture";
 import { observeSnapshots } from "./pages-observer";
 
 const SAMPLE_TILES = "acceptance-multi-letter-tiles";
@@ -209,11 +213,10 @@ test("a real match plays CH, A, T as CHAT and SCH, A through CH as SCHACH on who
     .strictObject({ requestId: z.string().regex(/^[0-9a-f]{32}$/), requestedAt: z.int() })
     .parse(
       JSON.parse(
-        execFileSync(
-          resolve(process.env.CARGO_TARGET_DIR ?? "target", "debug/examples/browser_game_fixture"),
-          ["--multi-letter-opening", dirname(process.env.SCRABBLE_GAME_FIXTURE ?? "")],
-          { encoding: "utf8", timeout: 30_000 },
-        ),
+        execFileSync(fixtureExecutable, ["--multi-letter-opening", gameFixtureDirectory], {
+          encoding: "utf8",
+          timeout: 30_000,
+        }),
       ),
     );
   const adaContext = await browser.newContext({ viewport: { width: 1280, height: 900 } });

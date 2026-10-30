@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 import { gameFixture, selectOpening } from "./game-fixture";
 import { interruptible, observeSnapshots } from "./pages-observer";

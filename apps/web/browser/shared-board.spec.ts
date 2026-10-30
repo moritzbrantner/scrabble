@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 test("every phase renders with stable board geometry and read-only semantics", async ({ page }) => {
   const errors: string[] = [];

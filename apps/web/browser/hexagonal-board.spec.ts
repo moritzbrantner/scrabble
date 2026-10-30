@@ -2,20 +2,22 @@
 // reused; this file checks actual catalog/UI/server exposure, never a fake game.
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { join } from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { z } from "zod";
 import { faceText } from "../src/public-state";
 import { observeSnapshots } from "./pages-observer";
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "./fixtures";
 
-import { gameFixture, selectOpening } from "./game-fixture";
+import {
+  selectOpening,
+  fixtureQuery,
+  gameFixtureDirectory,
+  fixtureExecutable,
+} from "./game-fixture";
 
-const query = new URLSearchParams({
-  server: gameFixture.endpoint,
-  api: gameFixture.api,
-  certificate: Buffer.from(gameFixture.certificateHash).toString("hex"),
-});
+// Completed hex matches are compared through native replay after this worker's fixture stops.
+test.use({ nativeReplay: "hex" });
 
 async function previewCells(preview: Locator) {
   return preview.getByRole("cell").or(preview.getByRole("gridcell"));
@@ -26,7 +28,7 @@ for (const width of [1280, 390]) {
     page,
   }, testInfo) => {
     await page.setViewportSize({ width, height: 900 });
-    await page.goto(`./?${query}`);
+    await page.goto(`./?${fixtureQuery()}`);
     const wordList = page.getByRole("combobox", { name: "Word list", exact: true });
     const tileProfile = page.getByRole("combobox", { name: "Tile profile", exact: true });
     const boardLayout = page.getByRole("combobox", { name: "Board layout", exact: true });
@@ -76,11 +78,6 @@ for (const width of [1280, 390]) {
 
 // Expected words and scores are pinned by the independent legal native trace in
 // multi_letter_tiles.rs. Browser commands below construct that board through play.
-const directory = dirname(process.env.SCRABBLE_GAME_FIXTURE!);
-const executable = resolve(
-  process.env.CARGO_TARGET_DIR ?? "target",
-  "debug/examples/browser_game_fixture",
-);
 const opening = z.strictObject({ requestId: z.string(), requestedAt: z.number() });
 const analysis = (page: Page) =>
   page
@@ -293,7 +290,7 @@ for (const policy of ["all_word", "main_word_only"] as const) {
       const adaState = await observeSnapshots(ada, "2");
       const linState = await observeSnapshots(lin, "3");
       try {
-        await page.goto(`./?${query}`);
+        await page.goto(`./?${fixtureQuery()}`);
         await page
           .getByRole("combobox", { name: "Word list", exact: true })
           .selectOption("acceptance-hex-words");
@@ -307,7 +304,7 @@ for (const policy of ["all_word", "main_word_only"] as const) {
         await page.getByLabel("Scoreless-turn limit", { exact: true }).fill("2");
         const deal = opening.parse(
           JSON.parse(
-            execFileSync(executable, ["--hex-opening", directory], {
+            execFileSync(fixtureExecutable, ["--hex-opening", gameFixtureDirectory], {
               encoding: "utf8",
               timeout: 30_000,
             }),
@@ -725,7 +722,7 @@ for (const policy of ["all_word", "main_word_only"] as const) {
         // Native recovery bundles are materialized only at graceful shutdown.
         // The source-owned runner verifies these SAME completed matches after all
         // browser cases and fixture shutdown, before removing the private fixture.
-        const expectations = join(directory, "hex-replay-expectations");
+        const expectations = join(gameFixtureDirectory, "hex-replay-expectations");
         mkdirSync(expectations, { recursive: true, mode: 0o700 });
         writeFileSync(
           join(expectations, `${policy}-${metric}.json`),
