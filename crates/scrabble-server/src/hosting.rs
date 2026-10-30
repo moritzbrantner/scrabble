@@ -1,4 +1,4 @@
-use crate::{config::ServerConfig, factory::MatchFactory, game_api, games::Games};
+use crate::{api, config::ServerConfig, factory::MatchFactory, games::Games};
 use game_server::{
     MatchHostRecoveryConfig, MatchHostStatusConfig, MatchHostWebTransportConfig,
     prepare_live_match_host_for_recovery,
@@ -50,6 +50,9 @@ pub async fn serve(
         config.route_prefix.clone(),
         config.reconnect_grace_ticks,
     ));
+    // Match retirement runs beside the other match-host tasks, independent of the API listener.
+    let sweeper = tokio::spawn(api::sweep(Arc::clone(&games)));
+    let _sweeper = Forwarder(sweeper.abort_handle());
     let (transport_shutdown, transport_receiver) = mpsc::channel(4);
     let forward_sender = transport_shutdown.clone();
     let forwarder = tokio::spawn(async move {
@@ -83,11 +86,11 @@ pub async fn serve(
             matches!(config.mode, crate::config::Mode::Local),
         ))
     });
-    let origins = game_api::BoardOrigins {
+    let origins = api::BoardOrigins {
         board: config.board_origin,
         guests: config.guest_board_origins,
     };
-    let api = game_api::serve(listener, games, origins, accounts);
+    let api = api::serve(listener, games, origins, accounts);
     tokio::pin!(api);
     tokio::select! {
         result = &mut transport => result?,

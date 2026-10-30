@@ -10,9 +10,9 @@ use scrabble_game::{
     protocol::{Command, CommandEnvelope, Phase, PlayerSnapshot},
 };
 use scrabble_server::{
+    api,
     config::ServerConfig,
     factory::{MatchFactory, game_id},
-    game_api,
     games::{Games, JoinInformation, unix_seconds},
     simulation::{MATCH_LIFETIME_SECONDS, ScrabbleSimulation},
 };
@@ -115,7 +115,7 @@ impl Stack {
         let api_port = listener.local_addr().unwrap().port();
         let api_games = Arc::clone(&games);
         let api = tokio::spawn(async move {
-            let _ = game_api::serve(listener, api_games, ORIGIN.into(), None).await;
+            let _ = api::serve(listener, api_games, ORIGIN.into(), None).await;
         });
         let client = Endpoint::client(
             ClientConfig::builder()

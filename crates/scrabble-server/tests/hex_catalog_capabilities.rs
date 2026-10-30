@@ -6,9 +6,9 @@ use game_server::{
 };
 use scrabble_game::ruleset::{Premium, english_fixture};
 use scrabble_server::{
+    api,
     config::ServerConfig,
     factory::MatchFactory,
-    game_api,
     games::{Games, unix_seconds},
 };
 use serde_json::{Value, json};
@@ -127,7 +127,7 @@ impl Api {
         .unwrap();
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
-        let task = tokio::spawn(game_api::serve(
+        let task = tokio::spawn(api::serve(
             listener,
             games,
             config.board_origin.into(),
