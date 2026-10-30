@@ -42,6 +42,7 @@ pub enum WordListError {
     InvalidIdentity,
     InvalidWord { line: usize },
     Empty,
+    TooLarge,
 }
 impl fmt::Display for WordListError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -50,18 +51,46 @@ impl fmt::Display for WordListError {
 }
 impl std::error::Error for WordListError {}
 
+/// Sorted unique words packed into one buffer (#216): multi-million-word presets would
+/// otherwise cost one heap allocation and tree slot per word.
+struct PackedWords {
+    text: Box<str>,
+    /// `starts[i]..starts[i + 1]` is word `i`; one more entry than there are words.
+    starts: Box<[u32]>,
+}
+impl PackedWords {
+    fn get(&self, index: usize) -> &str {
+        &self.text[self.starts[index] as usize..self.starts[index + 1] as usize]
+    }
+    fn len(&self) -> usize {
+        self.starts.len() - 1
+    }
+    fn contains(&self, word: &str) -> bool {
+        let (mut low, mut high) = (0, self.len());
+        while low < high {
+            let middle = low + (high - low) / 2;
+            match self.get(middle).cmp(word) {
+                std::cmp::Ordering::Less => low = middle + 1,
+                std::cmp::Ordering::Greater => high = middle,
+                std::cmp::Ordering::Equal => return true,
+            }
+        }
+        false
+    }
+}
+
 /// Owns a validated word set; neither source order nor duplicate entries affect lookup.
 #[derive(Clone)]
 pub struct WordList {
     identity: ContentIdentity,
-    words: Arc<BTreeSet<String>>,
+    words: Arc<PackedWords>,
 }
 impl WordList {
     pub fn from_text(identity: ContentIdentity, text: &str) -> Result<Self, WordListError> {
         if identity.name.is_empty() || identity.revision.is_empty() {
             return Err(WordListError::InvalidIdentity);
         }
-        let mut words = BTreeSet::new();
+        let mut words = Vec::new();
         for (index, word) in text.lines().enumerate() {
             if word.is_empty() {
                 continue;
@@ -72,14 +101,26 @@ impl WordList {
             {
                 return Err(WordListError::InvalidWord { line: index + 1 });
             }
-            words.insert(word.to_owned());
+            words.push(word);
         }
         if words.is_empty() {
             return Err(WordListError::Empty);
         }
+        words.sort_unstable();
+        words.dedup();
+        let mut packed = String::with_capacity(words.iter().map(|word| word.len()).sum());
+        let mut starts = Vec::with_capacity(words.len() + 1);
+        starts.push(0);
+        for word in words {
+            packed.push_str(word);
+            starts.push(u32::try_from(packed.len()).map_err(|_| WordListError::TooLarge)?);
+        }
         Ok(Self {
             identity,
-            words: Arc::new(words),
+            words: Arc::new(PackedWords {
+                text: packed.into_boxed_str(),
+                starts: starts.into_boxed_slice(),
+            }),
         })
     }
     pub fn with_revision(mut self, revision: String) -> Result<Self, WordListError> {
@@ -91,7 +132,7 @@ impl WordList {
     }
     /// Sorted unique content for a deployment-owned content fingerprint, never a browser DTO.
     pub fn words(&self) -> impl Iterator<Item = &str> {
-        self.words.iter().map(String::as_str)
+        (0..self.words.len()).map(|index| self.words.get(index))
     }
 }
 impl Dictionary for WordList {

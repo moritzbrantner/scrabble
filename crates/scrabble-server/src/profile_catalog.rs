@@ -16,6 +16,11 @@ use scrabble_game::{
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, fs::File, io::Read, path::Path};
 
+/// One prepared word-list file.
+const MAX_LIST_BYTES: u64 = 64 * 1024 * 1024;
+/// All catalog word lists together (#216: ten operator presets plus the built-in list).
+const MAX_CATALOG_WORD_BYTES: usize = 160 * 1024 * 1024;
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Selection {
@@ -326,12 +331,12 @@ fn from_file(path: &Path, legacy: &Ruleset, dictionary: &WordList) -> ErrorResul
         .map(|row| row.profile.content().0.len())
         .sum::<usize>();
     for row in raw.word_lists {
-        let bytes = read_bounded(&directory.join(row.file), 64 * 1024 * 1024)?;
+        let bytes = read_bounded(&directory.join(row.file), MAX_LIST_BYTES)?;
         total = total
             .checked_add(bytes.len())
             .ok_or("catalog words exceed supported size")?;
-        if total > 64 * 1024 * 1024 {
-            return Err("catalog words exceed 64 MiB total".into());
+        if total > MAX_CATALOG_WORD_BYTES {
+            return Err("catalog words exceed 160 MiB total".into());
         }
         let source = WordList::from_text(row.identity, std::str::from_utf8(&bytes)?)?;
         words.push(Named {

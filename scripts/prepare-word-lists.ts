@@ -1,5 +1,6 @@
-// Prepares expanded English, English (UK), German and Spanish word-list presets and their tile profiles
-// (#153) as a profile catalog that extends the server's built-in profiles. Run by the
+// Prepares expanded English, English (UK), German and Spanish (#153) plus French, Italian,
+// Portuguese (Portugal and Brazil), Dutch and Polish (#216) word-list presets and their tile
+// profiles as a profile catalog that extends the server's built-in profiles. Run by the
 // operator at deploy time; the generated lists are never committed. Every list comes from
 // a pinned free source, is checked against its reviewed count and hash, and keeps its
 // licence and source notices next to it.
@@ -45,7 +46,16 @@ async function pinned(cwd: string, revision: string, paths: string[] = []) {
   await run(cwd, ["git", "diff", "--quiet", "HEAD", "--", ...paths]);
 }
 await pinned(scowl, scowlRevision);
-await pinned(dictionaries, dictionariesRevision, ["de", "es"]);
+await pinned(dictionaries, dictionariesRevision, [
+  "de",
+  "es",
+  "fr_FR",
+  "it_IT",
+  "pt_PT",
+  "pt_BR",
+  "nl_NL",
+  "pl_PL",
+]);
 await pinned(enable2k, enable2kSource.revision);
 
 const sha256 = (text: string | Uint8Array) =>
@@ -78,7 +88,12 @@ async function expandedEnglish(): Promise<string[]> {
   const archive = new Uint8Array(await readFile(resolve(enable2k, enable2kSource.file)));
   return verifiedEnable2kWords(archive);
 }
-async function hunspellForms(name: string): Promise<string[]> {
+/** Every expanded form passed through `keep`; Italian alone expands to tens of millions of
+ * raw forms, so they are filtered as they are generated. */
+async function hunspellForms(
+  name: string,
+  keep: (form: string) => string | undefined = (form) => form,
+): Promise<string[]> {
   const affBytes = new Uint8Array(
     await Bun.file(resolve(dictionaries, `${name}.aff`)).arrayBuffer(),
   );
@@ -88,17 +103,20 @@ async function hunspellForms(name: string): Promise<string[]> {
     new Uint8Array(await Bun.file(resolve(dictionaries, `${name}.dic`)).arrayBuffer()),
     encoding,
   );
-  const forms: string[] = [];
+  const forms = new Set<string>();
   for (const [word, flags] of entries(affixes, dic)) {
     // Abbreviations are written in capitals or with a full stop; neither is playable.
     if (word.includes(".") || /^\p{Lu}{2,}$/u.test(word)) {
       continue;
     }
     for (const form of expand(affixes, word, flags)) {
-      forms.push(form);
+      const kept = keep(form);
+      if (kept !== undefined) {
+        forms.add(kept);
+      }
     }
   }
-  return forms;
+  return [...forms];
 }
 /** German: Ä, Ö and Ü are their own letters and ß is written SS. igerman98 marks no proper
  * names, and German nouns are capitalized, so capitalized entries are kept. */
@@ -130,7 +148,56 @@ async function spanish(): Promise<string[]> {
   );
 }
 
-// Standard published German (102 tiles) and Spanish (100 tiles, with CH, LL and RR)
+/** Uppercases a form and drops accents except on the language's own tile letters. */
+function tileSpelling(form: string, locale: string, ownLetters: string): string {
+  let out = "";
+  for (const letter of form.toLocaleUpperCase(locale).normalize("NFC")) {
+    out += ownLetters.includes(letter) ? letter : letter.normalize("NFD").replaceAll(/\p{M}/gu, "");
+  }
+  return out;
+}
+/** Shared recipe for the #216 languages: expand, drop capitalized entries (proper names) and
+ * abbreviations, spell with the language's tiles, keep playable words. */
+async function language(
+  name: string,
+  locale: string,
+  ownLetters: string,
+  letters: RegExp,
+  rewrite: (word: string) => string = (word) => word,
+): Promise<string[]> {
+  return sorted(
+    await hunspellForms(name, (form) => {
+      if (/^\p{Lu}/u.test(form)) {
+        return undefined;
+      }
+      const word = rewrite(tileSpelling(form, locale, ownLetters));
+      return playable(word, letters) ? word : undefined;
+    }),
+  );
+}
+/** French: accents and cedilla are dropped, Œ/Æ are written OE/AE; elisions and hyphenated
+ * forms are not playable. */
+const french = () =>
+  language("fr_FR/dictionaries/fr", "fr-FR", "", /^[A-Z]+$/u, (word) =>
+    word.replaceAll("Œ", "OE").replaceAll("Æ", "AE"),
+  );
+/** Italian: accents are dropped and only the 21 Italian tile letters (no J, K, W, X, Y)
+ * remain; elided forms (dell', ...) are not playable. */
+const italian = () => language("it_IT/it_IT", "it-IT", "", /^[A-IL-VZ]+$/u);
+/** Portuguese: Ç is its own tile, other accents are dropped; no K, W or Y tiles. */
+const portuguese = (name: string, locale: string) => language(name, locale, "Ç", /^[A-JL-VXZÇ]+$/u);
+/** Dutch: the IJ ligature is spelled I + J (two tiles, the current Dutch convention),
+ * accents and diaeresis are dropped, and the apostrophe of plurals such as auto's is
+ * omitted. */
+const dutch = () =>
+  language("nl_NL/nl_NL", "nl-NL", "", /^[A-Z]+$/u, (word) =>
+    word.replaceAll("Ĳ", "IJ").replaceAll("'", ""),
+  );
+/** Polish: Ą Ć Ę Ł Ń Ó Ś Ź Ż are their own tiles; no Q, V or X tiles. */
+const polish = () => language("pl_PL/pl_PL", "pl-PL", "ĄĆĘŁŃÓŚŹŻ", /^[A-PR-UWYZĄĆĘŁŃÓŚŹŻ]+$/u);
+
+// Standard published German (102 tiles), Spanish (100 tiles, with CH, LL and RR), French
+// (102), Italian (120), Portuguese (120, Brazilian set), Dutch (102) and Polish (100)
 // distributions, shared with the server's catalog tests.
 const tileProfiles: unknown = await Bun.file(
   resolve(import.meta.dir, "preset-tile-profiles.json"),
@@ -207,6 +274,89 @@ const lists = [
       [resolve(dictionaries, "es/README_hunspell_es.txt"), "RLA-ES-README_hunspell_es.txt"],
     ],
   },
+  {
+    file: "words-fr.txt",
+    identity: { name: "grammalecte-fr", revision: "7.7-recipe1" },
+    label: `Français — Grammalecte 7.7 (${generalSpelling})`,
+    words: await french(),
+    source: "https://github.com/LibreOffice/dictionaries/tree/master/fr_FR",
+    sourceRevision: dictionariesRevision,
+    recipe:
+      "fr Hunspell affix expansion; drop capitalized entries and abbreviations; uppercase; drop accents and cedilla; Œ/Æ as OE/AE; letters A-Z, length 2..15",
+    notices: [
+      [
+        resolve(dictionaries, "fr_FR/dictionaries/README_dict_fr.txt"),
+        "Grammalecte-README_dict_fr.txt",
+      ],
+    ],
+  },
+  {
+    file: "words-it.txt",
+    identity: { name: "libreitalia-it-it", revision: "2020.11.07-recipe1" },
+    label: `Italiano — LibreItalia 2020.11.07 (${generalSpelling})`,
+    words: await italian(),
+    source: "https://github.com/LibreOffice/dictionaries/tree/master/it_IT",
+    sourceRevision: dictionariesRevision,
+    recipe:
+      "it_IT Hunspell affix expansion; drop capitalized entries, abbreviations and elisions; uppercase; drop accents; letters A-Z without J K W X Y, length 2..15",
+    notices: [[resolve(dictionaries, "it_IT/README_it_IT.txt"), "LibreItalia-README_it_IT.txt"]],
+  },
+  {
+    file: "words-pt-pt.txt",
+    identity: { name: "vero-pt-pt", revision: "20.10.5.1-recipe1" },
+    label: `Português (Portugal) — 20.10.5.1 (${generalSpelling})`,
+    words: await portuguese("pt_PT/pt_PT", "pt-PT"),
+    source: "https://github.com/LibreOffice/dictionaries/tree/master/pt_PT",
+    sourceRevision: dictionariesRevision,
+    recipe:
+      "pt_PT Hunspell affix expansion; drop capitalized entries, abbreviations and hyphenated forms; uppercase; drop accents except Ç; letters A-Z without K W Y plus Ç, length 2..15",
+    notices: [
+      [resolve(dictionaries, "pt_PT/LICENSES.txt"), "pt_PT-LICENSES.txt"],
+      [resolve(dictionaries, "pt_PT/README_pt_PT.txt"), "pt_PT-README_pt_PT.txt"],
+    ],
+  },
+  {
+    file: "words-pt-br.txt",
+    identity: { name: "vero-pt-br", revision: "3.3.0-recipe1" },
+    label: `Português (Brasil) — VERO 3.3.0 (${generalSpelling})`,
+    words: await portuguese("pt_BR/pt_BR", "pt-BR"),
+    source: "https://github.com/LibreOffice/dictionaries/tree/master/pt_BR",
+    sourceRevision: dictionariesRevision,
+    recipe:
+      "pt_BR Hunspell affix expansion; drop capitalized entries, abbreviations and hyphenated forms; uppercase; drop accents except Ç; letters A-Z without K W Y plus Ç, length 2..15",
+    notices: [
+      [resolve(dictionaries, "pt_BR/README_pt_BR.txt"), "VERO-README_pt_BR.txt"],
+      [resolve(dictionaries, "pt_BR/README_en.txt"), "VERO-README_en.txt"],
+    ],
+  },
+  {
+    file: "words-nl.txt",
+    identity: { name: "opentaal-nl", revision: "2.20.21-recipe1" },
+    label: `Nederlands — OpenTaal 2.20.21 (${generalSpelling})`,
+    words: await dutch(),
+    source: "https://github.com/LibreOffice/dictionaries/tree/master/nl_NL",
+    sourceRevision: dictionariesRevision,
+    recipe:
+      "nl_NL Hunspell affix expansion without compounds; drop capitalized entries and abbreviations; uppercase; IJ ligature as I+J; drop accents and apostrophes; letters A-Z, length 2..15",
+    notices: [
+      [resolve(dictionaries, "nl_NL/LICENSE.txt"), "OpenTaal-LICENSE.txt"],
+      [resolve(dictionaries, "nl_NL/README.md"), "OpenTaal-README.md"],
+    ],
+  },
+  {
+    file: "words-pl.txt",
+    identity: { name: "sjp-pl-pl", revision: "2017.05.14-recipe1" },
+    label: `Polski — SJP.PL 2017.05.14 (${generalSpelling})`,
+    words: await polish(),
+    source: "https://github.com/LibreOffice/dictionaries/tree/master/pl_PL",
+    sourceRevision: dictionariesRevision,
+    recipe:
+      "pl_PL Hunspell affix expansion; drop capitalized entries and abbreviations; uppercase; letters A-Z without Q V X plus Ą Ć Ę Ł Ń Ó Ś Ź Ż, length 2..15",
+    notices: [
+      [resolve(dictionaries, "pl_PL/README_pl_PL.txt"), "SJP-README_pl_PL.txt"],
+      [resolve(dictionaries, "pl_PL/README_en.txt"), "SJP-README_en.txt"],
+    ],
+  },
 ];
 const reviewed: Record<string, { count: number; sha256: string }> = {
   "enable2k-en": {
@@ -224,6 +374,30 @@ const reviewed: Record<string, { count: number; sha256: string }> = {
   "rla-es-es-es": {
     count: 580715,
     sha256: "8841e3022de6dd5c3ecef4689e0c20568716b1d5226ad51cbf491ea7d47243d9",
+  },
+  "grammalecte-fr": {
+    count: 401798,
+    sha256: "efef28733509c7dcd3494873f3b26ec4424f4e8528173cb545a49599a00d44fe",
+  },
+  "libreitalia-it-it": {
+    count: 2416618,
+    sha256: "2fffcc871d132e7053a947328d1bf690598a304dff8255914637d27930585de6",
+  },
+  "vero-pt-pt": {
+    count: 372432,
+    sha256: "e637c5a0c3122292d0997f9cb098c899ada16b571281053742f52bc2637a2d1f",
+  },
+  "vero-pt-br": {
+    count: 1069342,
+    sha256: "f81bc281506f56008806ad7565a0781304621fd3247cd4e95afc30e54cbd99b3",
+  },
+  "opentaal-nl": {
+    count: 249860,
+    sha256: "b59a4852eb89ca1450e48880dad6144563ef1313cda3c1aec3b1935593503681",
+  },
+  "sjp-pl-pl": {
+    count: 3367142,
+    sha256: "63f37c212cfcaf864bed6790d02020b31ac5117dd31cfc21d45a5d37d138cf03",
   },
 };
 const prepared = lists.map((list) => {
@@ -288,7 +462,7 @@ await Bun.write(
         usage: list.usage ?? generalSpelling,
       })),
       tileSources:
-        "Standard published German and Spanish Scrabble letter distributions (counts and values)",
+        "Standard published German, Spanish, French, Italian, Portuguese (Brazilian set), Dutch and Polish Scrabble letter distributions (counts and values)",
     },
     null,
     2,

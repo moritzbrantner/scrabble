@@ -20,6 +20,11 @@ fn write_presets(root: &Path, catalog: Value) {
     std::fs::create_dir_all(&directory).unwrap();
     std::fs::write(directory.join("words-de.txt"), "HAUS\nÄRGER\nSTRASSE\n").unwrap();
     std::fs::write(directory.join("words-es.txt"), "CHICO\nLLAVE\nNIÑO\n").unwrap();
+    std::fs::write(
+        directory.join("words-pl.txt"),
+        "ŻÓŁW\nZAŻÓŁĆ\nGĘŚLĄ\nJAŹŃ\n",
+    )
+    .unwrap();
     std::fs::write(directory.join("catalog.json"), catalog.to_string()).unwrap();
 }
 fn presets() -> Value {
@@ -29,7 +34,8 @@ fn presets() -> Value {
         "builtinWordListLabel": "English (US) — test",
         "wordLists": [
             {"identity":{"name":"test-de","revision":"1"},"label":"Deutsch — test","file":"words-de.txt"},
-            {"identity":{"name":"test-es","revision":"1"},"label":"Español — test","file":"words-es.txt"}
+            {"identity":{"name":"test-es","revision":"1"},"label":"Español — test","file":"words-es.txt"},
+            {"identity":{"name":"test-pl","revision":"1"},"label":"Polski — test","file":"words-pl.txt"}
         ],
         "tileProfiles": serde_json::from_str::<Value>(TILES).unwrap(),
     })
@@ -188,7 +194,12 @@ async fn presets_extend_the_builtin_catalog_and_compose_by_language() {
     };
     assert_eq!(
         labels("wordLists"),
-        ["English (US) — test", "Deutsch — test", "Español — test"]
+        [
+            "English (US) — test",
+            "Deutsch — test",
+            "Español — test",
+            "Polski — test"
+        ]
     );
     let tiles = labels("tileProfiles");
     assert!(tiles.contains(&"Default tiles".to_owned()), "{tiles:?}");
@@ -198,6 +209,12 @@ async fn presets_extend_the_builtin_catalog_and_compose_by_language() {
     );
     assert!(tiles.iter().any(|label| label.starts_with("Deutsch")));
     assert!(tiles.iter().any(|label| label.starts_with("Español")));
+    for language in ["Français", "Italiano", "Português", "Nederlands", "Polski"] {
+        assert!(
+            tiles.iter().any(|label| label.starts_with(language)),
+            "{language}: {tiles:?}"
+        );
+    }
     assert!(
         labels("boardProfiles").len() > 1,
         "built-in boards are kept"
@@ -214,6 +231,10 @@ async fn presets_extend_the_builtin_catalog_and_compose_by_language() {
         (builtin.as_str(), "german-standard", 200),
         ("test-es", "fixture-en", 400),
         ("test-de", "spanish-standard", 400),
+        ("test-pl", "polish-standard", 200),
+        ("test-pl", "french-standard", 400),
+        (builtin.as_str(), "french-standard", 200),
+        (builtin.as_str(), "dutch-standard", 200),
     ] {
         let tiles = if tiles == "fixture-en" {
             catalog["defaults"]["selection"]["tile"]["name"]
