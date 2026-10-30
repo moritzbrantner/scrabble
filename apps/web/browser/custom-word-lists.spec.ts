@@ -271,10 +271,23 @@ test("a guest imports with precise feedback, saves and reuses a word list across
 
   /** Opens the native file chooser from the keyboard and selects a file. */
   const chooseWithKeyboard = async (file: ReturnType<typeof textFile>) => {
+    // Start from an empty, feedback-free editor so the import's own outcome is observable.
+    // (An edit clears feedback; filling an already empty box would not be an edit.)
+    await wordsBox(page).fill("X");
+    await wordsBox(page).fill("");
+    await expect(editorRegion(page).getByRole("alert")).toHaveCount(0);
     await tabTo(page, fileInput(page));
     const chooser = page.waitForEvent("filechooser");
     await page.keyboard.press("Space");
     await (await chooser).setFiles(file);
+    // The import is asynchronous (#222): it ends with imported words or a blocking alert.
+    await expect
+      .poll(
+        async () =>
+          (await editorRegion(page).getByRole("alert").count()) > 0 ||
+          (await wordsBox(page).inputValue()) !== "",
+      )
+      .toBe(true);
   };
   const saveWithKeyboard = async () => {
     await tabTo(page, saveButton(page));
