@@ -6,7 +6,6 @@ import { copy, type Copy } from "./copy";
 import { JoinError, lookupGame, lookupRematch, type JoinInformation } from "./create-game";
 import { fixtures } from "./fixtures";
 import {
-  decodePlayerSnapshot,
   decodeWordRejection,
   decodeExchangeRejection,
   encodeGameCommand,
@@ -14,7 +13,7 @@ import {
   type TurnRejection,
   type SubmittedTurnAction,
 } from "./game-protocol";
-import { matchRules, requireMatchRules } from "./match-rules";
+import { localTrust, MatchSession } from "./match-session";
 import { MatchClocks, type ClockObservation } from "./MatchClocks";
 import { TurnHistory } from "./TurnHistory";
 import { useForegroundRetry } from "./foreground-retry";
@@ -114,10 +113,8 @@ export function PlayerPhone({
     }
     let active = true;
     let client: BrowserMatch | undefined;
-    let playerId: string | undefined;
-    let tickHz: number | undefined;
+    const session = new MatchSession(setRules);
     let nameSent = false;
-    let selectedRules: Ruleset | undefined;
     let savedFailed = false;
     let resumeStopped = false;
     let nameTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -144,20 +141,7 @@ export function PlayerPhone({
         if (!active) {
           return;
         }
-        let trust: WebTransportHash[] | undefined;
-        if (certificateHash !== undefined) {
-          if (!/^[0-9a-f]{64}$/.test(certificateHash)) {
-            throw new Error("Invalid local trust");
-          }
-          trust = [
-            {
-              algorithm: "sha-256",
-              value: Uint8Array.from({ length: 32 }, (_, index) =>
-                Number.parseInt(certificateHash.slice(index * 2, index * 2 + 2), 16),
-              ).buffer,
-            },
-          ];
-        }
+        const trust = localTrust(certificateHash);
         client = new BrowserMatch({
           autoReconnect: true,
           endpoint,
@@ -181,11 +165,7 @@ export function PlayerPhone({
               return;
             }
             setConnection(next);
-            if (next.kind === "connected" || next.kind === "synchronizing") {
-              playerId = next.admission.playerId;
-              tickHz = next.admission.tickHz;
-            }
-            if (next.kind === "synchronizing") {
+            if (session.observe(next)) {
               nameSent = false;
               clearTimeout(nameTimeout);
               submittedAction.current = undefined;
@@ -219,18 +199,11 @@ export function PlayerPhone({
             setTurnRejection(feedback);
           },
           onSnapshot: (frame) => {
-            if (!active || playerId === undefined) {
+            const current = active ? session.decode(frame, join.gameId) : undefined;
+            if (current === undefined) {
               return;
             }
-            const current = decodePlayerSnapshot(frame.payload, playerId);
-            if (current.public.game_id !== join.gameId) {
-              throw new ProtocolError("Snapshot belongs to a different match");
-            }
-            if (selectedRules === undefined) {
-              selectedRules = matchRules(current.public);
-              setRules(selectedRules);
-            }
-            requireMatchRules(current.public, selectedRules);
+            const playerId = session.playerId;
             const own = current.public.players.find((player) => player.id === playerId);
             if (own === undefined && current.public.host === undefined) {
               throw new ProtocolError("Player is absent from the roster");
@@ -246,11 +219,9 @@ export function PlayerPhone({
               return;
             }
             setSnapshot(current);
-            if (current.public.clock && tickHz !== undefined) {
-              setClockObservation({
-                serverMs: (Number(frame.tick) * 1000) / tickHz,
-                receivedAt: performance.now(),
-              });
+            const clock = session.clock(frame, current);
+            if (clock !== undefined) {
+              setClockObservation(clock);
             }
             if (desiredName !== undefined && own?.display_name !== desiredName) {
               if (current.public.phase.kind !== "lobby") {
@@ -285,7 +256,7 @@ export function PlayerPhone({
         });
         activeClient.current = client;
         await client.run();
-        if (active && playerId === undefined && !savedFailed && !resumeStopped) {
+        if (active && session.playerId === undefined && !savedFailed && !resumeStopped) {
           // Recheck current authority after a raced admission rejection; never allocate a fallback identity.
           await lookupGame(
             api,

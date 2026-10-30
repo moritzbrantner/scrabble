@@ -11,8 +11,8 @@ import {
   type JoinInformation,
 } from "./create-game";
 import { fixtures } from "./fixtures";
-import { decodePlayerSnapshot, encodeGameCommand } from "./game-protocol";
-import { matchRules, requireMatchRules } from "./match-rules";
+import { encodeGameCommand } from "./game-protocol";
+import { localTrust, MatchSession } from "./match-session";
 import { PlayerInvite } from "./PlayerInvite";
 import { useCopy } from "./preferences";
 import { type PublicSnapshot, type Ruleset } from "./public-state";
@@ -62,23 +62,12 @@ export function LiveBoard({
   >({ kind: "idle" });
   useEffect(() => {
     let mounted = true;
-    let playerId: string | undefined;
-    let tickHz: number | undefined;
     let match: BrowserMatch | undefined;
     let claimSent = false;
     let ownershipReported = false;
-    let selectedRules: Ruleset | undefined;
+    const session = new MatchSession(setRules);
     try {
-      let localTrust: WebTransportHash[] | undefined;
-      if (certificateHash !== undefined) {
-        if (!/^[0-9a-f]{64}$/.test(certificateHash)) {
-          throw new Error("Invalid local certificate hash");
-        }
-        const bytes = Uint8Array.from({ length: 32 }, (_, index) =>
-          Number.parseInt(certificateHash.slice(index * 2, index * 2 + 2), 16),
-        );
-        localTrust = [{ algorithm: "sha-256", value: bytes.buffer }];
-      }
+      const trust = localTrust(certificateHash);
       const route = matchUrl(endpoint, matchId).href;
       const resume = separateBoard ? readBoardSession(route) : undefined;
       // A reloaded (e.g. discarded) tab recovers the creation nonce it saved (#218).
@@ -90,18 +79,14 @@ export function LiveBoard({
         autoReconnect: true,
         ...(resume === undefined ? {} : { resume }),
         ...(separateBoard ? { onResume: saveBoardSession } : {}),
-        ...(localTrust === undefined ? {} : { serverCertificateHashes: localTrust }),
+        ...(trust === undefined ? {} : { serverCertificateHashes: trust }),
         endpoint,
         matchId,
         onState: (next) => {
           if (!mounted) {
             return;
           }
-          if (next.kind === "connected" || next.kind === "synchronizing") {
-            playerId = next.admission.playerId;
-            tickHz = next.admission.tickHz;
-          }
-          if (next.kind === "synchronizing") {
+          if (session.observe(next)) {
             claimSent = false;
             ownershipReported = false;
           }
@@ -109,16 +94,12 @@ export function LiveBoard({
           setState(next);
         },
         onSnapshot: (frame) => {
-          if (!mounted || playerId === undefined) {
+          const projection = mounted ? session.decode(frame) : undefined;
+          if (projection === undefined) {
             return;
           }
-          const projection = decodePlayerSnapshot(frame.payload, playerId);
+          const playerId = session.playerId;
           const current = projection.public;
-          if (selectedRules === undefined) {
-            selectedRules = matchRules(current);
-            setRules(selectedRules);
-          }
-          requireMatchRules(current, selectedRules);
           if (separateBoard) {
             if (current.host === undefined || projection.own_rack.tiles.length !== 0) {
               throw new ProtocolError("Invalid shared board projection");
@@ -176,11 +157,9 @@ export function LiveBoard({
             }
           }
           setSnapshot(current);
-          if (current.clock && tickHz !== undefined) {
-            setClockObservation({
-              serverMs: (Number(frame.tick) * 1000) / tickHz,
-              receivedAt: performance.now(),
-            });
+          const clock = session.clock(frame, projection);
+          if (clock !== undefined) {
+            setClockObservation(clock);
           }
           if (current.phase.kind !== "lobby") {
             clearTimeout(timeout.current);
