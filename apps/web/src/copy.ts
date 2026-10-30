@@ -167,6 +167,7 @@ export const en = {
   "join.full": "This game is full. Ask the host for another invitation.",
   "join.started": "This game has already started. New players cannot join.",
   "join.expired": "This game has expired. Ask the host for a new invitation.",
+  "join.inactive": "This game ended due to inactivity. Ask the host for a new invitation.",
   "join.unavailable": "This game is no longer available. Ask the host for a new invitation.",
   "join.checkFailed": "Unable to check this game. Check your connection and retry.",
   "join.differentGame": "The server returned a different game.",
@@ -716,6 +717,8 @@ const de: Record<CopyKey, string> = {
   "join.full": "Dieses Spiel ist voll. Bitte den Gastgeber um eine andere Einladung.",
   "join.started": "Dieses Spiel hat bereits begonnen. Neue Spieler können nicht mehr beitreten.",
   "join.expired": "Dieses Spiel ist abgelaufen. Bitte den Gastgeber um eine neue Einladung.",
+  "join.inactive":
+    "Dieses Spiel wurde wegen Inaktivität beendet. Bitte den Gastgeber um eine neue Einladung.",
   "join.unavailable":
     "Dieses Spiel ist nicht mehr verfügbar. Bitte den Gastgeber um eine neue Einladung.",
   "join.checkFailed":
@@ -1281,6 +1284,7 @@ const es: Record<CopyKey, string> = {
   "join.full": "Esta partida está llena. Pide al anfitrión otra invitación.",
   "join.started": "Esta partida ya ha comenzado. No pueden entrar jugadores nuevos.",
   "join.expired": "Esta partida ha caducado. Pide al anfitrión una invitación nueva.",
+  "join.inactive": "Esta partida terminó por inactividad. Pide al anfitrión una invitación nueva.",
   "join.unavailable": "Esta partida ya no está disponible. Pide al anfitrión una invitación nueva.",
   "join.checkFailed":
     "No se pudo comprobar la partida. Comprueba tu conexión e inténtalo de nuevo.",

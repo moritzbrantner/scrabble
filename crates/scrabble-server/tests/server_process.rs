@@ -623,6 +623,10 @@ async fn creation_retries_capacity_origin_and_restart_keep_one_authoritative_gam
     let second_join = server.api("POST", "/games", Some(&second), origin).await;
     assert_eq!(second_join.0, 200);
     assert!(second_join.1["matchId"].as_str().unwrap().starts_with("b_"));
+    // Both games have a connected player, so nothing can be evicted to make room (#219).
+    let _second_connection = server
+        .connect(&client, second_join.1["matchPath"].as_str().unwrap())
+        .await;
     assert_ne!(second_join.1["matchId"], first.1["matchId"]);
     let excess = serde_json::json!({"version":1, "requestId":"03".repeat(16), "requestedAt":now});
     assert_eq!(

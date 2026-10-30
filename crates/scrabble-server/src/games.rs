@@ -14,6 +14,21 @@ use tokio::sync::Mutex;
 
 pub const CREATE_RETRY_SECONDS: u64 = 120;
 const CLOCK_SKEW_SECONDS: u64 = 10;
+/// #219: any created game with no connected player for this long retires as inactive.
+pub const IDLE_RETIREMENT_SECONDS: u64 = 60 * 60;
+/// #219: a never-started game with no seated player for this long retires as inactive.
+pub const UNSTARTED_RETIREMENT_SECONDS: u64 = 15 * 60;
+/// #219: retry hint returned with `at-capacity` when every game has a connected player.
+pub const CAPACITY_RETRY_SECONDS: u64 = 30;
+
+/// Wall-clock activity the sweeper last observed for one created game.
+#[derive(Clone, Copy)]
+struct Activity {
+    /// Last time a player (or the board) was connected.
+    connected_at: u64,
+    /// Last time the game had at least one seated player.
+    seated_at: u64,
+}
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -140,6 +155,8 @@ pub enum GameOperationError {
     InvalidRequest,
     ExpiredRequest,
     ExpiredMatch,
+    /// Retired early by the inactivity policy (#219).
+    InactiveMatch,
     JoinClosed,
     NotServing,
     Draining,
@@ -179,6 +196,10 @@ pub struct Games {
     /// Finished match -> its rematch. Kept beside placement, outside both simulations, their
     /// replay and recovery evidence; removed when the finished match retires.
     rematches: Mutex<HashMap<String, JoinInformation>>,
+    /// Sweeper observations per created game; in memory, so a restart starts a fresh window.
+    activity: Mutex<HashMap<String, Activity>>,
+    /// Games retired for inactivity -> their original expiry, so returning players learn why.
+    inactive: Mutex<HashMap<String, u64>>,
 }
 impl Games {
     pub fn new(
@@ -194,6 +215,8 @@ impl Games {
             reconnect_grace_ticks,
             creation: Mutex::new(()),
             rematches: Mutex::new(HashMap::new()),
+            activity: Mutex::new(HashMap::new()),
+            inactive: Mutex::new(HashMap::new()),
         }
     }
     pub async fn create(
@@ -213,7 +236,7 @@ impl Games {
             _ => return Err(GameOperationError::InvalidRequest),
         }
         .map_err(|_| GameOperationError::Internal)?;
-        self.place_created(&id, request.requested_at).await
+        self.place_created(&id, request.requested_at, now).await
     }
     /// Runs one guest board-layout library operation off the async executor (#101).
     pub async fn with_layouts<T: Send + 'static>(
@@ -317,9 +340,7 @@ impl Games {
             if self.host.is_draining().await {
                 return Err(GameOperationError::Draining.into());
             }
-            if self.host.statuses().await.len() >= self.host.max_matches() {
-                return Err(GameOperationError::AtCapacity.into());
-            }
+            self.make_room(now).await?;
             let factory = self.factory.clone();
             let initialize_id = id.clone();
             tokio::task::spawn_blocking(move || factory.initialize(&initialize_id, prepared))
@@ -327,7 +348,7 @@ impl Games {
                 .map_err(|_| GameOperationError::Internal)?
                 .map_err(|_| GameOperationError::Internal)?;
         }
-        let result = self.place_created(&id, request.requested_at).await;
+        let result = self.place_created(&id, request.requested_at, now).await;
         if result.is_err() && newly_initialized {
             let factory = self.factory.clone();
             tokio::task::spawn_blocking(move || factory.retire_initialization(&id))
@@ -343,6 +364,7 @@ impl Games {
         &self,
         id: &MatchId,
         requested_at: u64,
+        now: u64,
     ) -> Result<JoinInformation, GameOperationError> {
         let statuses = self.host.statuses().await;
         // Even a duplicate retry is rejected during drain. Placement remains the final authority.
@@ -370,6 +392,7 @@ impl Games {
             {
                 return Err(GameOperationError::Internal);
             }
+            self.make_room(now).await?;
             let factory = self.factory.clone();
             let initialize_id = id.clone();
             let simulation = tokio::task::spawn_blocking(move || factory.create(&initialize_id))
@@ -434,7 +457,7 @@ impl Games {
                 Err(GameOperationError::RematchExists)
             };
         }
-        let join = self.place_created(&id, request.requested_at).await?;
+        let join = self.place_created(&id, request.requested_at, now).await?;
         self.rematches
             .lock()
             .await
@@ -516,6 +539,9 @@ impl Games {
         if self.host.is_draining().await {
             return Err(GameOperationError::Draining);
         }
+        if self.inactive.lock().await.contains_key(id.as_str()) {
+            return Err(GameOperationError::InactiveMatch);
+        }
         self.host
             .inspect(id, |runtime| {
                 if runtime.is_draining() || runtime.is_frozen() {
@@ -560,36 +586,131 @@ impl Games {
             expires_at: created_at.saturating_add(MATCH_LIFETIME_SECONDS),
         })
     }
+    /// Explicit retirement (`DELETE`): only lifetime-expired or finished-and-retained games.
     pub async fn retire(&self, id: &MatchId, now: u64) -> Result<(), GameOperationError> {
         // Serialized with creation so a racing rematch cannot link a match retired meanwhile.
         let _creation = self.creation.lock().await;
-        let due = self
-            .host
+        if !self.observe(id, now).await?.due {
+            return Err(GameOperationError::NotRetirable);
+        }
+        self.retire_locked(id, false).await
+    }
+    /// Lifecycle decode for the sweeper: hard expiry/finished grace, phase and seated players.
+    async fn observe(&self, id: &MatchId, now: u64) -> Result<Observation, GameOperationError> {
+        self.host
             .inspect(id, |runtime| {
                 let snapshot = runtime
                     .snapshot()
                     .map_err(|_| GameOperationError::Internal)?;
-                retirement_due(&snapshot.payload, now, runtime.current_tick())
-                    .map_err(|_| GameOperationError::Internal)
+                #[derive(Deserialize)]
+                struct GameHeader {
+                    phase: scrabble_game::protocol::Phase,
+                    players: Vec<serde::de::IgnoredAny>,
+                }
+                #[derive(Deserialize)]
+                struct Projection {
+                    game: GameHeader,
+                }
+                let current: Projection = serde_json::from_slice(&snapshot.payload)
+                    .map_err(|_| GameOperationError::Internal)?;
+                Ok(Observation {
+                    due: retirement_due(&snapshot.payload, now, runtime.current_tick())
+                        .map_err(|_| GameOperationError::Internal)?,
+                    lobby: matches!(current.game.phase, scrabble_game::protocol::Phase::Lobby {}),
+                    seated: !current.game.players.is_empty(),
+                })
             })
-            .await??;
-        if !due {
-            return Err(GameOperationError::NotRetirable);
-        }
+            .await?
+    }
+    /// Callers hold the creation lock. Recovery state goes with the runtime.
+    async fn retire_locked(&self, id: &MatchId, inactive: bool) -> Result<(), GameOperationError> {
         self.host.retire(id).await?;
         self.rematches.lock().await.remove(id.as_str());
+        self.activity.lock().await.remove(id.as_str());
+        if inactive && let Some(created_at) = creation_time(id) {
+            self.inactive.lock().await.insert(
+                id.as_str().to_owned(),
+                created_at.saturating_add(MATCH_LIFETIME_SECONDS),
+            );
+        }
         self.factory
             .retire_initialization(id)
             .map_err(|_| GameOperationError::Internal)?;
         Ok(())
     }
+    /// At the match cap, evicts the least-recently-active created game with nobody connected.
+    /// Callers hold the creation lock.
+    async fn make_room(&self, now: u64) -> Result<(), GameOperationError> {
+        let statuses = self.host.statuses().await;
+        if statuses.len() < self.host.max_matches() {
+            return Ok(());
+        }
+        let victim = {
+            let activity = self.activity.lock().await;
+            statuses
+                .iter()
+                .filter(|status| {
+                    status.active_players == 0
+                        && !status.draining
+                        && !status.frozen
+                        && creation_time(&status.id).is_some()
+                })
+                .min_by_key(|status| {
+                    activity
+                        .get(status.id.as_str())
+                        .map_or(now, |seen| seen.connected_at)
+                })
+                .map(|status| status.id.clone())
+        };
+        let Some(victim) = victim else {
+            return Err(GameOperationError::AtCapacity);
+        };
+        self.retire_locked(&victim, true).await
+    }
     pub async fn sweep(&self, now: u64) {
+        self.inactive
+            .lock()
+            .await
+            .retain(|_, expires_at| now < *expires_at);
         for status in self.host.statuses().await {
-            match self.retire(&status.id, now).await {
+            if status.draining || status.frozen || creation_time(&status.id).is_none() {
+                continue;
+            }
+            let _creation = self.creation.lock().await;
+            let observed = match self.observe(&status.id, now).await {
+                Ok(observed) => observed,
+                Err(GameOperationError::UnknownMatch | GameOperationError::Draining) => continue,
+                Err(_) => {
+                    eprintln!("game retirement failed");
+                    continue;
+                }
+            };
+            let seen = {
+                let mut activity = self.activity.lock().await;
+                let seen = activity
+                    .entry(status.id.as_str().to_owned())
+                    .or_insert(Activity {
+                        connected_at: now,
+                        seated_at: now,
+                    });
+                if status.active_players > 0 {
+                    seen.connected_at = now;
+                }
+                if observed.seated {
+                    seen.seated_at = now;
+                }
+                *seen
+            };
+            let inactive = now.saturating_sub(seen.connected_at) >= IDLE_RETIREMENT_SECONDS
+                || (observed.lobby
+                    && now.saturating_sub(seen.seated_at) >= UNSTARTED_RETIREMENT_SECONDS);
+            if !observed.due && !inactive {
+                continue;
+            }
+            match self.retire_locked(&status.id, !observed.due).await {
                 Ok(())
                 | Err(
-                    GameOperationError::NotRetirable
-                    | GameOperationError::UnknownMatch
+                    GameOperationError::UnknownMatch
                     | GameOperationError::Draining
                     | GameOperationError::NotServing,
                 ) => {}
@@ -597,6 +718,12 @@ impl Games {
             }
         }
     }
+}
+
+struct Observation {
+    due: bool,
+    lobby: bool,
+    seated: bool,
 }
 
 #[cfg(test)]
@@ -662,6 +789,66 @@ mod tests {
             shutdown.send(()).await.unwrap();
             tasks.join_next().await.unwrap().unwrap().unwrap();
         }).await.expect("lifetime retirement must finish against the live runtime");
+    }
+
+    #[tokio::test]
+    async fn inactive_games_retire_and_the_least_active_unconnected_game_is_evicted_at_capacity() {
+        use game_server::{
+            MatchHost, MatchHostWebTransportConfig, RejectMatchControlService,
+            serve_live_match_host_with_control_and_shutdown,
+        };
+        use std::{collections::BTreeMap, time::Duration};
+        use tokio::{sync::mpsc, task::JoinSet};
+        use wtransport::Identity;
+        tokio::time::timeout(Duration::from_secs(10), async {
+            let directory = tempfile::tempdir().unwrap();
+            let identity = Identity::self_signed(["localhost", "127.0.0.1"]).unwrap();
+            let cert = directory.path().join("cert.pem");
+            let key = directory.path().join("key.pem");
+            identity.certificate_chain().store_pemfile(&cert).await.unwrap();
+            identity.private_key().store_secret_pemfile(&key).await.unwrap();
+            let config = crate::config::ServerConfig::from_values(&BTreeMap::from([
+                ("SCRABBLE_MATCH_IDS".into(), String::new()),
+                ("SCRABBLE_SEED_FILE".into(), directory.path().join("seed").to_str().unwrap().into()),
+                ("SCRABBLE_RECOVERY_DIR".into(), directory.path().join("recovery").to_str().unwrap().into()),
+            ])).unwrap();
+            let host = LiveMatchHost::new(MatchHost::new(2).unwrap());
+            let games = Games::new(host.clone(), MatchFactory::new(&config).unwrap(), config.route_prefix.clone(), 1200);
+            let socket = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+            let port = socket.local_addr().unwrap().port();
+            drop(socket);
+            let (shutdown, receiver) = mpsc::channel(1);
+            let mut tasks = JoinSet::new();
+            let serving = host.clone();
+            tasks.spawn(async move { serve_live_match_host_with_control_and_shutdown(serving, RejectMatchControlService,
+                MatchHostWebTransportConfig { port, certificate_pem: cert, private_key_pem: key,
+                    route_prefix: config.route_prefix, allowed_origins: None, drain_grace: Duration::ZERO }, receiver).await });
+            while !host.is_serving() {
+                tokio::select! { result = tasks.join_next() => panic!("server exited before readiness: {result:?}"), _ = tokio::task::yield_now() => {} }
+            }
+            let now = unix_seconds().unwrap();
+            let create = |byte: &str, at: u64| CreateGame { version: 2, request_id: byte.repeat(16), requested_at: at };
+            let first = games.create(&create("01", now), now).await.unwrap();
+            games.sweep(now).await;
+            let second = games.create(&create("02", now + 60), now + 60).await.unwrap();
+            games.sweep(now + 60).await;
+            // At the cap of two, the least recently active unconnected game makes room.
+            let third = games.create(&create("03", now + 120), now + 120).await.unwrap();
+            let first_id = MatchId::new(&first.match_id).unwrap();
+            assert_eq!(games.lookup(&first_id, now + 120).await, Err(GameOperationError::InactiveMatch));
+            let second_id = MatchId::new(&second.match_id).unwrap();
+            assert_eq!(games.lookup(&second_id, now + 120).await.unwrap(), second);
+            // Unstarted with no seated player: retired after the unstarted window, not before.
+            games.sweep(now + 60 + UNSTARTED_RETIREMENT_SECONDS - 1).await;
+            assert_eq!(host.statuses().await.len(), 2);
+            games.sweep(now + 60 + UNSTARTED_RETIREMENT_SECONDS).await;
+            assert_eq!(games.lookup(&second_id, now + 60 + UNSTARTED_RETIREMENT_SECONDS).await, Err(GameOperationError::InactiveMatch));
+            let third_id = MatchId::new(&third.match_id).unwrap();
+            assert!(games.lookup(&third_id, now + 60 + UNSTARTED_RETIREMENT_SECONDS).await.is_ok());
+            assert_eq!(host.statuses().await.len(), 1);
+            shutdown.send(()).await.unwrap();
+            tasks.join_next().await.unwrap().unwrap().unwrap();
+        }).await.expect("inactivity retirement must finish against the live runtime");
     }
 
     #[test]

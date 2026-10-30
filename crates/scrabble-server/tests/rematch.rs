@@ -739,13 +739,17 @@ async fn rematch_respects_capacity_and_drain_without_recording_a_link() {
     let board_nonce = "55".repeat(16);
     let finished = board_match(&stack, &board_nonce, now, true).await;
     let path = format!("/games/{}/rematch", finished.join.match_id);
-    let other = stack.create_board_match(&"66".repeat(16), now).await;
+    // A connected board keeps the other game from being evicted to make room (#219).
+    let other = board_match(&stack, &"66".repeat(16), now, false).await;
     assert_eq!(stack.hosted().await, 2);
     let request = "77".repeat(16);
     let body = rematch_body(&board_nonce, &request, now);
     assert_eq!(
         stack.post_json(&path, &body).await,
-        (429, serde_json::json!({"error": "at-capacity"}))
+        (
+            429,
+            serde_json::json!({"error": "at-capacity", "retryAfterSeconds": 30})
+        )
     );
     assert_eq!(
         stack.get(&path).await,
@@ -756,10 +760,9 @@ async fn rematch_respects_capacity_and_drain_without_recording_a_link() {
     assert_eq!(stack.hosted().await, 2);
 
     // Freeing capacity lets the same intent succeed.
-    let other_id = MatchId::new(other.match_id).unwrap();
     stack
         .games
-        .retire(&other_id, other.expires_at)
+        .retire(&other.id, other.join.expires_at)
         .await
         .unwrap();
     let (status, created) = stack.post_json(&path, &body).await;

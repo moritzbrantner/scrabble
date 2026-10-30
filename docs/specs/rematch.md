@@ -60,7 +60,7 @@ If admission fails (lobby closed, full or expired), the phone shows the normal j
 
 ## Link lifetime
 
-The link lives in the server's in-memory game registry, next to placement, not in either match's simulation state. It is removed when the finished match retires (at the earliest five minutes after completion, see [game creation](game-creation.md#lifetime-and-retirement)). It is not part of graceful-restart recovery: after a server restart, both matches recover, but phones of the finished match can no longer discover the link. They can still join the rematch through its new invite on the board.
+The link lives in the server's in-memory game registry, next to placement, not in either match's simulation state. It is removed when the finished match retires (at the earliest ten minutes after completion, see [game creation](game-creation.md#lifetime-and-retirement)). It is not part of graceful-restart recovery: after a server restart, both matches recover, but phones of the finished match can no longer discover the link. They can still join the rematch through its new invite on the board.
 
 ## Acceptance evidence
 
