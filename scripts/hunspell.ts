@@ -26,10 +26,11 @@ export function decode(bytes: Uint8Array, encoding: string): string {
   const label = /^ISO8859-1$/i.test(encoding) ? "latin1" : encoding;
   return new TextDecoder(label).decode(bytes);
 }
-/** The SET encoding declared by an .aff file (defaults to ISO8859-1, as Hunspell does). */
+/** The SET encoding declared anywhere in an .aff file (defaults to ISO8859-1, as Hunspell
+ * does); pt_BR declares it after a long comment header. */
 export function affixEncoding(bytes: Uint8Array): string {
-  const head = new TextDecoder("latin1").decode(bytes.subarray(0, 4096));
-  return /^SET\s+(\S+)/m.exec(head)?.[1] ?? "ISO8859-1";
+  const text = new TextDecoder("latin1").decode(bytes);
+  return /^SET\s+(\S+)/m.exec(text)?.[1] ?? "ISO8859-1";
 }
 
 function flagParser(type: string | undefined): (text: string) => string[] {

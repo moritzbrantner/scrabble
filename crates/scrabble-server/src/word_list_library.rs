@@ -273,7 +273,7 @@ fn prepare(source: ContentIdentity, words: &str, limits: &WordListLimits) -> Res
             reason: "the word list contains no words".into(),
             line: None,
         },
-        WordListError::InvalidIdentity => WordListLibraryError::Internal,
+        WordListError::InvalidIdentity | WordListError::TooLarge => WordListLibraryError::Internal,
     })?;
     let word_count = list.words().count();
     if word_count > limits.max_words {
