@@ -36,10 +36,13 @@ pub async fn serve(
         },
     )
     .await?;
+    // One pooled outbound client for push delivery and account verification (#214).
+    let client = crate::http_client::client()?;
     let push = Arc::new(crate::push::PushService::open(
         &config.push_directory,
         config.board_origin.clone(),
         config.push_insecure_test,
+        client.clone(),
     )?);
     let watcher = tokio::spawn(crate::push::watch(prepared.host(), Arc::clone(&push)));
     let _watcher = Forwarder(watcher.abort_handle());
@@ -84,6 +87,7 @@ pub async fn serve(
         Arc::new(crate::accounts::Accounts::new(
             url,
             matches!(config.mode, crate::config::Mode::Local),
+            client,
         ))
     });
     let origins = api::BoardOrigins {

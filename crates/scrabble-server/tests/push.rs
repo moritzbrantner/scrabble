@@ -12,6 +12,10 @@ use std::{
     sync::{Arc, Mutex, mpsc},
 };
 
+fn client() -> reqwest::Client {
+    scrabble_server::http_client::client().unwrap()
+}
+
 struct Device {
     private: agreement::EphemeralPrivateKey,
     subscription: Subscription,
@@ -112,7 +116,7 @@ fn push_service(status: Arc<Mutex<u16>>) -> (String, mpsc::Receiver<Received>) {
             let code = *status.lock().unwrap();
             write!(
                 stream,
-                "HTTP/1.1 {code} Status\r\nContent-Length: 0\r\n\r\n"
+                "HTTP/1.1 {code} Status\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
             )
             .unwrap();
             sender
@@ -156,13 +160,19 @@ fn subscribe(
     )
 }
 
-#[test]
-fn every_subscribed_device_of_the_new_active_player_gets_one_encrypted_content_free_push() {
+#[tokio::test]
+async fn every_subscribed_device_of_the_new_active_player_gets_one_encrypted_content_free_push() {
     let directory = tempfile::tempdir().unwrap();
     let status = Arc::new(Mutex::new(201));
     let (origin, received) = push_service(Arc::clone(&status));
     let service = Arc::new(
-        PushService::open(directory.path(), "https://board.example".into(), true).unwrap(),
+        PushService::open(
+            directory.path(),
+            "https://board.example".into(),
+            true,
+            client(),
+        )
+        .unwrap(),
     );
     let key: serde_json::Value = serde_json::from_slice(
         &control(&service, 2, serde_json::json!({"kind":"push_key"})).unwrap(),
@@ -191,7 +201,10 @@ fn every_subscribed_device_of_the_new_active_player_gets_one_encrypted_content_f
     assert!(service.observe(id, turn(2, "2")).is_empty());
 
     for delivery in &deliveries {
-        assert_eq!(service.deliver(delivery, &turn_payload()).unwrap(), 201);
+        assert_eq!(
+            service.deliver(delivery, &turn_payload()).await.unwrap(),
+            201
+        );
     }
     let mut messages: BTreeMap<String, Received> = (0..2)
         .map(|_| {
@@ -225,13 +238,21 @@ fn every_subscribed_device_of_the_new_active_player_gets_one_encrypted_content_f
     assert!(received.try_recv().is_err());
 }
 
-#[test]
-fn devices_unsubscribe_independently_and_state_survives_restart_without_repeats() {
+#[tokio::test]
+async fn devices_unsubscribe_independently_and_state_survives_restart_without_repeats() {
     let directory = tempfile::tempdir().unwrap();
     let status = Arc::new(Mutex::new(201));
     let (origin, _received) = push_service(Arc::clone(&status));
     let open = || {
-        Arc::new(PushService::open(directory.path(), "https://board.example".into(), true).unwrap())
+        Arc::new(
+            PushService::open(
+                directory.path(),
+                "https://board.example".into(),
+                true,
+                client(),
+            )
+            .unwrap(),
+        )
     };
     let service = open();
     let phone = device(format!("{origin}/push/phone"));
@@ -276,7 +297,10 @@ fn devices_unsubscribe_independently_and_state_survives_restart_without_repeats(
     assert_eq!(after.len(), 1);
     // A push service reporting the subscription gone (410) removes it.
     *status.lock().unwrap() = 410;
-    assert_eq!(service.deliver(&after[0], &turn_payload()).unwrap(), 410);
+    assert_eq!(
+        service.deliver(&after[0], &turn_payload()).await.unwrap(),
+        410
+    );
     service.observe(id, turn(3, "6"));
     assert!(service.observe(id, turn(2, "7")).is_empty());
 
@@ -290,7 +314,13 @@ fn devices_unsubscribe_independently_and_state_survives_restart_without_repeats(
 fn malformed_insecure_and_excess_subscriptions_are_rejected() {
     let directory = tempfile::tempdir().unwrap();
     let secure = Arc::new(
-        PushService::open(directory.path(), "https://board.example".into(), false).unwrap(),
+        PushService::open(
+            directory.path(),
+            "https://board.example".into(),
+            false,
+            client(),
+        )
+        .unwrap(),
     );
     let plain = device("http://127.0.0.1:9/push".into());
     assert!(subscribe(&secure, 2, &plain.subscription).is_err());
