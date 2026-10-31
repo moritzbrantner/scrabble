@@ -2,3 +2,4 @@
 # Keep their source-authored bytes and integrity hashes intact.
 .conventions/
 conventions.lock.json
+docs/specs/story-coverage.md

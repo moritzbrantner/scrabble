@@ -17,6 +17,8 @@
     "build": "vite build --config apps/web/vite.config.ts",
     "check": "bun run format:check && bun run typecheck && bun run lint && bun run test && bun run build && bun run test:browser",
     "test:browser": "bun scripts/test-browser.ts && bun scripts/test-browser.ts --pages",
+    "test:stories": "bun scripts/test-browser.ts --grep @story",
+    "stories:coverage": "bun scripts/story-coverage.ts",
     "review": "bun scripts/test-browser.ts --review",
     "test:deployment": "bun scripts/test-deployment.ts",
     "fixtures:generate": "cargo run -q -p scrabble-game --example public_fixtures --locked"
@@ -42,7 +44,8 @@
     "oxlint": "1.90.0",
     "oxlint-tsgolint": "7.0.2005",
     "typescript": "7.0.2",
-    "vite": "8.3.5"
+    "vite": "8.3.5",
+    "xstate": "5.33.3"
   },
   "packageManager": "bun@1.4.4"
 }
