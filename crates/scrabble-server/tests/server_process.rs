@@ -82,12 +82,8 @@ impl Server {
             ("SCRABBLE_CERT_PEM".into(), cert.to_str().unwrap().into()),
             ("SCRABBLE_KEY_PEM".into(), key.to_str().unwrap().into()),
             (
-                "SCRABBLE_SEED_FILE".into(),
-                directory.path().join("seed").to_str().unwrap().into(),
-            ),
-            (
-                "SCRABBLE_RECOVERY_DIR".into(),
-                directory.path().join("recovery").to_str().unwrap().into(),
+                "SCRABBLE_STATE_DIR".into(),
+                directory.path().to_str().unwrap().into(),
             ),
             ("SCRABBLE_MATCH_IDS".into(), "alpha,beta".into()),
             ("SCRABBLE_TEST_SEED".into(), "07".repeat(32)),
@@ -752,16 +748,6 @@ async fn profile_server(compact_default: bool, maximum_names: bool) -> Server {
     server.values.insert(
         "SCRABBLE_PROFILE_CATALOG_FILE".into(),
         catalog.to_str().unwrap().into(),
-    );
-    server.values.insert(
-        "SCRABBLE_MATCH_CONFIGURATION_DIR".into(),
-        server
-            .directory
-            .path()
-            .join("configurations")
-            .to_str()
-            .unwrap()
-            .into(),
     );
     server.start().await;
     server

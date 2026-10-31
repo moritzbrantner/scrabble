@@ -62,15 +62,7 @@ fn values(root: &Path) -> BTreeMap<String, String> {
             "SCRABBLE_PROFILE_CATALOG_FILE".into(),
             catalog.to_str().unwrap().into(),
         ),
-        ("SCRABBLE_SEED_FILE".into(), path("seed")),
-        ("SCRABBLE_RECOVERY_DIR".into(), path("recovery")),
-        (
-            "SCRABBLE_MATCH_CONFIGURATION_DIR".into(),
-            path("configurations"),
-        ),
-        ("SCRABBLE_BOARD_LAYOUT_DIR".into(), path("layouts")),
-        ("SCRABBLE_WORD_LIST_DIR".into(), path("word-lists")),
-        ("SCRABBLE_TILE_PROFILE_DIR".into(), path("tile-profiles")),
+        ("SCRABBLE_STATE_DIR".into(), root.to_str().unwrap().into()),
         ("SCRABBLE_MAX_MATCHES".into(), "8".into()),
         (
             "SCRABBLE_CERT_PEM".into(),

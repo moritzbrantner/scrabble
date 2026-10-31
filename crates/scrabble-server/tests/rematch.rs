@@ -65,12 +65,8 @@ impl Stack {
             ("SCRABBLE_MATCH_IDS".into(), String::new()),
             ("SCRABBLE_TEST_SEED".into(), "07".repeat(32)),
             (
-                "SCRABBLE_SEED_FILE".into(),
-                directory.path().join("seed").to_str().unwrap().into(),
-            ),
-            (
-                "SCRABBLE_RECOVERY_DIR".into(),
-                directory.path().join("recovery").to_str().unwrap().into(),
+                "SCRABBLE_STATE_DIR".into(),
+                directory.path().to_str().unwrap().into(),
             ),
         ]))
         .unwrap();

@@ -363,12 +363,8 @@ fn offline_report_verifies_persisted_native_evidence_and_excludes_private_fields
         ("SCRABBLE_MATCH_IDS".into(), "alpha".into()),
         ("SCRABBLE_TEST_SEED".into(), "07".repeat(32)),
         (
-            "SCRABBLE_SEED_FILE".into(),
-            directory.path().join("seed").to_str().unwrap().into(),
-        ),
-        (
-            "SCRABBLE_RECOVERY_DIR".into(),
-            directory.path().join("recovery").to_str().unwrap().into(),
+            "SCRABBLE_STATE_DIR".into(),
+            directory.path().to_str().unwrap().into(),
         ),
     ]))
     .unwrap();

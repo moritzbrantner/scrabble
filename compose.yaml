@@ -18,12 +18,7 @@ services:
       SCRABBLE_GUEST_BOARD_ORIGINS: ${DEPLOY_GUEST_BOARD_ORIGINS:-https://moritzbrantner.github.io}
       SCRABBLE_CERT_PEM: /tls/cert.pem
       SCRABBLE_KEY_PEM: /tls/key.pem
-      SCRABBLE_SEED_FILE: /state/seed
-      SCRABBLE_RECOVERY_DIR: /state/recovery
-      SCRABBLE_BOARD_LAYOUT_DIR: /state/layouts
-      SCRABBLE_WORD_LIST_DIR: /state/word-lists
-      SCRABBLE_TILE_PROFILE_DIR: /state/tile-profiles
-      SCRABBLE_PUSH_DIR: /state/push
+      SCRABBLE_STATE_DIR: /state
       SCRABBLE_ROUTE_PREFIX: /game
       SCRABBLE_MATCH_IDS: ""
       SCRABBLE_MAX_MATCHES: "16"

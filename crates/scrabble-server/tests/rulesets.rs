@@ -36,12 +36,8 @@ fn configuration(directory: &Path) -> (BTreeMap<String, String>, ServerConfig) {
         ),
         ("SCRABBLE_DICTIONARY_REVISION".into(), "1".into()),
         (
-            "SCRABBLE_SEED_FILE".into(),
-            directory.join("seed").to_str().unwrap().into(),
-        ),
-        (
-            "SCRABBLE_RECOVERY_DIR".into(),
-            directory.join("recovery").to_str().unwrap().into(),
+            "SCRABBLE_STATE_DIR".into(),
+            directory.to_str().unwrap().into(),
         ),
         ("SCRABBLE_TEST_SEED".into(), "07".repeat(32)),
     ]);

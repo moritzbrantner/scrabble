@@ -194,20 +194,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             key_pem.to_str().ok_or("invalid key path")?.into(),
         ),
         (
-            "SCRABBLE_SEED_FILE".into(),
-            directory
-                .join("seed")
-                .to_str()
-                .ok_or("invalid seed path")?
-                .into(),
-        ),
-        (
-            "SCRABBLE_RECOVERY_DIR".into(),
-            directory
-                .join("recovery")
-                .to_str()
-                .ok_or("invalid recovery path")?
-                .into(),
+            "SCRABBLE_STATE_DIR".into(),
+            directory.to_str().ok_or("invalid state path")?.into(),
         ),
     ]);
     let configured = std::env::args().nth(3).as_deref() == Some("playable");
@@ -288,25 +276,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             "2026.02.25-recipe1".into(),
         );
     }
-    values.insert(
-        "SCRABBLE_MATCH_CONFIGURATION_DIR".into(),
-        directory
-            .join("configurations")
-            .to_str()
-            .ok_or("invalid configuration path")?
-            .into(),
-    );
-    // #101 durable guest board-layout library (see tests/custom_board_layouts.rs).
-    values.insert(
-        "SCRABBLE_BOARD_LAYOUT_DIR".into(),
-        directory
-            .join("layouts")
-            .to_str()
-            .ok_or("invalid layout library path")?
-            .into(),
-    );
-    retain_backend_without_layout_library(&mut values);
-    retain_legacy_backend_if_catalog_is_unavailable(&mut values)?;
     // Test-only paths and configuration let later tests select fresh real creation inputs.
     // The persisted derivation key remains in its private seed file and never reaches metadata.
     std::fs::write(
@@ -334,37 +303,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     signal.abort();
     let _ = signal.await;
     result
-}
-
-/// Keep a pre-#101 backend runnable so unrelated suites still execute; the custom
-/// layout acceptance then fails on its real missing `/layouts` routes instead.
-fn retain_backend_without_layout_library(values: &mut std::collections::BTreeMap<String, String>) {
-    if let Err(error) = scrabble_server::config::ServerConfig::from_values(values)
-        && error.to_string() == "unknown server configuration key SCRABBLE_BOARD_LAYOUT_DIR"
-    {
-        values.remove("SCRABBLE_BOARD_LAYOUT_DIR");
-    }
-}
-
-/// Keep pre-feature executable fixtures runnable without pretending the new catalog works.
-/// The new acceptance still requires GET /profiles = 200 and the actual creation controls.
-/// Only the specifically absent #94 keys permit this baseline compatibility branch.
-fn retain_legacy_backend_if_catalog_is_unavailable(
-    values: &mut std::collections::BTreeMap<String, String>,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
-    if let Err(error) = scrabble_server::config::ServerConfig::from_values(values) {
-        let message = error.to_string();
-        if message == "unknown server configuration key SCRABBLE_PROFILE_CATALOG_FILE"
-            || message == "unknown server configuration key SCRABBLE_MATCH_CONFIGURATION_DIR"
-        {
-            values.remove("SCRABBLE_PROFILE_CATALOG_FILE");
-            values.remove("SCRABBLE_MATCH_CONFIGURATION_DIR");
-            scrabble_server::config::ServerConfig::from_values(values)?;
-        } else {
-            return Err(error.into());
-        }
-    }
-    Ok(())
 }
 
 /// #98 acceptance harness: an authored multi-letter tile profile and a compatible word list,
