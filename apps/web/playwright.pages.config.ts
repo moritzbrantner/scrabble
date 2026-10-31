@@ -13,6 +13,7 @@ export default defineConfig({
     "**/production-configuration.spec.ts",
     "**/performance-budgets.spec.ts",
     "**/rematch.spec.ts",
+    "**/hosted-account-cookie.spec.ts",
   ],
   // The bundle compiles in one shared fixture, and performance timing stays serial.
   fullyParallel: false,

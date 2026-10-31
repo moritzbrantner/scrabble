@@ -14,6 +14,7 @@ export default defineConfig({
     "**/production-configuration.spec.ts",
     "**/performance-budgets.spec.ts",
     "**/rematch.spec.ts",
+    "**/hosted-account-cookie.spec.ts",
   ],
   timeout: 30_000,
   retries: 0,

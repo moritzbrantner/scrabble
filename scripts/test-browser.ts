@@ -137,6 +137,9 @@ try {
         certificateHash: z.array(z.number()).length(32),
       })
       .parse(await Bun.file(gameMetadataPath).json());
+    const hosted = z
+      .object({ endpoint: z.string(), api: z.string() })
+      .parse(await Bun.file("deploy/client.json").json());
     const production = { VITE_SCRABBLE_TEST_CERTIFICATE_HASH: "private-certificate-canary" };
     await Promise.all([
       buildClient("pages-build", "test", {
@@ -150,6 +153,12 @@ try {
         ...production,
         VITE_SCRABBLE_ENDPOINT: "",
         VITE_SCRABBLE_API: "",
+      }),
+      // The moenarch.com bundle, built from the public client addresses (#206).
+      buildClient("pages-moenarch", "production", {
+        ...production,
+        VITE_SCRABBLE_ENDPOINT: hosted.endpoint,
+        VITE_SCRABBLE_API: hosted.api,
       }),
       buildClient("pages-invalid", "production", {
         ...production,
