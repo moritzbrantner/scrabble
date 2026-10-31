@@ -747,8 +747,7 @@ mod tests {
             identity.private_key().store_secret_pemfile(&key).await.unwrap();
             let config = crate::config::ServerConfig::from_values(&BTreeMap::from([
                 ("SCRABBLE_MATCH_IDS".into(), String::new()),
-                ("SCRABBLE_SEED_FILE".into(), directory.path().join("seed").to_str().unwrap().into()),
-                ("SCRABBLE_RECOVERY_DIR".into(), directory.path().join("recovery").to_str().unwrap().into()),
+                ("SCRABBLE_STATE_DIR".into(), directory.path().to_str().unwrap().into()),
             ])).unwrap();
             let host = LiveMatchHost::new(MatchHost::new(1).unwrap());
             let games = Games::new(host.clone(), MatchFactory::new(&config).unwrap(), config.route_prefix.clone(), 1200);
@@ -809,8 +808,7 @@ mod tests {
             identity.private_key().store_secret_pemfile(&key).await.unwrap();
             let config = crate::config::ServerConfig::from_values(&BTreeMap::from([
                 ("SCRABBLE_MATCH_IDS".into(), String::new()),
-                ("SCRABBLE_SEED_FILE".into(), directory.path().join("seed").to_str().unwrap().into()),
-                ("SCRABBLE_RECOVERY_DIR".into(), directory.path().join("recovery").to_str().unwrap().into()),
+                ("SCRABBLE_STATE_DIR".into(), directory.path().to_str().unwrap().into()),
             ])).unwrap();
             let host = LiveMatchHost::new(MatchHost::new(2).unwrap());
             let games = Games::new(host.clone(), MatchFactory::new(&config).unwrap(), config.route_prefix.clone(), 1200);

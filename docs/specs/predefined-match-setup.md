@@ -45,7 +45,7 @@ version-2 creation retains its original complete configuration identity.
 
 ## Immutable initialization and recovery
 
-An explicit `SCRABBLE_MATCH_CONFIGURATION_DIR` stores immutable initialization
+The fixed `configurations/` child of `SCRABBLE_STATE_DIR` stores immutable initialization
 manifests for configured matches and content-addressed word-list versions.
 This state is separate from the upstream runtime's game recovery ownership.
 Manifests contain public effective rules, selected source identities and a
@@ -157,8 +157,8 @@ of total source word bytes. Public metadata is bounded to 128 KiB. These are
 resource bounds, not new game-rule defaults. The creation body bound is 2 KiB,
 including full versioned selection identities and the six rule values.
 
-The initialization directory defaults to `configurations` beside the seed and
-must remain outside the upstream consumed recovery directory. Preserve it along
+The initialization directory is `<state>/configurations`, a sibling of the
+upstream consumed recovery directory. Preserve it along
 with the seed and recovery across upgrades; it stores immutable initialization
 manifests and one shared content-addressed word file per selected version.
 Configured source edits affect future choices only. Deleting required saved

@@ -17,9 +17,7 @@ fixture, in the dev and Pages suites).
   `localStorage` under `scrabble:word-list-owner:v1:<wordListId>`, bound to the
   game API that issued it. It never appears in a URL, the DOM, session storage,
   a share link or any public projection.
-- `SCRABBLE_WORD_LIST_DIR` (optional; default `word-lists/` beside the seed;
-  absolute in production and separate from TLS, seed, recovery, match
-  initialization and board layouts) holds one private `w_<id>.json` entry per
+- The fixed `word-lists/` child of `SCRABBLE_STATE_DIR` holds one private `w_<id>.json` entry per
   original and one `w_<id>-r<revision>.txt` content file per retained version.
   The entry stores the name, an optional share id, version metadata and an HMAC
   verifier of the capability keyed from the private seed — never the capability.

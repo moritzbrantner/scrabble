@@ -24,16 +24,11 @@ bytes. Tile/premium/rule defaults remain exactly equivalent to their previous
 complete deployment configuration. No fourth profile or new game-rule bounds
 are introduced.
 
-Only the test example may adapt to an older binary lacking the two introduced
-configuration keys: an exact `unknown server configuration key` error for
-`SCRABBLE_PROFILE_CATALOG_FILE` or `SCRABBLE_MATCH_CONFIGURATION_DIR` removes
-only those keys and revalidates the original configuration. Every other error
-propagates. It writes this effective configuration to `fixture-config.json`,
-so `--fresh-opening` uses exactly the same legacy native factory. New tests
-still require actual `/profiles` = 200 and real controls; there is no success
-fallback or replacement API/game. A candidate recognizing the keys exercises
-the real catalog path. The native acceptance does not use this compatibility
-branch.
+The test example writes its effective configuration to `fixture-config.json`,
+so `--fresh-opening` uses exactly the same native factory. Tests require actual
+`/profiles` = 200 and real controls; there is no success fallback or
+replacement API/game. Match initialization lives in the fixed `configurations/`
+child of `SCRABBLE_STATE_DIR`.
 
 ## Protected native contracts
 

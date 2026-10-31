@@ -15,12 +15,8 @@ use std::{collections::BTreeMap, fs};
 fn values(directory: &std::path::Path) -> BTreeMap<String, String> {
     BTreeMap::from([
         (
-            "SCRABBLE_SEED_FILE".into(),
-            directory.join("seed").to_str().unwrap().into(),
-        ),
-        (
-            "SCRABBLE_RECOVERY_DIR".into(),
-            directory.join("recovery").to_str().unwrap().into(),
+            "SCRABBLE_STATE_DIR".into(),
+            directory.to_str().unwrap().into(),
         ),
         (
             "SCRABBLE_DICTIONARY_FILE".into(),

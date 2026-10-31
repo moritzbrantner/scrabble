@@ -15,12 +15,8 @@ fn factory(directory: &std::path::Path) -> MatchFactory {
         ("SCRABBLE_MATCH_IDS".into(), String::new()),
         ("SCRABBLE_TEST_SEED".into(), "07".repeat(32)),
         (
-            "SCRABBLE_SEED_FILE".into(),
-            directory.join("seed").to_str().unwrap().into(),
-        ),
-        (
-            "SCRABBLE_RECOVERY_DIR".into(),
-            directory.join("recovery").to_str().unwrap().into(),
+            "SCRABBLE_STATE_DIR".into(),
+            directory.to_str().unwrap().into(),
         ),
     ]))
     .unwrap();

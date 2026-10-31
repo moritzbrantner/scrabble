@@ -6,16 +6,10 @@ fn values() -> BTreeMap<String, String> {
     BTreeMap::new()
 }
 fn temporary_config(directory: &std::path::Path) -> BTreeMap<String, String> {
-    BTreeMap::from([
-        (
-            "SCRABBLE_SEED_FILE".into(),
-            directory.join("seed").to_str().unwrap().into(),
-        ),
-        (
-            "SCRABBLE_RECOVERY_DIR".into(),
-            directory.join("recovery").to_str().unwrap().into(),
-        ),
-    ])
+    BTreeMap::from([(
+        "SCRABBLE_STATE_DIR".into(),
+        directory.to_str().unwrap().into(),
+    )])
 }
 
 #[test]
@@ -37,8 +31,9 @@ fn local_defaults_and_invalid_configuration_are_explicit() {
         ("SCRABBLE_ROUTE_PREFIX", "/game/"),
         ("SCRABBLE_ROUTE_PREFIX", "/%2e/game"),
         ("SCRABBLE_TEST_SEED", "PRIVATE-BAD-VALUE"),
-        ("SCRABBLE_RECOVERY_DIR", ""),
+        ("SCRABBLE_STATE_DIR", ""),
         ("SCRABBLE_POTR", "1234"),
+        ("UNPREFIXED", "1"),
         ("SCRABBLE_API_PORT", "8080"),
         ("SCRABBLE_BOARD_ORIGIN", "https://board.example/path"),
         ("SCRABBLE_BOARD_ORIGIN", "https://user:secret@board.example"),
@@ -57,10 +52,63 @@ fn local_defaults_and_invalid_configuration_are_explicit() {
     );
     let mut config = values();
     config.insert(
-        "SCRABBLE_SEED_FILE".into(),
-        ".local/server/recovery/seed".into(),
+        "SCRABBLE_CERT_PEM".into(),
+        ".local/server/recovery/cert.pem".into(),
     );
     assert!(ServerConfig::from_values(&config).is_err());
+    config.insert("SCRABBLE_CERT_PEM".into(), ".local/server/seed".into());
+    assert!(ServerConfig::from_values(&config).is_err());
+}
+
+#[test]
+fn one_state_directory_fixes_every_private_child() {
+    use std::path::Path;
+    let config = ServerConfig::from_values(&BTreeMap::from([(
+        "SCRABBLE_STATE_DIR".into(),
+        "/srv/state".into(),
+    )]))
+    .unwrap();
+    assert_eq!(config.state_directory, Path::new("/srv/state"));
+    assert_eq!(config.seed_file, Path::new("/srv/state/seed"));
+    assert_eq!(config.recovery_directory, Path::new("/srv/state/recovery"));
+    assert_eq!(
+        config.match_configuration_directory,
+        Path::new("/srv/state/configurations")
+    );
+    assert_eq!(
+        config.board_layout_directory,
+        Path::new("/srv/state/layouts")
+    );
+    assert_eq!(
+        config.word_list_directory,
+        Path::new("/srv/state/word-lists")
+    );
+    assert_eq!(
+        config.tile_profile_directory,
+        Path::new("/srv/state/tile-profiles")
+    );
+    assert_eq!(config.push_directory, Path::new("/srv/state/push"));
+    assert_eq!(
+        ServerConfig::from_values(&values()).unwrap().seed_file,
+        Path::new(".local/server/seed")
+    );
+    for removed in [
+        "SCRABBLE_SEED_FILE",
+        "SCRABBLE_RECOVERY_DIR",
+        "SCRABBLE_MATCH_CONFIGURATION_DIR",
+        "SCRABBLE_BOARD_LAYOUT_DIR",
+        "SCRABBLE_WORD_LIST_DIR",
+        "SCRABBLE_TILE_PROFILE_DIR",
+        "SCRABBLE_PUSH_DIR",
+    ] {
+        let error = ServerConfig::from_values(&BTreeMap::from([(removed.into(), "/x".into())]))
+            .err()
+            .unwrap();
+        assert_eq!(
+            error.to_string(),
+            format!("unknown server configuration key {removed}")
+        );
+    }
 }
 
 #[test]
@@ -70,8 +118,7 @@ fn production_requires_private_persistent_initialization_and_explicit_tls() {
     for (key, value) in [
         ("SCRABBLE_CERT_PEM", "/etc/scrabble/cert.pem"),
         ("SCRABBLE_KEY_PEM", "/etc/scrabble/key.pem"),
-        ("SCRABBLE_SEED_FILE", "/var/lib/scrabble/seed"),
-        ("SCRABBLE_RECOVERY_DIR", "/var/lib/scrabble/recovery"),
+        ("SCRABBLE_STATE_DIR", "/var/lib/scrabble"),
         ("SCRABBLE_MATCH_IDS", "one,two"),
         ("SCRABBLE_BOARD_ORIGIN", "https://board.example"),
     ] {
@@ -129,7 +176,7 @@ fn production_requires_private_persistent_initialization_and_explicit_tls() {
         "SCRABBLE_DICTIONARY_FILE".into(),
         "/var/lib/scrabble/words.txt".into(),
     );
-    config.insert("SCRABBLE_SEED_FILE".into(), "relative/seed".into());
+    config.insert("SCRABBLE_STATE_DIR".into(), "relative/state".into());
     assert!(ServerConfig::from_values(&config).is_err());
 }
 

@@ -60,21 +60,8 @@ impl Api {
                 file.to_str().unwrap().into(),
             ),
             (
-                "SCRABBLE_SEED_FILE".into(),
-                directory.path().join("seed").to_str().unwrap().into(),
-            ),
-            (
-                "SCRABBLE_RECOVERY_DIR".into(),
-                directory.path().join("recovery").to_str().unwrap().into(),
-            ),
-            (
-                "SCRABBLE_MATCH_CONFIGURATION_DIR".into(),
-                directory
-                    .path()
-                    .join("configurations")
-                    .to_str()
-                    .unwrap()
-                    .into(),
+                "SCRABBLE_STATE_DIR".into(),
+                directory.path().to_str().unwrap().into(),
             ),
         ]))
         .unwrap();

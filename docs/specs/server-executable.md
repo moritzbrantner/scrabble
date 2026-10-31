@@ -71,8 +71,7 @@ The installed English fixture ruleset is still the authored test configuration. 
 | `SCRABBLE_GUEST_BOARD_ORIGINS`                             | empty; up to 4 comma-separated canonical origins, distinct from the board origin, HTTPS in production; game, library and WebTransport routes only, never account routes |
 | `SCRABBLE_STATUS_PORT`                                     | `8080`; 1–65535, TCP/read-only status                                                                                                                                   |
 | `SCRABBLE_CERT_PEM`, `SCRABBLE_KEY_PEM`                    | `.local/server/cert.pem`, `.local/server/key.pem`; distinct files                                                                                                       |
-| `SCRABBLE_SEED_FILE`                                       | `.local/server/seed`; private 32-byte binary initialization key                                                                                                         |
-| `SCRABBLE_RECOVERY_DIR`                                    | `.local/server/recovery`; upstream-owned consumable recovery bundle                                                                                                     |
+| `SCRABBLE_STATE_DIR`                                       | `.local/server`; private durable state root with fixed children (below); absolute and explicit in production                                                            |
 | `SCRABBLE_ROUTE_PREFIX`                                    | `/game`; canonical absolute ASCII base path                                                                                                                             |
 | `SCRABBLE_MATCH_IDS`                                       | `table-1,table-2`; unique canonical IDs, comma-separated without whitespace; empty starts with zero matches                                                             |
 | `SCRABBLE_MAX_MATCHES`                                     | `16`; 1–64, at least the configured match count                                                                                                                         |
@@ -82,7 +81,9 @@ The installed English fixture ruleset is still the authored test configuration. 
 | `SCRABBLE_DICTIONARY_NAME`, `SCRABBLE_DICTIONARY_REVISION` | unset; set with FILE; 1–64 ASCII letters, digits, hyphens, underscores or dots                                                                                          |
 | `SCRABBLE_TEST_SEED`                                       | unset; optional 64 hex characters for local deterministic fixtures only                                                                                                 |
 
-Production requires explicit absolute certificate, key, seed and recovery paths, plus explicit match IDs (which may be empty) and an HTTPS board origin. It forbids test seeds. Mount seed and recovery storage persistently; keep the seed outside the recovery directory and separate from TLS files. On Unix the seed must be a regular owner-only file; symlinks and group/other access fail. A corrupt seed or recovery directory without its seed causes startup failure without reinitialization. A failed interrupted initial key publication can leave `<seed>.tmp`; investigate the files and remove only that disposable temporary file explicitly before retrying.
+`SCRABBLE_STATE_DIR` has a fixed layout: `seed` (private 32-byte binary initialization key), `recovery/` (upstream-owned consumable recovery bundle), `configurations/` (match initialization), `layouts/` (#101), `word-lists/` (#97), `tile-profiles/` (#100) and `push/` (#158). The supplied Compose file mounts it at `/state`; the Hetzner environment uses `/var/lib/scrabble`. Unknown `SCRABBLE_*` keys, including the removed per-path keys, fail startup.
+
+Production requires explicit absolute certificate, key and state paths, plus explicit match IDs (which may be empty) and an HTTPS board origin. It forbids test seeds. Mount the state directory persistently; TLS files must lie outside the seed and state children. On Unix the seed must be a regular owner-only file; symlinks and group/other access fail. A corrupt seed or recovery directory without its seed causes startup failure without reinitialization. A failed interrupted initial key publication can leave `<seed>.tmp`; investigate the files and remove only that disposable temporary file explicitly before retrying.
 
 ## Runtime health and recovery
 
@@ -135,19 +136,15 @@ This implements Atlas 1.41's optional English sample, not proof of public
 availability. Publish and verify the CH/SCH-capable frontend before exposing the
 new server catalog, then complete the [actual hosted acceptance journey](public-multi-letter-preset.md).
 
-`SCRABBLE_MATCH_CONFIGURATION_DIR` defaults to `configurations/` beside the seed.
-In production use an absolute durable directory separate from runtime recovery.
+`<state>/configurations/` is separate from runtime recovery.
 Preserve it with the seed and recovery during upgrades. It holds authenticated
 per-match initialization and shared immutable word versions, not private racks
 or command authority. Deleting/corrupting required inputs fails recovery closed.
 Source edits apply only to future selections. The existing v1 rematch API creates
 a new deployment-default v2 game; configured-profile carryover is not promised.
 
-`SCRABBLE_BOARD_LAYOUT_DIR` (#101) holds the durable guest-owned custom board
-layout library. It defaults to `layouts/` beside the seed; the supplied Compose
-file sets `/state/layouts` and the Hetzner environment `/var/lib/scrabble/layouts`.
-In production it must be absolute and separate from the TLS files, seed, runtime
-recovery and match initialization directories. The server creates it (mode 0700)
+`<state>/layouts/` (#101) holds the durable guest-owned custom board
+layout library. The server creates it (mode 0700)
 and stores one `l_<id>.json` file (mode 0600) per saved original: its name, an
 optional share id, its recent immutable versions and an HMAC verifier of the
 owner capability keyed from the private seed. The bearer capability itself is
@@ -163,11 +160,8 @@ selectable versions per original are retained. Only the owner capability withdra
 sharing again issues a fresh id, and saved copies and started matches are
 unaffected.
 
-`SCRABBLE_TILE_PROFILE_DIR` (#100) holds the durable guest-owned private tile-profile
-library. It defaults to `tile-profiles/` beside the seed; the supplied Compose file sets
-`/state/tile-profiles` and the Hetzner environment `/var/lib/scrabble/tile-profiles`. In
-production it must be absolute and separate from the TLS files, seed, runtime recovery,
-match initialization, board-layout and word-list directories. The server creates it
+`<state>/tile-profiles/` (#100) holds the durable guest-owned private tile-profile
+library. The server creates it
 (mode 0700) and stores one `t_<id>.json` file (mode 0600) per saved original: its name,
 its recent immutable versions and a seed-keyed HMAC verifier of the owner capability,
 never the capability. As for layouts, the server refuses to create a new seed while this
@@ -179,12 +173,8 @@ There are no share links (Decision 1.27). A match selects a retained version by 
 original are retained. Deleting the directory removes every guest profile but never
 changes a started match, whose tiles are pinned in its initialization manifest.
 
-`SCRABBLE_WORD_LIST_DIR` (#97) holds the durable guest-owned custom word-list
-library ([contract](word-list-library.md)). It defaults to `word-lists/` beside
-the seed; the supplied Compose file sets `/state/word-lists` and the Hetzner
-environment `/var/lib/scrabble/word-lists`. In production it must be absolute and
-separate from the TLS files, seed, runtime recovery, match initialization and
-board-layout directories. The server creates it (mode 0700) and stores one
+`<state>/word-lists/` (#97) holds the durable guest-owned custom word-list
+library ([contract](word-list-library.md)). The server creates it (mode 0700) and stores one
 `w_<id>.json` entry (mode 0600) per saved original — name, optional share id,
 version metadata and a seed-keyed HMAC verifier of the owner capability, never
 the capability — plus one verified `w_<id>-r<revision>.txt` normalized word file
@@ -212,12 +202,11 @@ services:
   server:
     environment:
       SCRABBLE_PROFILE_CATALOG_FILE: /content/profiles.json
-      SCRABBLE_MATCH_CONFIGURATION_DIR: /state/configurations
 ```
 
 Pass that override after `compose.yaml` using Compose's `-f` option, including it
-on subsequent start and update commands. Both paths use the existing content
-and durable-state mounts. Host `SCRABBLE_*` environment variables alone do not
+on subsequent start and update commands. It uses the existing content mount;
+match initialization lands in `/state/configurations`. Host `SCRABBLE_*` environment variables alone do not
 override the service's explicit Compose environment. Validate the catalog before
 release; this repository's authored acceptance dictionaries are test data.
 

@@ -171,21 +171,10 @@ async fn configured_initialization_corruption_never_falls_back_and_exact_restora
             "SCRABBLE_KEY_PEM".into(),
             root.join("key.pem").display().to_string(),
         ),
-        (
-            "SCRABBLE_SEED_FILE".into(),
-            root.join("seed").display().to_string(),
-        ),
-        (
-            "SCRABBLE_RECOVERY_DIR".into(),
-            root.join("recovery").display().to_string(),
-        ),
+        ("SCRABBLE_STATE_DIR".into(), root.display().to_string()),
         (
             "SCRABBLE_PROFILE_CATALOG_FILE".into(),
             catalog.display().to_string(),
-        ),
-        (
-            "SCRABBLE_MATCH_CONFIGURATION_DIR".into(),
-            root.join("configurations").display().to_string(),
         ),
         ("SCRABBLE_DRAIN_GRACE_MS".into(), "100".into()),
     ]);

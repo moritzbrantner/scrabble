@@ -12,9 +12,8 @@
 //!
 //! # Seams this contract defines (the implementation must provide them)
 //!
-//! Storage: a new optional server configuration key `SCRABBLE_WORD_LIST_DIR`
-//! names a durable, private library directory that survives restarts (default,
-//! like `SCRABBLE_BOARD_LAYOUT_DIR`: `word-lists` next to the seed file). The
+//! Storage: the fixed `word-lists/` child of `SCRABBLE_STATE_DIR` is a durable,
+//! private library directory that survives restarts. The
 //! server stores no owner capability in clear text anywhere on disk (only a
 //! verifier, e.g. a keyed hash). Started matches never read the library again:
 //! their configured initialization manifest and content-addressed word store
@@ -120,7 +119,6 @@ mod hosted;
 #[path = "support/profile_catalog.rs"]
 mod profile_catalog;
 
-const WORD_LIST_DIR_KEY: &str = "SCRABBLE_WORD_LIST_DIR";
 const UMLAUT_TILES: &str = "acceptance-umlaut-tiles";
 /// Rejects every two-tile opening: no two-letter word exists in this list.
 const REJECTING_WORDS: &str = "QUIZ\n";
@@ -169,39 +167,20 @@ fn write_catalog(root: &Path) -> PathBuf {
     catalog
 }
 
-fn values(root: &Path, library: bool) -> BTreeMap<String, String> {
+fn values(root: &Path) -> BTreeMap<String, String> {
     let catalog = write_catalog(root);
-    let path = |name: &str| root.join(name).to_str().unwrap().to_owned();
-    let mut values = BTreeMap::from([
+    BTreeMap::from([
         ("SCRABBLE_MATCH_IDS".into(), String::new()),
         ("SCRABBLE_TEST_SEED".into(), "0c".repeat(32)),
         (
             "SCRABBLE_PROFILE_CATALOG_FILE".into(),
             catalog.to_str().unwrap().into(),
         ),
-        ("SCRABBLE_SEED_FILE".into(), path("seed")),
-        ("SCRABBLE_RECOVERY_DIR".into(), path("recovery")),
-        (
-            "SCRABBLE_MATCH_CONFIGURATION_DIR".into(),
-            path("configurations"),
-        ),
-        ("SCRABBLE_BOARD_LAYOUT_DIR".into(), path("layouts")),
-    ]);
-    if library {
-        values.insert(WORD_LIST_DIR_KEY.into(), path("word-lists"));
-        // The key is optional and defaults to `word-lists` next to the seed file
-        // (the same directory). A pre-#97 server rejects the unknown key; drop it
-        // there so red tests fail on the missing HTTP routes, not on startup.
-        if ServerConfig::from_values(&values).is_err_and(|error| {
-            error.to_string() == format!("unknown server configuration key {WORD_LIST_DIR_KEY}")
-        }) {
-            values.remove(WORD_LIST_DIR_KEY);
-        }
-    }
-    values
+        ("SCRABBLE_STATE_DIR".into(), root.to_str().unwrap().into()),
+    ])
 }
 fn config(root: &Path) -> ServerConfig {
-    ServerConfig::from_values(&values(root, true)).expect("valid acceptance configuration")
+    ServerConfig::from_values(&values(root)).expect("valid acceptance configuration")
 }
 
 /// The production server (`hosting::serve`: recovery-prepared live host, HTTP
@@ -222,13 +201,10 @@ impl Drop for Api {
 }
 impl Api {
     async fn start(root: &Path) -> Self {
-        Self::start_with(root, true, &[]).await
+        Self::start_configured(root, &[]).await
     }
     /// Starts with operator overrides (Decision 1.50 limit keys).
     async fn start_configured(root: &Path, overrides: &[(&str, &str)]) -> Self {
-        Self::start_with(root, true, overrides).await
-    }
-    async fn start_with(root: &Path, library: bool, overrides: &[(&str, &str)]) -> Self {
         let certificate = root.join("cert.pem");
         let key = root.join("key.pem");
         if !certificate.exists() {
@@ -244,7 +220,7 @@ impl Api {
                 .await
                 .unwrap();
         }
-        let mut values = values(root, library);
+        let mut values = values(root);
         for (name, value) in [
             ("SCRABBLE_MAX_MATCHES", "12".to_owned()),
             ("SCRABBLE_CERT_PEM", certificate.to_str().unwrap().into()),
@@ -1777,13 +1753,12 @@ async fn concurrent_lists_and_matches_stay_isolated() {
     }
 }
 
-/// Harness self-check (expected green at baseline): without the new key the
-/// same real host creates and recovers a catalog match, so red library tests
-/// fail on the missing #97 behavior rather than on this harness.
+/// Harness self-check: the same real host creates and recovers a catalog match,
+/// so red library tests fail on library behavior rather than on this harness.
 #[tokio::test]
-async fn harness_self_check_recovers_a_catalog_match_without_the_library_key() {
+async fn harness_self_check_recovers_a_catalog_match() {
     let root = tempfile::tempdir().unwrap();
-    let api = Api::start_with(root.path(), false, &[]).await;
+    let api = Api::start(root.path()).await;
     let catalog = api.catalog().await;
     let words = identity_of(&catalog, "wordLists", "acceptance-pairs");
     let (status, join, _) = api
@@ -1792,7 +1767,7 @@ async fn harness_self_check_recovers_a_catalog_match_without_the_library_key() {
     assert_eq!(status, 200, "{join}");
     let match_id = join["matchId"].as_str().unwrap().to_owned();
     api.stop().await;
-    let api = Api::start_with(root.path(), false, &[]).await;
+    let api = Api::start(root.path()).await;
     let (status, body) = api.get(&format!("/games/{match_id}")).await;
     assert_eq!(
         status, 200,

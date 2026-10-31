@@ -6,8 +6,8 @@
 //!
 //! # Seams this contract defines (the implementation must provide them)
 //!
-//! Storage: a new optional server configuration key `SCRABBLE_BOARD_LAYOUT_DIR`
-//! names a durable, private library directory that survives restarts. The
+//! Storage: the fixed `layouts/` child of `SCRABBLE_STATE_DIR` is a durable,
+//! private library directory that survives restarts. The
 //! server stores no owner capability in clear text anywhere on disk (only a
 //! verifier, e.g. a keyed hash).
 //!
@@ -86,14 +86,11 @@ mod hosted;
 #[path = "support/profile_catalog.rs"]
 mod profile_catalog;
 
-const LAYOUT_DIR_KEY: &str = "SCRABBLE_BOARD_LAYOUT_DIR";
-
 fn values(root: &Path) -> BTreeMap<String, String> {
     let catalog = root.join("profile-catalog.json");
     if !catalog.exists() {
         profile_catalog::write_catalog(root, profile_catalog::LEGACY_WORDS).unwrap();
     }
-    let path = |name: &str| root.join(name).to_str().unwrap().to_owned();
     BTreeMap::from([
         ("SCRABBLE_MATCH_IDS".into(), String::new()),
         ("SCRABBLE_TEST_SEED".into(), "0b".repeat(32)),
@@ -101,18 +98,11 @@ fn values(root: &Path) -> BTreeMap<String, String> {
             "SCRABBLE_PROFILE_CATALOG_FILE".into(),
             catalog.to_str().unwrap().into(),
         ),
-        ("SCRABBLE_SEED_FILE".into(), path("seed")),
-        ("SCRABBLE_RECOVERY_DIR".into(), path("recovery")),
-        (
-            "SCRABBLE_MATCH_CONFIGURATION_DIR".into(),
-            path("configurations"),
-        ),
-        (LAYOUT_DIR_KEY.into(), path("layouts")),
+        ("SCRABBLE_STATE_DIR".into(), root.to_str().unwrap().into()),
     ])
 }
 fn config(root: &Path) -> ServerConfig {
-    ServerConfig::from_values(&values(root))
-        .expect("#101 requires the durable guest layout library key SCRABBLE_BOARD_LAYOUT_DIR")
+    ServerConfig::from_values(&values(root)).expect("valid acceptance configuration")
 }
 
 /// The production server (`hosting::serve`: recovery-prepared live host, HTTP
