@@ -70,5 +70,11 @@ client treats that like a server without accounts and hides the account section.
 fake account service that implements the verification contract. It covers all three
 kinds, a missing capability, signed out, duplicate link, wrong owner, a second device,
 recovery after restart, deletion and an unreachable service.
-`apps/web/src/account-link.test.ts` covers the browser client. Live cross-device
-acceptance against the deployed account service is **unverified**.
+`apps/web/src/account-link.test.ts` covers the browser client.
+`apps/web/browser/hosted-account-cookie.spec.ts` (Pages run) serves the production
+bundle built from `deploy/client.json` at `https://moenarch.com/scrabble/`. It shows
+that the account page's host-only `Path=/` cookie reaches `/scrabble-api/account/session`
+and the board shows the account. From the GitHub Pages origin, the same cookie stays
+behind and the account section is hidden. Live cross-device acceptance against the
+deployed account service is **unverified**: wrong owner, duplicate link, and recovery
+with the same `account_id` after passkey loss.
