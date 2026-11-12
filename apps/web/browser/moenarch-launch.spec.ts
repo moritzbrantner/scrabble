@@ -11,7 +11,7 @@ test("session-only and ambiguous launcher URLs cannot silently create Scrabble m
   await expect(page.getByRole("alert")).toContainText("has no Scrabble match");
   await expect(page.getByRole("button", { name: "Create game", exact: true })).toHaveCount(0);
   await page.goto(`./?launch=moenarch&session=${sessionId}&session=${sessionId}`);
-  await expect(page.getByRole("alert")).toContainText("Invalid moenarch.com session link");
+  await expect(page.getByRole("alert")).toContainText("repeats a routing parameter");
   await expect(page.getByRole("button", { name: "Create game", exact: true })).toHaveCount(0);
 });
 
