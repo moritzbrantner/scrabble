@@ -17,6 +17,7 @@ import { PlayerInvite } from "./PlayerInvite";
 import { useCopy } from "./preferences";
 import { type PublicSnapshot, type Ruleset } from "./public-state";
 import { type ClockObservation } from "./MatchClocks";
+import { SameTabJoin } from "./SameTabJoin";
 import { SharedBoard } from "./SharedBoard";
 import { BrowserMatch, matchUrl, type ConnectionState } from "./transport/browser-match";
 import {
@@ -283,6 +284,14 @@ export function LiveBoard({
     <>
       <header className="board-toolbar">
         <ConnectionStatus state={state} {...(failure === undefined ? {} : { failure })} />
+        {api !== undefined && (snapshot === undefined || snapshot.phase.kind === "lobby") && (
+          <SameTabJoin
+            key={`${matchId}:${snapshot?.players.length ?? 0}`}
+            endpoint={endpoint}
+            api={api}
+            matchId={matchId}
+          />
+        )}
         {snapshot?.phase.kind === "lobby" && <PlayerInvite key={matchId} matchId={matchId} />}
         {(state.kind === "disconnected" ||
           state.kind === "failed" ||

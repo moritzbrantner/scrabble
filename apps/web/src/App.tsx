@@ -76,6 +76,7 @@ export function App() {
     return (
       <ConnectedBoard
         endpoint={endpoint}
+        {...(api ? { api } : {})}
         matchId={matchId}
         onBoardOwned={reportMoenarchMatch}
         {...localTrust}
