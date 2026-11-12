@@ -51,6 +51,12 @@ storyTests<Page>("ROUTE-QUERY", {
     },
   },
   states: {
+    ambiguous: async (page) => {
+      await expect(page.getByRole("alert")).toContainText(
+        /repeats a routing parameter|Routing-Parameter mehrfach/,
+      );
+      await expect(page.locator("main button")).toHaveCount(0);
+    },
     english: async (page) => {
       await expect(page.locator("html")).toHaveAttribute("lang", "en");
       await expect(select(page, "Interface language")).toHaveValue("en");

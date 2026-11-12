@@ -45,3 +45,22 @@ export function connectionSettings(
     return { kind: "unavailable", message: "create.invalidConnection" };
   }
 }
+
+/** All recognized URL fields are single-valued, including development overrides.
+ * Unknown keys are deliberately ignored; rejection never mutates the address.
+ * See docs/specs/routing-parameters.md.
+ */
+export function hasDuplicateRoutingParameter(params: URLSearchParams): boolean {
+  return [
+    "match",
+    "view",
+    "lang",
+    "server",
+    "api",
+    "certificate",
+    "share",
+    "launch",
+    "session",
+    "fixture",
+  ].some((key) => params.getAll(key).length > 1);
+}
