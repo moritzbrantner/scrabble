@@ -21,7 +21,7 @@ under `/scrabble/` because that is its fixed Vite base. The
 GitHub Pages build at `https://moritzbrantner.github.io/scrabble/` stays a guest-only
 demo and is not a launch target.
 
-This explicit board route offers **Create game**. The popup creates its match
+This explicit board route requires the valid launch/session pair above and offers **Create game**. A bare `view=board` without a match reports that a launch session is required; it does not silently open creation. Canonical match links can still restore a tab-owned board without launcher context. The popup creates its match
 through Scrabble's existing idempotent creation API and keeps the private
 creation proof and board reconnect capsule in their existing tab-owned
 boundaries. After creation it adds the canonical match ID to its own URL. Only after an

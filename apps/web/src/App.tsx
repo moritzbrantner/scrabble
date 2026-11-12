@@ -5,6 +5,8 @@ import {
   hasDuplicateRoutingParameter,
   type ConnectionMode,
 } from "./connection-settings";
+import { NewGameLink } from "./NewGameLink";
+import { validInviteId } from "./player-invite";
 import { CreateBoard } from "./CreateBoard";
 import { fixtures } from "./fixtures";
 import { moenarchLaunch, reportMoenarchMatch } from "./moenarch-launch";
@@ -33,6 +35,39 @@ export function App() {
       </main>
     );
   }
+  const view = connection?.get("view");
+  const matchId = connection?.get("match");
+  const routeError = (() => {
+    if (
+      view !== undefined &&
+      view !== null &&
+      !["player", "board", "layout", "word-list"].includes(view)
+    ) {
+      return "app.unrecognizedLink";
+    }
+    if (
+      (view === "layout" || view === "word-list") &&
+      !/^s_[0-9a-f]{32}$/.test(connection?.get("share") ?? "")
+    ) {
+      return view === "layout" ? "shared.invalid" : "sharedWords.invalid";
+    }
+    if (view !== "player" && matchId !== undefined && matchId !== null && !validInviteId(matchId)) {
+      return "create.invalidConnection";
+    }
+    if (view === "board" && !matchId && !connection?.has("launch")) {
+      return "app.boardLaunchRequired";
+    }
+    return undefined;
+  })();
+  if (routeError !== undefined) {
+    return (
+      <main className="create-board">
+        <h1>Scrabble</h1>
+        <p role="alert">{t(routeError)}</p>
+        <NewGameLink />
+      </main>
+    );
+  }
   const launch = moenarchLaunch(connection ?? new URLSearchParams());
   if (launch.kind === "invalid" || launch.kind === "unbound") {
     return (
@@ -45,7 +80,6 @@ export function App() {
   const endpoint: string | undefined = import.meta.env.DEV
     ? (connection?.get("server") ?? undefined)
     : import.meta.env.VITE_SCRABBLE_ENDPOINT || undefined;
-  const matchId = connection?.get("match");
   const api: string | undefined = import.meta.env.DEV
     ? (connection?.get("api") ?? undefined)
     : import.meta.env.VITE_SCRABBLE_API || undefined;

@@ -109,7 +109,7 @@ const checks: Record<string, (page: Page) => Promise<void>> = {
   },
   // Unknown values fall back to the lobby preview (shared-board.md names only its two fixtures).
   previewBogusFixture: async (page) => checks.preview?.(page),
-  unknownView: async (page) => checks.create?.(page),
+  unknownView: (page) => alert(page, "Unrecognized game link."),
   connectionInvalid: (page) => alert(page, "Invalid game connection settings."),
   boardWithoutServer: (page) => alert(page, "Invalid game connection settings."),
   boardUnknownMatch: (page) => alert(page, "Unable to recover this board session."),
@@ -121,7 +121,7 @@ const checks: Record<string, (page: Page) => Promise<void>> = {
   inviteUnknown: (page) => alert(page, "This game is no longer available."),
   layoutMissing: (page) => alert(page, "This shared board layout is not available."),
   wordListMissing: (page) => alert(page, "This shared word list is no longer available."),
-  wordListMalformed: (page) => alert(page, "This shared word list is no longer available."),
+  wordListMalformed: (page) => alert(page, "Invalid shared word-list link."),
   wordListShared: async (page) => {
     await expect(page.getByRole("region", { name: "Shared word list", exact: true })).toBeVisible();
     await expect(heading(page, "Story words")).toBeVisible();

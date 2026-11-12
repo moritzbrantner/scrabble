@@ -10,6 +10,7 @@ export default defineConfig({
   testIgnore: [],
   testMatch: [
     "**/playable-loop.spec.ts",
+    "**/route-recovery.spec.ts",
     "**/production-configuration.spec.ts",
     "**/performance-budgets.spec.ts",
     "**/rematch.spec.ts",

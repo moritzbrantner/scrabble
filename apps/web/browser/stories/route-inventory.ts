@@ -12,7 +12,7 @@ export type InventoryRoute = {
 
 export const routeInventory: readonly InventoryRoute[] = [
   { url: "?server&api[&certificate]", view: "Create game", state: "create" },
-  { url: "?server&api&view=<unknown>", view: "Create game (fallback)", state: "unknownView" },
+  { url: "?server&api&view=<unknown>", view: "Unrecognized link alert", state: "unknownView" },
   { url: "?server&api&match=<created here>", view: "Live board", state: "board" },
   { url: "?server&match=<unknown>", view: "Board recovery alert", state: "boardUnknownMatch" },
   { url: "?server&match=<malformed>", view: "Connection alert", state: "boardMalformedMatch" },
@@ -33,13 +33,28 @@ export const routeInventory: readonly InventoryRoute[] = [
   { url: "?view=word-list&share=<shared>", view: "Shared word list", state: "wordListShared" },
   { url: "(after Use for a new game)", view: "Create with list", state: "wordListInUse" },
   { url: "?view=word-list&share=<missing>", view: "Unavailable alert", state: "wordListMissing" },
-  { url: "?view=word-list&share=../x", view: "Unavailable alert", state: "wordListMalformed" },
+  { url: "?view=word-list&share=../x", view: "Malformed share alert", state: "wordListMalformed" },
   {
     url: "?view=layout&share=<shared>",
     view: "Shared board layout",
     notCovered: "needs an authored layout document; custom-board-layouts.spec.ts covers it",
   },
   { url: "?view=layout&share=<missing>", view: "Unavailable alert", state: "layoutMissing" },
+  {
+    url: "?view=board (no match or launch)",
+    view: "Launch required alert",
+    notCovered: "ROUTE-RECOVERY checks recovery, reload, history and new creation",
+  },
+  {
+    url: "?view=Player (wrong case)",
+    view: "Unrecognized link alert",
+    notCovered: "ROUTE-RECOVERY checks this explicit guard",
+  },
+  {
+    url: "?view=layout&share=../x",
+    view: "Malformed share alert",
+    notCovered: "ROUTE-RECOVERY checks both malformed share types and unavailable shares",
+  },
   { url: "?launch=<other>&session", view: "Launch alert", state: "launchInvalid" },
   { url: "?launch=moenarch&session", view: "Launch alert", state: "launchUnbound" },
   { url: "?launch=moenarch&session&view=board", view: "Create game", state: "launchHosting" },

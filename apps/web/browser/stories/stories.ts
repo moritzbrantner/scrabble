@@ -249,6 +249,34 @@ const routes = setup({
   },
 });
 
+// #238, Decision 6.5: errors stay explicit across history/reload; recovery only opens
+// setup. Creating there establishes a fresh board with its own tab-owned authority.
+const recoveryEvents = [
+  "RELOAD_ERROR",
+  "RECOVER",
+  "RELOAD_CREATE",
+  "BACK",
+  "FORWARD",
+  "CREATE",
+  "RELOAD_BOARD",
+] as const;
+const recovery = setup({
+  types: {} as { events: { type: (typeof recoveryEvents)[number] } },
+}).createMachine({
+  id: "route-recovery",
+  initial: "error",
+  states: {
+    error: { on: { RELOAD_ERROR: "reloadedError" } },
+    reloadedError: { on: { RECOVER: "create" } },
+    create: { on: { RELOAD_CREATE: "reloadedCreate" } },
+    reloadedCreate: { on: { BACK: "errorAgain" } },
+    errorAgain: { on: { FORWARD: "createAgain" } },
+    createAgain: { on: { CREATE: "board" } },
+    board: { on: { RELOAD_BOARD: "recoveredBoard" } },
+    recoveredBoard: {},
+  },
+});
+
 // ------------------------------------------------------------------------------ ROUTE-QUERY
 
 const languageEvents = [
@@ -343,6 +371,13 @@ const sameTab = setup({
 });
 
 export const stories: readonly Story[] = [
+  {
+    id: "ROUTE-RECOVERY",
+    title: "Invalid links recover through setup and create a fresh owned board",
+    sources: ["issue #238", "Decision Atlas 6.5", "docs/specs/routing-parameters.md"],
+    model: recovery,
+    events: recoveryEvents,
+  },
   {
     id: "SAME-TAB-1",
     title: "Join and resume a player in the board tab while preserving host ownership",

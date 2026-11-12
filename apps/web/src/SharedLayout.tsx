@@ -4,6 +4,7 @@ import { Button } from "@moritzbrantner/ui/client";
 import { useEffect, useState } from "react";
 
 import { BoardLayoutPreview } from "./BoardLayoutPreview";
+import { NewGameLink } from "./NewGameLink";
 import { type Copy } from "./copy";
 import { type BoardChoice, layoutFailure } from "./CustomLayouts";
 import { boardRow, copyShared, fetchShared, type SharedLayout } from "./layout-library";
@@ -62,7 +63,12 @@ export function SharedLayoutView({
       <h1>Scrabble</h1>
       <section className="shared-layout" aria-label={t("shared.region")}>
         {!shared && !unavailable && <p role="status">{t("shared.loading")}</p>}
-        {unavailable && <p role="alert">{t("shared.unavailable")}</p>}
+        {unavailable && (
+          <>
+            <p role="alert">{t("shared.unavailable")}</p>
+            <NewGameLink />
+          </>
+        )}
         {shared && choice && (
           <>
             <h2>{shared.name}</h2>

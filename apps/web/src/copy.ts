@@ -123,6 +123,12 @@ export const en = {
   "settings.close": "Close",
   "settings.note":
     "The interface language changes labels and messages only. It does not change the word list, tiles or match rules.",
+  "app.newGame": "Create a new game",
+  "app.unrecognizedLink": "Unrecognized game link. Ask for a corrected link or create a new game.",
+  "app.boardLaunchRequired":
+    "This board link requires a valid launch session. Open it from the launcher or create a new game.",
+  "shared.invalid": "Invalid shared board layout link. Ask for a corrected link.",
+  "sharedWords.invalid": "Invalid shared word-list link. Ask for a corrected link.",
   "app.player": "Player",
   "app.activePlayer": "the active player",
   "app.duplicateRouting":
@@ -673,6 +679,14 @@ const de: Record<CopyKey, string> = {
   "settings.close": "Schließen",
   "settings.note":
     "Die Sprache der Oberfläche ändert nur Beschriftungen und Meldungen. Wortliste, Spielsteine und Spielregeln bleiben unverändert.",
+  "app.newGame": "Neues Spiel erstellen",
+  "app.unrecognizedLink":
+    "Unbekannter Spiellink. Bitte um einen korrigierten Link oder erstelle ein neues Spiel.",
+  "app.boardLaunchRequired":
+    "Dieser Brettlink benötigt eine gültige Startsitzung. Öffne ihn über den Launcher oder erstelle ein neues Spiel.",
+  "shared.invalid": "Ungültiger Link zum geteilten Brettlayout. Bitte um einen korrigierten Link.",
+  "sharedWords.invalid":
+    "Ungültiger Link zur geteilten Wortliste. Bitte um einen korrigierten Link.",
   "app.player": "Spieler",
   "app.activePlayer": "den aktiven Spieler",
   "app.duplicateRouting":
@@ -1243,6 +1257,14 @@ const es: Record<CopyKey, string> = {
   "settings.close": "Cerrar",
   "settings.note":
     "El idioma de la interfaz solo cambia etiquetas y mensajes. No cambia la lista de palabras, las fichas ni las reglas de la partida.",
+  "app.newGame": "Crear una partida nueva",
+  "app.unrecognizedLink":
+    "Enlace de partida no reconocido. Pide un enlace corregido o crea una partida nueva.",
+  "app.boardLaunchRequired":
+    "Este enlace de tablero requiere una sesión de inicio válida. Ábrelo desde el lanzador o crea una partida nueva.",
+  "shared.invalid": "Enlace al diseño de tablero compartido no válido. Pide un enlace corregido.",
+  "sharedWords.invalid":
+    "Enlace a la lista de palabras compartida no válido. Pide un enlace corregido.",
   "app.player": "Jugador",
   "app.activePlayer": "el jugador activo",
   "app.duplicateRouting":
