@@ -3,6 +3,7 @@
 import { Button } from "@moritzbrantner/ui/client";
 import { useEffect, useState } from "react";
 
+import { NewGameLink } from "./NewGameLink";
 import { type Copy } from "./copy";
 import { wordCount, wordListFailure } from "./CustomWordLists";
 import { useCopy } from "./preferences";
@@ -62,7 +63,12 @@ export function SharedWordListView({
       <h1>Scrabble</h1>
       <section className="shared-layout" aria-label={t("sharedWords.region")}>
         {!shared && !unavailable && <p role="status">{t("sharedWords.loading")}</p>}
-        {unavailable && <p role="alert">{t("sharedWords.unavailable")}</p>}
+        {unavailable && (
+          <>
+            <p role="alert">{t("sharedWords.unavailable")}</p>
+            <NewGameLink />
+          </>
+        )}
         {shared && (
           <>
             {/* Separate text nodes keep the name and count distinct words for all readers. */}

@@ -1,6 +1,7 @@
 import { Button } from "@moritzbrantner/ui/client";
 import { useEffect, useState } from "react";
 
+import { NewGameLink } from "./NewGameLink";
 import { copy, type Copy } from "./copy";
 import { JoinError, lookupGame } from "./create-game";
 import { playerInviteUrl, validInviteId } from "./player-invite";
@@ -124,6 +125,7 @@ export function JoinRoute({
         state.kind === "failed" && (
           <>
             <p role="alert">{t(state.message)}</p>
+            <NewGameLink />
             <Button onClick={() => setAttempt((value) => value + 1)}>{t("join.retry")}</Button>
           </>
         )

@@ -1,6 +1,7 @@
 import { Button } from "@moritzbrantner/ui/client";
 import { useEffect, useRef, useState } from "react";
 
+import { NewGameLink } from "./NewGameLink";
 import { ConnectionStatus } from "./ConnectionStatus";
 import { copy, type Copy } from "./copy";
 import {
@@ -293,11 +294,13 @@ export function LiveBoard({
           />
         )}
         {snapshot?.phase.kind === "lobby" && <PlayerInvite key={matchId} matchId={matchId} />}
-        {(state.kind === "disconnected" ||
-          state.kind === "failed" ||
-          state.kind === "resume-failed") && (
-          <Button onClick={() => void reconnect()}>{t("board.reconnect")}</Button>
-        )}
+        {client.current !== undefined &&
+          (state.kind === "disconnected" ||
+            state.kind === "failed" ||
+            state.kind === "resume-failed") && (
+            <Button onClick={() => void reconnect()}>{t("board.reconnect")}</Button>
+          )}
+        {failure !== undefined && snapshot === undefined && <NewGameLink />}
         {snapshot?.phase.kind === "lobby" && (
           <section aria-label={t("lobby.title")}>
             <Button
