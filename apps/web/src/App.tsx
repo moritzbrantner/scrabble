@@ -1,6 +1,10 @@
 import { useState } from "react";
 
-import { connectionSettings, type ConnectionMode } from "./connection-settings";
+import {
+  connectionSettings,
+  hasDuplicateRoutingParameter,
+  type ConnectionMode,
+} from "./connection-settings";
 import { CreateBoard } from "./CreateBoard";
 import { fixtures } from "./fixtures";
 import { moenarchLaunch, reportMoenarchMatch } from "./moenarch-launch";
@@ -21,6 +25,14 @@ export function App() {
   );
   const [sharedUse, setSharedUse] = useState<BoardChoice>();
   const [sharedWords, setSharedWords] = useState<WordChoice>();
+  if (connection !== null && hasDuplicateRoutingParameter(connection)) {
+    return (
+      <main className="create-board">
+        <h1>Scrabble</h1>
+        <p role="alert">{t("app.duplicateRouting")}</p>
+      </main>
+    );
+  }
   const launch = moenarchLaunch(connection ?? new URLSearchParams());
   if (launch.kind === "invalid" || launch.kind === "unbound") {
     return (
@@ -61,11 +73,9 @@ export function App() {
   }
   const localTrust = certificateHash === undefined ? {} : { certificateHash };
   if (connection?.get("view") === "player") {
-    const unambiguous =
-      connection.getAll("match").length === 1 && connection.getAll("view").length === 1;
     return (
       <JoinRoute
-        matchId={unambiguous ? (matchId ?? "") : ""}
+        matchId={matchId ?? ""}
         {...(endpoint ? { endpoint } : {})}
         {...(api ? { api } : {})}
         {...localTrust}

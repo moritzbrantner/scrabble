@@ -125,6 +125,8 @@ export const en = {
     "The interface language changes labels and messages only. It does not change the word list, tiles or match rules.",
   "app.player": "Player",
   "app.activePlayer": "the active player",
+  "app.duplicateRouting":
+    "This link repeats a routing parameter. Ask for a corrected link with each parameter appearing only once.",
   "app.preview": "Board preview · Multiplayer is not connected yet.",
   "app.serviceUnavailable": "The game service is unavailable. Please try again later.",
   "connection.idle": "Not connected.",
@@ -673,6 +675,8 @@ const de: Record<CopyKey, string> = {
     "Die Sprache der Oberfläche ändert nur Beschriftungen und Meldungen. Wortliste, Spielsteine und Spielregeln bleiben unverändert.",
   "app.player": "Spieler",
   "app.activePlayer": "den aktiven Spieler",
+  "app.duplicateRouting":
+    "Dieser Link enthält einen Routing-Parameter mehrfach. Bitte um einen korrigierten Link, in dem jeder Parameter nur einmal vorkommt.",
   "app.preview": "Spielbrettvorschau · Mehrspieler ist noch nicht verbunden.",
   "app.serviceUnavailable": "Der Spieldienst ist nicht verfügbar. Bitte versuche es später erneut.",
   "connection.idle": "Nicht verbunden.",
@@ -1241,6 +1245,8 @@ const es: Record<CopyKey, string> = {
     "El idioma de la interfaz solo cambia etiquetas y mensajes. No cambia la lista de palabras, las fichas ni las reglas de la partida.",
   "app.player": "Jugador",
   "app.activePlayer": "el jugador activo",
+  "app.duplicateRouting":
+    "Este enlace repite un parámetro de ruta. Solicita un enlace corregido en el que cada parámetro aparezca una sola vez.",
   "app.preview": "Vista previa del tablero · El multijugador aún no está conectado.",
   "app.serviceUnavailable":
     "El servicio de juego no está disponible. Inténtalo de nuevo más tarde.",

@@ -22,7 +22,7 @@ export const routeInventory: readonly InventoryRoute[] = [
   { url: "(same URL, seated in this tab)", view: "Player phone", state: "joined" },
   { url: "?view=player", view: "Invalid invite alert", state: "inviteNoMatch" },
   { url: "?view=player&match=<malformed>", view: "Invalid invite alert", state: "inviteMalformed" },
-  { url: "?view=player&match&match", view: "Invalid invite alert", state: "inviteAmbiguous" },
+  { url: "?view=player&match&match", view: "Duplicate routing alert", state: "inviteAmbiguous" },
   { url: "?view=player&match=<expired>", view: "Expired alert", state: "inviteExpired" },
   { url: "?view=player&match=<unknown>", view: "Unavailable alert", state: "inviteUnknown" },
   {
@@ -76,3 +76,5 @@ export const queryParameters: Readonly<Record<string, string>> = {
   api: "ROUTE-NAV: valid and invalid; ROUTE-INVITE: encoded (dev and test builds only)",
   certificate: "ROUTE-INVITE: forwarded; an invalid value is not reached (dev only)",
 };
+
+// Every recognized key rejects duplicates before route activation (duplicate-routing.spec.ts).

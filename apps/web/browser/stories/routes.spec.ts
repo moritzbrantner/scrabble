@@ -116,7 +116,7 @@ const checks: Record<string, (page: Page) => Promise<void>> = {
   boardMalformedMatch: (page) => alert(page, "Invalid game connection settings."),
   inviteNoMatch: (page) => alert(page, "invalid game identifier"),
   inviteMalformed: (page) => alert(page, "invalid game identifier"),
-  inviteAmbiguous: (page) => alert(page, "invalid game identifier"),
+  inviteAmbiguous: (page) => alert(page, "repeats a routing parameter"),
   inviteExpired: (page) => alert(page, "This game has expired."),
   inviteUnknown: (page) => alert(page, "This game is no longer available."),
   layoutMissing: (page) => alert(page, "This shared board layout is not available."),

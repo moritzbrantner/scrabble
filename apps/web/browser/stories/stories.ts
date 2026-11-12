@@ -275,7 +275,7 @@ const language = setup({
     OPEN_LANG_DE: ".german",
     OPEN_LANG_UNSUPPORTED: ".english",
     OPEN_PLAIN: [{ guard: savedIsDe, target: ".german" }, { target: ".english" }],
-    OPEN_LANG_AMBIGUOUS: [{ guard: savedIsDe, target: ".german" }, { target: ".english" }],
+    OPEN_LANG_AMBIGUOUS: ".ambiguous",
   },
   states: {
     english: {
@@ -290,6 +290,7 @@ const language = setup({
         RELOAD: "german",
       },
     },
+    ambiguous: { on: { RELOAD: "ambiguous" } },
   },
 });
 
@@ -395,6 +396,7 @@ export const stories: readonly Story[] = [
     title: "Every view loads directly, survives reload, back and forward, and guards bad URLs",
     sources: [
       "owner request 2026-10-31 (routing as a first-class story)",
+      "docs/specs/routing-parameters.md",
       "docs/specs/player-invites.md",
       "docs/specs/board-lobby.md",
       "docs/specs/shared-board.md",
@@ -406,8 +408,12 @@ export const stories: readonly Story[] = [
   },
   {
     id: "ROUTE-QUERY",
-    title: "The lang parameter applies, persists, updates and falls back",
-    sources: ["docs/specs/mobile-accessibility.md", "docs/specs/settings-dialog.md"],
+    title: "The lang parameter applies, persists, updates and rejects duplicates",
+    sources: [
+      "docs/specs/mobile-accessibility.md",
+      "docs/specs/settings-dialog.md",
+      "docs/specs/routing-parameters.md",
+    ],
     model: language,
     events: languageEvents,
   },
