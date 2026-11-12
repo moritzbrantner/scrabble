@@ -11,3 +11,26 @@ The player route rejects malformed or ambiguous identifiers before network admis
 The player route opens the compact [phone join and identity flow](phone-joining.md); private-rack presentation remains #16. Phone refresh resumes its saved player capability. The board and phone use the [reconnect and resume](reconnect-resume.md) policy.
 
 Validation: unit checks protect allowlisted URL fields and exact identifier round trips. Chromium rasterizes the actual rendered SVG and independently decodes it with the development-only `jsQR` dependency, compares that result with the visible link and clipboard, loads a player invitation, and verifies malformed/expired failure on direct load and refresh. The real runtime lifecycle test checks lookup availability and six-hour expiry. Full repository checks: `bun run check`. Shared convention revision: `46d8793bb3034326561f876dcc67dbaa5aa1e432`.
+
+## Same-tab joining
+
+An opened match offers **Join as player** in the current tab after the existing
+public `/join` check confirms availability. This also works from a public board
+URL in a tab without board ownership. Full, started, expired, unavailable and
+connection failures show the existing admission reason and an explicit retry;
+current lobby snapshots refresh the hint when the roster changes. Admission
+still rechecks availability and the native runtime remains authoritative.
+
+The action follows the canonical player invitation, retaining only public
+routing context. It reuses the name form, authenticated identity and player
+reconnect capsule; query names or player IDs never select a seat. The separate
+board capsule remains in the tab. A player route holding that match's board
+capability offers **Return to board**; browser history and refresh recover the
+appropriate role independently. Returning to the controller resumes its own
+player, including after play starts. The invite link, clipboard and QR remain
+available for other devices.
+
+Focused Chromium coverage in `same-tab-join.spec.ts` exercises these role and
+history transitions, private rack preservation, duplicate-name isolation,
+mobile touch joining and admission failure/retry states. This does not claim
+physical-device or live-hosted acceptance.

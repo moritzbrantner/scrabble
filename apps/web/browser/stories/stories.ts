@@ -310,7 +310,50 @@ const invite = setup({
   },
 });
 
+// #236: the approved same-tab role journey, independent of application routing.
+const sameTabEvents = [
+  "CREATE",
+  "JOIN_AS_PLAYER",
+  "JOIN",
+  "RELOAD",
+  "BACK",
+  "FORWARD",
+  "RETURN_TO_BOARD",
+  "START",
+  "RESUME_PLAYER",
+] as const;
+const sameTab = setup({
+  types: {} as { events: { type: (typeof sameTabEvents)[number] } },
+}).createMachine({
+  id: "same-tab",
+  initial: "create",
+  states: {
+    create: { on: { CREATE: "board" } },
+    board: { on: { JOIN_AS_PLAYER: "entry" } },
+    entry: { on: { JOIN: "player" } },
+    player: { on: { RELOAD: "refreshedPlayer" } },
+    refreshedPlayer: { on: { BACK: "recoveredBoard" } },
+    recoveredBoard: { on: { FORWARD: "resumedPlayer" } },
+    resumedPlayer: { on: { RETURN_TO_BOARD: "hostBoard" } },
+    hostBoard: { on: { START: "playingBoard" } },
+    playingBoard: { on: { RESUME_PLAYER: "playingPlayer" } },
+    playingPlayer: {},
+  },
+});
+
 export const stories: readonly Story[] = [
+  {
+    id: "SAME-TAB-1",
+    title: "Join and resume a player in the board tab while preserving host ownership",
+    sources: [
+      "issue #236",
+      "issue #234 owner approval 2026-11-08",
+      "docs/specs/player-invites.md",
+      "docs/specs/phone-joining.md",
+    ],
+    model: sameTab,
+    events: sameTabEvents,
+  },
   {
     id: "LOBBY-1",
     title: "Create a game, invite players, join and start",
