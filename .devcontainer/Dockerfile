@@ -1,17 +1,15 @@
 # Prebuilt agent environment candidate for #81. The Playwright base matches
 # @playwright/test 1.63.0 and already contains Chromium with its system libraries.
-# Bun comes from package.json `packageManager` and Rust from rust-toolchain.toml,
-# read at build time, so this file adds no second version authority.
+# Bun is the latest stable release at build time (BUN-001: no pinned Bun version) and
+# Rust comes from rust-toolchain.toml, so this file adds no second version authority.
 FROM mcr.microsoft.com/playwright:v1.65.1-noble@sha256:1507cbfc550a63a6b7396791ca4f00df17beb56342d2447b3f106c306f525579
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential ca-certificates curl git jq pkg-config unzip \
     && rm -rf /var/lib/apt/lists/*
 
-COPY package.json /tmp/bun-version/package.json
-RUN version="$(jq -er '.packageManager | capture("^bun@(?<v>[0-9.]+)$").v' /tmp/bun-version/package.json)" \
-    && base="https://github.com/oven-sh/bun/releases/download/bun-v${version}" \
-    && cd /tmp/bun-version \
+RUN base="https://github.com/oven-sh/bun/releases/latest/download" \
+    && mkdir -p /tmp/bun-version && cd /tmp/bun-version \
     && curl -fsSLO "${base}/bun-linux-x64.zip" \
     && curl -fsSL "${base}/SHASUMS256.txt" | grep ' bun-linux-x64.zip$' | sha256sum -c - \
     && unzip -q bun-linux-x64.zip \

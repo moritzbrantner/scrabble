@@ -67,3 +67,9 @@
 - Repair the owning primitive or interaction seam when behavior is wrong. Do not hide an ownership defect behind duplicate overlays, descendant-specific CSS overrides, parallel local state, or wrapper-level gesture patches.
 - Treat hit targets, clipping, selection bounds, drag handles, overlay alignment, pointer capture, scroll/zoom behavior, and viewport placement as observable product behavior rather than cosmetic details.
 - When those properties depend on browser layout, pointer geometry, media, canvas, or viewport behavior, add focused browser evidence that exercises the real interaction; use cheaper tests for semantics that do not require a browser.
+
+## UI-014 — Define navigable UI behavior as a state graph
+
+- Make the important pages and interactive modes of a workflow inspectable as states with defined events, guards, transitions, and observable outcomes; nest local interaction modes under their page rather than multiplying ordinary data values into states.
+- Keep durable navigation in URL paths/query parameters, transient interaction state in its owning feature, and server-owned data in its existing authority; do not create shadow route state.
+- Use a statechart library only when transition complexity warrants it; the existing router and typed local state suffice for simpler flows.
