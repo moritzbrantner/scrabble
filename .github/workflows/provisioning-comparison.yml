@@ -43,9 +43,13 @@ jobs:
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
       - name: Build only when the environment inputs changed
         id: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          tag="$(cat .devcontainer/Dockerfile rust-toolchain.toml <(jq -r .packageManager package.json) | sha256sum | cut -c1-16)"
+          # The image installs the latest stable Bun, so its release tag is an input.
+          bun_release="$(gh api repos/oven-sh/bun/releases/latest --jq .tag_name)"
+          tag="$(cat .devcontainer/Dockerfile rust-toolchain.toml <(echo "$bun_release") | sha256sum | cut -c1-16)"
           image="$IMAGE_REPOSITORY:$tag"
           if ! docker buildx imagetools inspect "$image" >/dev/null 2>&1; then
             start=$(date +%s)
