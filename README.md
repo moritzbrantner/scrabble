@@ -13,9 +13,9 @@ bunx playwright install --with-deps chromium
 bun run check
 ```
 
-An optional locked Nix shell (`nix develop`, from `flake.nix`/`flake.lock`) provides Bun 1.4.3, Git and rustup. rustup still takes the Rust toolchain channel from `rust-toolchain.toml`, and Playwright's Chromium is still installed with the command above. A second optional environment, `.devcontainer/Dockerfile`, is a digest-pinned Playwright 1.63.0 image (Chromium included). It reads Bun from `package.json` and Rust from `rust-toolchain.toml`, so it adds no second version authority.
+An optional environment, `.devcontainer/Dockerfile`, is a digest-pinned Playwright 1.63.0 image (Chromium included). It installs the latest stable Bun and reads Rust from `rust-toolchain.toml`, so it adds no second version authority.
 
-Required CI uses neither. The manual `Scrabble Provisioning Comparison` workflow (#81) runs the identical `bun run check` under conventional, Nix and container provisioning, with `cache_state` set to `cold` or `warm`. On 2026-10-17, five samples per variant (ubuntu-24.04, source `5084d2f`) gave these mean job times:
+Required CI does not use it. The manual `Scrabble Provisioning Comparison` workflow (#81) runs the identical `bun run check` under conventional and container provisioning, with `cache_state` set to `cold` or `warm`. On 2026-10-17, five samples per variant (ubuntu-24.04, source `5084d2f`) gave these mean job times; the Nix row comes from the locked Nix shell that was compared then:
 
 | Variant      |  Cold |  Warm |
 | ------------ | ----: | ----: |
@@ -23,7 +23,9 @@ Required CI uses neither. The manual `Scrabble Provisioning Comparison` workflow
 | Nix          | 990 s | 847 s |
 | Container    | 839 s | 858 s |
 
-From checkout to the first focused test, cold runs took 44 s, 64 s and 63 s respectively; warm runs took 51 s, 86 s and 61 s. The full gate (about 620–980 s, noisy) dominates every variant, so none is materially faster. **Recommendation:** keep conventional provisioning for required CI. Keep the Nix shell and the container only as optional reproducible environments for agents. Building the container image once takes about 8 minutes, and pulling it costs about 45 s on every fresh runner. To roll back, delete `flake.nix`, `flake.lock`, `.devcontainer/`, `.github/actions/provision-sample/` and that workflow; nothing else depends on them.
+From checkout to the first focused test, cold runs took 44 s, 64 s and 63 s respectively; warm runs took 51 s, 86 s and 61 s. The full gate (about 620–980 s, noisy) dominates every variant, so none is materially faster. **Recommendation:** keep conventional provisioning for required CI. Keep the Nix shell and the container only as optional reproducible environments for agents. Building the container image once takes about 8 minutes, and pulling it costs about 45 s on every fresh runner.
+
+_Note (2026-11-23):_ the Nix arm (`flake.nix`, `flake.lock` and the workflow's `nix` variant) was removed by owner decision of 2026-11-23 (#260); its measurements above are kept as recorded. To roll back the remaining experiment, delete `.devcontainer/`, `.github/actions/provision-sample/` and that workflow; nothing else depends on them.
 
 For a playable local game, prepare the English dictionary once, then run `bun run dev:local` and open the complete game URL it prints. This starts the canonical local Compose server and the browser client together. See [local game setup](docs/specs/server-executable.md#local-game-setup) for prerequisites and persistent storage. To host friends on other networks, forward the documented ports and set `LOCAL_PUBLIC_HOST`; see [hosting players on other networks](docs/specs/server-executable.md#hosting-players-on-other-networks).
 
