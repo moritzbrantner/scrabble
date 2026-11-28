@@ -4,7 +4,7 @@ description: >-
   "first useful test") and the identical repository gate. Step durations are the samples.
 inputs:
   variant:
-    description: ubuntu, nix or container
+    description: ubuntu or container
     required: true
   image:
     description: Digest-pinned agent container image (container variant only)
@@ -19,21 +19,6 @@ runs:
         bun-version: latest
     - name: Conventional Rust setup from rust-toolchain.toml
       if: inputs.variant == 'ubuntu'
-      shell: bash
-      run: rustup toolchain install
-    - name: Install Nix
-      if: inputs.variant == 'nix'
-      uses: NixOS/nix-installer-action@62c1943b776c509394b550f3f983adc14e9212d6 # v1.0.0
-      with:
-        installer-version: 2.35.2
-        enable-kvm: false
-    - name: Activate locked Nix development shell
-      if: inputs.variant == 'nix'
-      shell: bash
-      run: |
-        nix develop --command bash -c 'printf "%s\n" "$PATH" >> "$GITHUB_PATH"'
-    - name: Install Rust toolchain from rust-toolchain.toml
-      if: inputs.variant == 'nix'
       shell: bash
       run: rustup toolchain install
     - name: Pull prebuilt agent container image
@@ -56,7 +41,7 @@ runs:
           -e GIT_CONFIG_VALUE_0=/workspace "$IMAGE" bash -euo pipefail -c "\$1"
         SCRIPT
         chmod +x "$RUNNER_TEMP/in-env"
-    - name: Use the host directly for non-container variants
+    - name: Use the host directly for the conventional variant
       if: inputs.variant != 'container'
       shell: bash
       run: |
@@ -67,7 +52,6 @@ runs:
       run: |
         "$RUNNER_TEMP/in-env" '
           echo "Commit: $(git rev-parse HEAD)"
-          echo "Flake lock digest: $(sha256sum flake.lock)"
           echo "Cargo lock digest: $(sha256sum Cargo.lock)"
           echo "Bun lock digest: $(sha256sum bun.lock)"
           command -v bun cargo rustc

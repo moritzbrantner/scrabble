@@ -1,16 +1,16 @@
 name: Scrabble Provisioning Comparison
 
 # Non-required experiment for #81: identical `bun run check` on the same runner class with
-# conventional provisioning, the locked Nix development shell, and a prebuilt digest-pinned
-# agent container (.devcontainer/Dockerfile). Opt in when collecting benchmark evidence;
-# routine PRs must not trigger this fifteen-sample experiment.
+# conventional provisioning and a prebuilt digest-pinned agent container
+# (.devcontainer/Dockerfile). The locked Nix arm was removed by owner decision on
+# 2026-11-23 (#260). Opt in when collecting benchmark evidence; routine PRs must not
+# trigger this ten-sample experiment.
 #
 # cold: every sample is a fresh runner with no restored Actions caches. The container
 #       sample still pulls its image on that fresh runner; building the image is a separate
 #       `image` job, skipped when the tag already exists in GHCR.
 # warm: one priming job per variant runs the gate and saves its dependency/build caches
 #       under this run's key; every sample is then a fresh runner that restores them.
-#       The Nix store itself is not cached (no binary cache by design).
 on:
   workflow_dispatch:
     inputs:
@@ -72,7 +72,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [ubuntu, nix, container]
+        variant: [ubuntu, container]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: ./.github/actions/provision-sample
@@ -99,7 +99,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [ubuntu, nix, container]
+        variant: [ubuntu, container]
         sample: [1, 2, 3, 4, 5]
     steps:
       - name: Check out the identical source revision
